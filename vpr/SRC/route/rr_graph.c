@@ -8,6 +8,7 @@
 #include "rr_graph_util.h"
 #include "rr_graph.h"
 #include "rr_graph2.h"
+#include "rr_graph_multi.h"
 #include "rr_graph_sbox.h"
 #include "check_rr_graph.h"
 #include "rr_graph_timing_params.h"
@@ -421,6 +422,14 @@ void build_rr_graph(INP t_graph_type graph_type, INP int L_num_types,
 		}
 	}
 
+	/* For now the parameters are fixed and delay_increase is ignored */
+	int percent_wires_cut = 40;
+	int num_cuts = 3;
+	int delay_increase = 0;
+	/* Function that cuts some of the vertical wires */
+	cut_rr_graph_edges(nodes_per_chan, seg_details, rr_node, rr_node_indices,
+			directionality, percent_wires_cut, num_cuts, delay_increase);
+	
 	rr_graph_externals(timing_inf, segment_inf, num_seg_types, nodes_per_chan,
 			wire_to_ipin_switch, base_cost_type);
 	if (getEchoEnabled() && isEchoFileEnabled(E_ECHO_RR_GRAPH)) {
@@ -1362,7 +1371,7 @@ alloc_and_load_pin_to_track_map(INP enum e_pin_type pin_type,
 
 	int **num_dir; /* [0..height][0..3] Number of *physical* pins on each side.          */
 	int ***dir_list; /* [0..height][0..3][0..num_pins-1] list of pins of correct type  *
-	 * * on each side. Max possible space alloced for simplicity */
+	 * * on each side. Max possible space allocated for simplicity */
 
 	int i, j, k, iside, ipin, iclass, num_phys_pins, pindex, ioff;
 	int *pin_num_ordering, *side_ordering, *offset_ordering;
