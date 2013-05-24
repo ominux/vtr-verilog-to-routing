@@ -139,7 +139,7 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 	int cut_step;
 	int itrack, inode;
 	int i, j, counter;
-	int ti, tj;
+	int tj;
 	int step;
 
 	if(directionality == BI_DIRECTIONAL) /* Ignored for now TODO */
@@ -154,8 +154,6 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 	 * direction = DEC_DIRECTION (wire is going down and has edges 
 	 * in the switch box going through the cut */
 	num_wires_cut_border = num_wires_cut / (2*4); // 4 = wirelength
-	/* ignoring this value for now and cutting all edges in this
-	 * situation */
 
 	/* the interval at which the cuts should be made */
 	cut_step = ny / (num_cuts + 1);
@@ -200,30 +198,29 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 			   and from CHANY to CHANY (the case where ylow = y_cut+1
 			   and direction = DEC_DIRECTION) */
 			// TODO
-			ti = i+1;
 			tj = j+1;
 			if(tj >= ny)
 				continue;
 
+			cur_wires_cut_down = 0;
+			/* From CHANY to other channels when ylow = ycut+1 */
 			for(itrack = 0; itrack < nodes_per_chan; itrack++){
 				inode = get_rr_node_index(i, tj, CHANY, itrack, L_rr_node_indices);
 
 				if(L_rr_node[inode].direction == DEC_DIRECTION
-				&& L_rr_node[inode].ylow == tj){
+				&& L_rr_node[inode].ylow == tj && cur_wires_cut_down < num_wires_cut_border){
 					cut_rr_yedges(j, inode, L_rr_node);
+					//printf("Cutting edges because ylow=ycut+1\n");
+					cur_wires_cut_down++;
 				}
 			}
-			if(i > 0){
+
+			/* From CHANX to CHANY, cut only the edges at the switches */
+			if(i > 0 && i < nx){
 				for(itrack = 0; itrack < nodes_per_chan; itrack++){
 					inode = get_rr_node_index(i, j, CHANX, itrack, L_rr_node_indices);
 
-					cut_rr_xedges(j, inode, L_rr_node);
-				}
-			}
-			if(ti < nx){
-				for(itrack = 0; itrack < nodes_per_chan; itrack++){
-					inode = get_rr_node_index(ti, j, CHANX, itrack, L_rr_node_indices);
-
+					//printf("Cutting edges between CHANX and CHANY\n");
 					cut_rr_xedges(j, inode, L_rr_node);
 				}
 			}
