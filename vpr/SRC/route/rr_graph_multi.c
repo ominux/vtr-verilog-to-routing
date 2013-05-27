@@ -25,8 +25,8 @@
  */
 void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 			INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
-			INP enum e_directionality directionality, INP int percent_wires_cut,
-			INP int num_cuts, INP int delay_increase);
+			INP enum e_directionality directionality, INP int L_percent_wires_cut,
+			INP int L_num_cuts, INP int L_delay_increase);
 
 
 /* ---------------------------------------------------------------------------
@@ -131,8 +131,8 @@ void cut_rr_xedges(INP int cut_location, INP int inode, INOUTP t_rr_node *L_rr_n
  */
 void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
-		INP enum e_directionality directionality, INP int percent_wires_cut,
-		INP int num_cuts, INP int delay_increase){
+		INP enum e_directionality directionality, INP int L_percent_wires_cut,
+		INP int L_num_cuts, INP int L_delay_increase){
 
 	int num_wires_cut, cur_wires_cut_up, cur_wires_cut_down;
 	int num_wires_cut_border;
@@ -146,8 +146,8 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		return;
 
 	/* Number of wires that should be cut at each horizontal cut */
-	num_wires_cut = nodes_per_chan * percent_wires_cut;
-	assert(percent_wires_cut == 0 || num_wires_cut >= nodes_per_chan); /* to catch overflows */
+	num_wires_cut = nodes_per_chan * L_percent_wires_cut;
+	assert(L_percent_wires_cut == 0 || num_wires_cut >= nodes_per_chan); /* to catch overflows */
 	num_wires_cut = num_wires_cut / 100;
 
 	/* Number of wires to be cut in the case when ylow = ycut+1 and
@@ -156,7 +156,7 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 	num_wires_cut_border = num_wires_cut / (2*4); // 4 = wirelength
 
 	/* the interval at which the cuts should be made */
-	cut_step = ny / (num_cuts + 1);
+	cut_step = ny / (L_num_cuts + 1);
 	/*printf("nodes_per_chan:%d num_wires_cut:%d\n", nodes_per_chan, num_wires_cut);*/
 
 	counter = 0;
@@ -164,7 +164,7 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		step = 100000000;
 	else
 		step = nodes_per_chan / num_wires_cut;
-	for(j = cut_step; j < ny && counter < num_cuts; j+=cut_step){
+	for(j = cut_step; j < ny && counter < L_num_cuts; j+=cut_step){
 		for(i = 0; i <= nx; i++){
 			cur_wires_cut_up = cur_wires_cut_down = 0;
 
@@ -227,14 +227,14 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		}
 		counter++;
 	}
-	assert(counter == num_cuts);
+	assert(counter == L_num_cuts);
 }
 
 
 void cut_rr_graph_capacity(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
-		INP enum e_directionality directionality, INP int percent_wires_cut,
-		INP int num_cuts, INP int delay_increase){
+		INP enum e_directionality directionality, INP int L_percent_wires_cut,
+		INP int L_num_cuts, INP int L_delay_increase){
 
 	int num_wires_cut, cur_wires_cut_up, cur_wires_cut_down;
 	int cut_step;
@@ -246,12 +246,12 @@ void cut_rr_graph_capacity(INP int nodes_per_chan, INP t_seg_details * seg_detai
 		return;
 
 	/* Number of wires that should be cut at each horizontal cut */
-	num_wires_cut = nodes_per_chan * percent_wires_cut;
-	assert(percent_wires_cut == 0 || num_wires_cut >= nodes_per_chan); /* to catch overflows */
+	num_wires_cut = nodes_per_chan * L_percent_wires_cut;
+	assert(L_percent_wires_cut == 0 || num_wires_cut >= nodes_per_chan); /* to catch overflows */
 	num_wires_cut = num_wires_cut / 100;
 
 	/* the interval at which the cuts should be made */
-	cut_step = ny / (num_cuts + 1);
+	cut_step = ny / (L_num_cuts + 1);
 	/*printf(">>>>>>>>>>>>>Got to the beginning of cut <<<<<<<<<<<<<<<\n");
 	printf("nodes_per_chan:%d num_wires_cut:%d\n", nodes_per_chan, num_wires_cut);*/
 
@@ -265,7 +265,7 @@ void cut_rr_graph_capacity(INP int nodes_per_chan, INP t_seg_details * seg_detai
 	/* version that cuts wires equally from each channel, in steps */
 	counter = 0;
 	step = nodes_per_chan / num_wires_cut;
-	for(j = cut_step; j < ny && counter < num_cuts; j+=cut_step){
+	for(j = cut_step; j < ny && counter < L_num_cuts; j+=cut_step){
 		for(i = 0; i <= nx; i++){
 			cur_wires_cut_up = cur_wires_cut_down = 0;
 			for(itrack = 0; itrack < nodes_per_chan; itrack++){
@@ -309,5 +309,5 @@ void cut_rr_graph_capacity(INP int nodes_per_chan, INP t_seg_details * seg_detai
 		}
 		counter++;
 	}
-	assert(counter == num_cuts);
+	assert(counter == L_num_cuts);
 }

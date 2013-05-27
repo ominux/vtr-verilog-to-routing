@@ -455,6 +455,12 @@ ProcessOption(INP char **Args, INOUTP t_options * Options) {
 		return ReadRouterAlgorithm(Args, &Options->RouterAlgorithm);
 	case OT_BASE_COST_TYPE:
 		return ReadBaseCostType(Args, &Options->base_cost_type);
+	case OT_PERCENT_WIRES_CUT:
+		return ReadInt(Args, &Options->percent_wires_cut);
+	case OT_NUM_CUTS:
+		return ReadInt(Args, &Options->num_cuts);
+	case OT_DELAY_INCREASE:
+		return ReadInt(Args, &Options->delay_increase);
 
 		/* Routing options valid only for timing-driven routing */
 	case OT_ASTAR_FAC:

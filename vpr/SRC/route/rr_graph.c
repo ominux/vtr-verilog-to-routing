@@ -422,10 +422,7 @@ void build_rr_graph(INP t_graph_type graph_type, INP int L_num_types,
 		}
 	}
 
-	/* For now the parameters are fixed and delay_increase is ignored */
-	int percent_wires_cut = 90;
-	int num_cuts = 3;
-	int delay_increase = 0;
+	/* The parameters are given as a parameter to the VPR and delay_increase is ignored */
 	/* Function that cuts some of the vertical wires */
 	if(percent_wires_cut > 0)
 		cut_rr_graph_edges(nodes_per_chan, seg_details, rr_node, rr_node_indices,

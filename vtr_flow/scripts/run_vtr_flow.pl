@@ -456,7 +456,8 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 			"--cluster_seed_type",        "$vpr_cluster_seed_type",
 			"--sdc_file", 				  "$sdc_file_path",
 			"--seed",			 		  "$seed",
-			"--nodisp"
+			"--nodisp",
+			"--verify_binary_search"
 		);
 		if ( $timing_driven eq "on" ) {
 			# Critical path delay is nonsensical at minimum channel width because congestion constraints completely dominate the cost function.

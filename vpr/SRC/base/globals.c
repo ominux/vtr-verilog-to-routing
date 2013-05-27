@@ -95,3 +95,10 @@ const t_pb_type *pbtype_max_internal_delay = NULL; /* physical block type with h
 
 /********** Structures representing the global clock network */
 t_clock_arch * g_clock_arch;
+
+/********** Stuff added by me (Andre) **************************/
+/* Related to the interposer */
+/* TODO Remove this stuff from here and put at a proper place */
+int percent_wires_cut = 0;
+int num_cuts = 0;
+int delay_increase = 0;

@@ -207,6 +207,12 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 	grid_logic_tile_area = Arch->grid_logic_tile_area;
 	ipin_mux_trans_size = Arch->ipin_mux_trans_size;
 
+	/* TODO Global variables are ugly, these are global just for the sake of simplicity */
+	percent_wires_cut = Options->percent_wires_cut;
+	num_cuts = Options->num_cuts;
+	delay_increase = Options->delay_increase;
+
+
 	/* Set seed for pseudo-random placement, default seed to 1 */
 	PlacerOpts->seed = 1;
 	if (Options->Count[OT_SEED]) {
