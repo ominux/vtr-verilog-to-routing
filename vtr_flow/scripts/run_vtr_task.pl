@@ -16,6 +16,13 @@
 #							name should be on a separate line.
 #
 #	-hide_runtime: Do not show runtime estimates
+#	
+#	-percent_wires_cut <int>: the percentage of wires that go through interchip cuts that
+#	should be cut
+#
+#	-num_cuts <int>: the number of cuts to be done to the chip
+#
+#	-delay_increase <int>: the increased delay to be added to wires which cross the cuts
 #
 # Note: At least one task must be specified, either directly as a parameter or
 #		through the -l option.
@@ -53,6 +60,9 @@ my $processors             = 1;
 my $run_prefix             = "run";
 my $show_runtime_estimates = 1;
 my $system_type            = "local";
+my $percent_wires_cut		   = 0;
+my $num_cuts		   = 0;
+my $delay_increase		   = 0;
 
 # Parse Input Arguments
 while ( $token = shift(@ARGV) ) {
@@ -65,6 +75,18 @@ while ( $token = shift(@ARGV) ) {
 	# Check for -p N
 	elsif ( $token eq "-p" ) {
 		$processors = int( shift(@ARGV) );
+	}
+
+	elsif ( $token eq "-percent_wires_cut" ){
+		$percent_wires_cut = int( shift(@ARGV) );
+	}
+
+	elsif ( $token eq "-num_cuts" ){
+		$num_cuts = int( shift(@ARGV) );
+	}
+	
+	elsif ( $token eq "-delay_increase" ){
+		$delay_increase = int( shift(@ARGV) );
 	}
 
 	elsif ( $token eq "-system" ) {
@@ -121,7 +143,7 @@ my %hash = map { $_, 1 } @tasks;
 
 if ( $#tasks == -1 ) {
 	die "\n"
-	  . "Incorect usage.  You must specify at least one task to execute\n"
+	  . "Incorrect usage.  You must specify at least one task to execute\n"
 	  . "\n"
 	  . "USAGE:\n"
 	  . "run_vtr_task.pl <TASK1> <TASK2> ... \n" . "\n"
@@ -355,7 +377,7 @@ sub run_single_task {
 					# SDC file defaults to circuit_name.sdc
 					my $sdc = fileparse( $circuit, '\.[^.]+$' ) . ".sdc";
 					system(
-						"$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params\n"
+						"$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params -percent_wires_cut $percent_wires_cut -cuts $num_cuts -delay $delay_increase\n"
 					);
 				}
 			}
@@ -376,7 +398,7 @@ sub run_single_task {
 					my $sdc = fileparse( $circuit, '\.[^.]+$' ) . ".sdc";
 
 					my $command =
-					  "$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params";
+					  "$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params -percent_wires_cut $percent_wires_cut -cuts $num_cuts -delay $delay_increase";
 					$thread_work->enqueue("$dir||||$command");
 				}
 			}

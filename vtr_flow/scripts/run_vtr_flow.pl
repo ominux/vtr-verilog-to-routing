@@ -20,6 +20,12 @@
 # 	-keep_intermediate_files: Do not delete the intermediate files.
 #
 #   -temp_dir <dir>: Directory used for all temporary files
+#
+#   -percent_wires_cut <int>
+#   
+#   -cuts <int>: num_cuts
+#
+#   -delay <int>: delay_increase
 ###################################################################################
 
 use strict;
@@ -54,6 +60,10 @@ sub xml_find_LUT_Kvalue;
 sub xml_find_mem_size;
 
 my $temp_dir = "./temp";
+
+my $percent_wires_cut = 0;
+my $num_cuts = 0;
+my $delay_increase = 0;
 
 my $stage_idx_odin   = 1;
 my $stage_idx_abc    = 2;
@@ -130,6 +140,15 @@ while ( $token = shift(@ARGV) ) {
 	}
 	elsif ( $token eq "-min_hard_adder_size" ) {
 		$min_hard_adder_size = shift(@ARGV);
+	}
+	elsif ( $token eq "-percent_wires_cut" ){
+		$percent_wires_cut = int (shift(@ARGV) );
+	}
+	elsif ( $token eq "-cuts" ){
+		$num_cuts = int (shift(@ARGV) );
+	}
+	elsif ( $token eq "-delay" ){
+		$delay_increase = int (shift(@ARGV) );
 	}
 	else {
 		die "Error: Invalid argument ($token)\n";
@@ -457,7 +476,10 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 			"--sdc_file", 				  "$sdc_file_path",
 			"--seed",			 		  "$seed",
 			"--nodisp",
-			"--verify_binary_search"
+			"--verify_binary_search",
+			"--percent_wires_cut",		"$percent_wires_cut",
+			"--num_cuts",			"$num_cuts",
+			"--delay_increase",		"$delay_increase"
 		);
 		if ( $timing_driven eq "on" ) {
 			# Critical path delay is nonsensical at minimum channel width because congestion constraints completely dominate the cost function.
@@ -501,7 +523,10 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 					"--max_router_iterations", "100",
 					"--nodisp",              @vpr_power_args,
 					"--gen_postsynthesis_netlist", "$gen_postsynthesis_netlist",
-					"--sdc_file",			 "$sdc_file_path"
+					"--sdc_file",			 "$sdc_file_path",
+					"--percent_wires_cut",		"$percent_wires_cut",
+					"--num_cuts",			"$num_cuts",
+					"--delay_increase",		"$delay_increase"
 				);
 			}
 		}
