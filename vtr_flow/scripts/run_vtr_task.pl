@@ -149,7 +149,10 @@ if ( $#tasks == -1 ) {
 	  . "run_vtr_task.pl <TASK1> <TASK2> ... \n" . "\n"
 	  . "OPTIONS:\n"
 	  . "-l <path_to_task_list.txt> - Provides a text file with a list of tasks\n"
-	  . "-p <N> - Execution is performed in parallel using N threads (Default: 1)\n";
+	  . "-p <N> - Execution is performed in parallel using N threads (Default: 1)\n"
+	  . "-percent_wires_cut <int>: the percentage of wires that go through the interposer that should be cut (Default: 0)\n"
+	  . "-num_cuts <int>: the number of cuts to be done to the chip (Default: 0)\n"
+	  . "-delay_increase <int>: the increased delay to be added to wires which go through the interposer (Default: 0)\n";
 }
 
 ##############################################################
