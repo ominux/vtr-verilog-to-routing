@@ -310,7 +310,7 @@ static void SetupSwitches(INP t_arch Arch,
 	switch_inf = (struct s_switch_inf *) my_malloc(
 			sizeof(struct s_switch_inf) * RoutingArch->num_switch);
 
-	/* TODO create map table */
+	/* Mapping of the switches to their respective increased delay versions */
 	increased_delay_edge_map = (int *) my_malloc(sizeof(int) * RoutingArch->num_switch);
 
 	/* Order of the switches:

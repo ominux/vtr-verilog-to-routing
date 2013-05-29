@@ -121,6 +121,32 @@ void cut_rr_xedges(INP int cut_location, INP int inode, INOUTP t_rr_node *L_rr_n
 }
 
 
+/*
+ * Function which increases the delay of the edges which cross the cut for a given wire in the CHANY
+ */
+void increase_delay_rr_yedges(INP int cut_location, INP int inode, INOUTP t_rr_node *L_rr_node){
+	
+	int iedge, d_node, num_removed;
+	int tmp;
+
+	num_removed = 0;
+
+	/* mark and remove the edges */
+	for(iedge = 0; iedge < L_rr_node[inode].num_edges; iedge++){
+		d_node = L_rr_node[inode].edges[iedge];
+		if(d_node == -1)
+			continue;
+		/* crosses the cut line, increase delay */
+		if((L_rr_node[inode].direction == INC_DIRECTION && L_rr_node[d_node].ylow > cut_location)
+		|| (L_rr_node[inode].direction == DEC_DIRECTION && L_rr_node[d_node].ylow <= cut_location)){
+			// TODO
+		}
+		else{
+			/*printf(">>>> Did not cut this edge because it does not cross the boundary <<<<\n");*/
+		}
+	}
+}
+
 /* 
  * Function that does num_cuts horizontal cuts to the chip,
  * percent_wires_cut% of the wires crossing these cuts are removed
@@ -173,16 +199,20 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 
 				if(L_rr_node[inode].direction == INC_DIRECTION){
 					if((itrack/2) % step != 0 || 
-					cur_wires_cut_up >= num_wires_cut/2)
+					cur_wires_cut_up >= num_wires_cut/2){
+						/* Increase delay of this wire TODO */
 						continue;
+					}
 
 					cur_wires_cut_up++;
 				}
 				else{
 					assert(L_rr_node[inode].direction == DEC_DIRECTION);
 					if((itrack/2) % step != 0 || 
-					cur_wires_cut_down >= num_wires_cut/2)
+					cur_wires_cut_down >= num_wires_cut/2){
+						/* Increase delay of this wire TODO */
 						continue;
+					}
 
 					cur_wires_cut_down++;
 				}
@@ -197,7 +227,6 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 			/* Now cut edges at the switch box, from CHANX to CHANY
 			   and from CHANY to CHANY (the case where ylow = y_cut+1
 			   and direction = DEC_DIRECTION) */
-			// TODO
 			tj = j+1;
 			if(tj >= ny)
 				continue;
@@ -208,10 +237,15 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 				inode = get_rr_node_index(i, tj, CHANY, itrack, L_rr_node_indices);
 
 				if(L_rr_node[inode].direction == DEC_DIRECTION
-				&& L_rr_node[inode].ylow == tj && cur_wires_cut_down < num_wires_cut_border){
-					cut_rr_yedges(j, inode, L_rr_node);
-					//printf("Cutting edges because ylow=ycut+1\n");
-					cur_wires_cut_down++;
+				&& L_rr_node[inode].ylow == tj){
+					if(cur_wires_cut_down < num_wires_cut_border){
+						cut_rr_yedges(j, inode, L_rr_node);
+						//printf("Cutting edges because ylow=ycut+1\n");
+						cur_wires_cut_down++;
+					}
+					else{
+						/* Increase delay of this wire TODO */
+					}
 				}
 			}
 
