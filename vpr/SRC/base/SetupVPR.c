@@ -195,6 +195,11 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 	*Segments = Arch->Segments;
 	RoutingArch->num_segment = Arch->num_segments;
 
+	/* TODO Global variables are ugly, these are global just for the sake of simplicity */
+	percent_wires_cut = Options->percent_wires_cut;
+	num_cuts = Options->num_cuts;
+	delay_increase = Options->delay_increase;
+
 	SetupSwitches(*Arch, RoutingArch, Arch->Switches, Arch->num_switches);
 	SetupRoutingArch(*Arch, RoutingArch);
 	SetupTiming(*Options, *Arch, TimingEnabled, *Operation, *PlacerOpts,
@@ -206,12 +211,6 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 	out_file_prefix = Options->out_file_prefix;
 	grid_logic_tile_area = Arch->grid_logic_tile_area;
 	ipin_mux_trans_size = Arch->ipin_mux_trans_size;
-
-	/* TODO Global variables are ugly, these are global just for the sake of simplicity */
-	percent_wires_cut = Options->percent_wires_cut;
-	num_cuts = Options->num_cuts;
-	delay_increase = Options->delay_increase;
-
 
 	/* Set seed for pseudo-random placement, default seed to 1 */
 	PlacerOpts->seed = 1;
@@ -284,8 +283,9 @@ static void SetupSwitches(INP t_arch Arch,
 	int i;
 	double d_delay_increase;
 
-	/* Convert the delay to seconds, as it is given as int in ns */
-	d_delay_increase = (double)delay_increase * 1e-9;
+	/* Convert the delay to seconds, as it is given as int in ps */
+	d_delay_increase = (double)delay_increase * 1e-12;
+	printf("delay_increase:%d d_delay_increase: %g\n", delay_increase, d_delay_increase);
 
 	RoutingArch->num_switch = NumArchSwitches;
 

@@ -22,7 +22,7 @@
 #
 #	-num_cuts <int>: the number of cuts to be done to the chip
 #
-#	-delay_increase <int>: the increased delay to be added to wires which cross the cuts
+#	-delay_increase <int>: the increased delay to be added to wires which cross the cuts (ps)
 #
 # Note: At least one task must be specified, either directly as a parameter or
 #		through the -l option.
@@ -152,7 +152,7 @@ if ( $#tasks == -1 ) {
 	  . "-p <N> - Execution is performed in parallel using N threads (Default: 1)\n"
 	  . "-percent_wires_cut <int>: the percentage of wires that go through the interposer that should be cut (Default: 0)\n"
 	  . "-num_cuts <int>: the number of cuts to be done to the chip (Default: 0)\n"
-	  . "-delay_increase <int>: the increased delay to be added to wires which go through the interposer (Default: 0)\n";
+	  . "-delay_increase <int>: the increased delay to be added to wires which go through the interposer (ps) (Default: 0)\n";
 }
 
 ##############################################################

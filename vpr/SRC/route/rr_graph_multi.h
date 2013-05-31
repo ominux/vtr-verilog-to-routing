@@ -10,12 +10,12 @@
  */
 void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 			INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
-			INP enum e_directionality directionality, INP int percent_wires_cut,
-			INP int num_cuts, INP int delay_increase);
+			INP enum e_directionality directionality, INP int L_percent_wires_cut,
+			INP int L_num_cuts, INP int L_delay_increase);
 
 void cut_rr_graph_capacity(INP int nodes_per_chan, INP t_seg_details * seg_details,
 			INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
-			INP enum e_directionality directionality, INP int percent_wires_cut,
-			INP int num_cuts, INP int delay_increase);
+			INP enum e_directionality directionality, INP int L_percent_wires_cut,
+			INP int L_num_cuts, INP int L_delay_increase);
 
 #endif
