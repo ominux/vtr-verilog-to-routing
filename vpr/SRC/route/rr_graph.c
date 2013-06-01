@@ -426,7 +426,7 @@ void build_rr_graph(INP t_graph_type graph_type, INP int L_num_types,
 	/* Function that cuts some of the vertical wires */
 	if(percent_wires_cut > 0)
 		cut_rr_graph_edges(nodes_per_chan, seg_details, rr_node, rr_node_indices,
-				directionality, percent_wires_cut, num_cuts, delay_increase);
+				directionality, percent_wires_cut, num_cuts);
 	
 	rr_graph_externals(timing_inf, segment_inf, num_seg_types, nodes_per_chan,
 			wire_to_ipin_switch, base_cost_type);

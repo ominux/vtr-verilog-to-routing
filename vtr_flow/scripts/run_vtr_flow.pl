@@ -528,28 +528,6 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 					"--num_cuts",			"$num_cuts",
 					"--delay_increase",		"$delay_increase"
 				);
-				if (-e $vpr_route_output_file_path and !($q eq "success") )
-				{
-					# Was unsuccesful routing with 1.3W, try 1.3W - 2
-					$min_chan_width = $min_chan_width - 2;
-					system "rm -f $vpr_route_output_file_path";
-					$q = &system_with_timeout(
-						$vpr_path,               "vpr.crit_path.out",
-						$timeout,                $temp_dir,
-						$architecture_file_name, "$benchmark_name",
-						"--route",
-						"--blif_file",           "$prevpr_output_file_name",
-						"--route_chan_width",    "$min_chan_width",
-						"--cluster_seed_type",   "$vpr_cluster_seed_type",
-						"--max_router_iterations", "100",
-						"--nodisp",              @vpr_power_args,
-						"--gen_postsynthesis_netlist", "$gen_postsynthesis_netlist",
-						"--sdc_file",			 "$sdc_file_path",
-						"--percent_wires_cut",		"$percent_wires_cut",
-						"--num_cuts",			"$num_cuts",
-						"--delay_increase",		"$delay_increase"
-					);
-				}
 			}
 		}
 	}

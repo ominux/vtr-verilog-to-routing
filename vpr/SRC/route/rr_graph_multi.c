@@ -24,7 +24,12 @@
 void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 			INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
 			INP enum e_directionality directionality, INP int L_percent_wires_cut,
-			INP int L_num_cuts, INP int L_delay_increase);
+			INP int L_num_cuts);
+
+void cut_rr_graph_capacity(INP int nodes_per_chan, INP t_seg_details * seg_details,
+		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
+		INP enum e_directionality directionality, INP int L_percent_wires_cut,
+		INP int L_num_cuts);
 
 
 /* ---------------------------------------------------------------------------
@@ -138,17 +143,112 @@ void increase_delay_rr_yedges(INP int cut_location, INP int inode, INOUTP t_rr_n
 			 * for each kind of switch, so to increase the delay I just
 			 * need to substitute the switch type of the edge with the
 			 * increased delay one */
-			if(L_rr_node[inode].switches[iedge] ==
-				increased_delay_edge_map[L_rr_node[inode].switches[iedge]]){
-				//printf("Switch type:%d\n", L_rr_node[inode].switches[iedge]);
-			}
-			else{
-				//printf("Switch type:%d\n", L_rr_node[inode].switches[iedge]);
-			}
-			/*assert(L_rr_node[inode].switches[iedge] !=
-				increased_delay_edge_map[L_rr_node[inode].switches[iedge]]);*/
 			L_rr_node[inode].switches[iedge] =
 				increased_delay_edge_map[L_rr_node[inode].switches[iedge]];
+		}
+	}
+}
+
+
+void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
+		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
+		INP enum e_directionality directionality, INP int num_wires_cut,
+		INP int cut_pos, INP int i, INP int offset){
+	int itrack, inode;
+	int cur_wires_cut_up, cur_wires_cut_down, num_wires_cut_border;
+	int increased_delay_up, increased_delay_down;
+	int tj, step;
+
+	cur_wires_cut_up = cur_wires_cut_down = 0;
+	increased_delay_up = increased_delay_down = 0;
+
+	step = nodes_per_chan / num_wires_cut;
+
+	/* Cut the first num_wires_cut/2 wires beginning at offset and wrapping around */
+	for(itrack = offset; cur_wires_cut_up < num_wires_cut/4 ||
+			cur_wires_cut_down < num_wires_cut/4; itrack=(itrack+1)%nodes_per_chan){
+		//printf("itrack_cont:%d nodes_per_chan:%d\n", itrack, nodes_per_chan);
+		inode = get_rr_node_index(i, cut_pos, CHANY, itrack, L_rr_node_indices);
+
+		if(L_rr_node[inode].direction == INC_DIRECTION)
+			cur_wires_cut_up++;
+		else
+			cur_wires_cut_down++;
+		cut_rr_yedges(cut_pos, inode, L_rr_node);
+	}
+
+	/* Now cut interleaved wires continuing from where it stopped */
+	for(; itrack != offset;	itrack=(itrack+1)%nodes_per_chan){
+		//printf("itrack:%d nodes_per_chan:%d\n", itrack, nodes_per_chan);
+		inode = get_rr_node_index(i, cut_pos, CHANY, itrack, L_rr_node_indices);
+
+		if(L_rr_node[inode].direction == INC_DIRECTION){
+			if((itrack/2 + offset) % step != 0 || cur_wires_cut_up >= num_wires_cut/2){
+				/* Increase delay of this wire */
+				increase_delay_rr_yedges(cut_pos, inode, L_rr_node);
+				increased_delay_up++;
+				continue;
+			}
+			cur_wires_cut_up++;
+		}
+		else{
+			if((itrack/2 + offset) % step != 0 || cur_wires_cut_down >= num_wires_cut/2){
+				/* Increase delay of this wire */
+				increase_delay_rr_yedges(cut_pos, inode, L_rr_node);
+				increased_delay_down++;
+				continue;
+			}
+			cur_wires_cut_down++;
+		}
+
+		/* actually cut the edges */
+		cut_rr_yedges(cut_pos, inode, L_rr_node); 
+	}
+
+	assert(cur_wires_cut_down == num_wires_cut/2);
+	assert(cur_wires_cut_up == num_wires_cut/2);
+	/*printf("delay_up:%d delay_down:%d cut_down:%d cut_up:%d num_wires_cut:%d\n",
+		increased_delay_up, increased_delay_down, cur_wires_cut_down, cur_wires_cut_up, num_wires_cut);*/
+	assert(increased_delay_up + increased_delay_down + cur_wires_cut_down + cur_wires_cut_up
+			== nodes_per_chan);
+
+	/* Now cut edges at the switch box, from CHANX to CHANY
+	   and from CHANY to CHANY (the case where ylow = y_cut+1
+	   and direction = DEC_DIRECTION) */
+	tj = cut_pos + 1;
+	if(tj >= ny)
+		return;
+
+
+	/* From CHANX to CHANY, cut only the edges at the switches */
+	if(i > 0 && i < nx){
+		for(itrack = 0; itrack < nodes_per_chan; itrack++){
+			inode = get_rr_node_index(i, cut_pos, CHANX, itrack, L_rr_node_indices);
+
+			cut_rr_xedges(cut_pos, inode, L_rr_node);
+		}
+	}
+
+	return;
+	/* Number of wires to be cut in the case when ylow = ycut+1 and
+	 * direction = DEC_DIRECTION (wire is going down and has edges 
+	 * in the switch box going through the cut */
+	num_wires_cut_border = num_wires_cut / (2*4); // 4 = wirelength
+
+	cur_wires_cut_down = 0;
+	/* From CHANY to other channels when ylow = ycut+1 */
+	for(itrack = 0; itrack < nodes_per_chan; itrack++){
+		inode = get_rr_node_index(i, tj, CHANY, itrack, L_rr_node_indices);
+
+		if(L_rr_node[inode].direction == DEC_DIRECTION && L_rr_node[inode].ylow == tj){
+			if(cur_wires_cut_down < num_wires_cut_border){
+				cut_rr_yedges(cut_pos, inode, L_rr_node);
+				cur_wires_cut_down++;
+			}
+			else{
+				/* Increase delay of this wire*/
+				increase_delay_rr_yedges(cut_pos, inode, L_rr_node);
+			}
 		}
 	}
 }
@@ -162,15 +262,12 @@ void increase_delay_rr_yedges(INP int cut_location, INP int inode, INOUTP t_rr_n
 void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
 		INP enum e_directionality directionality, INP int L_percent_wires_cut,
-		INP int L_num_cuts, INP int L_delay_increase){
+		INP int L_num_cuts){
 
-	int num_wires_cut, cur_wires_cut_up, cur_wires_cut_down;
-	int num_wires_cut_border;
+	int num_wires_cut;
 	int cut_step;
-	int itrack, inode;
 	int i, j, counter;
-	int tj;
-	int step;
+	int offset;
 
 	if(directionality == BI_DIRECTIONAL) /* Ignored for now TODO */
 		return;
@@ -179,11 +276,8 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 	num_wires_cut = nodes_per_chan * L_percent_wires_cut;
 	assert(L_percent_wires_cut == 0 || num_wires_cut >= nodes_per_chan); /* to catch overflows */
 	num_wires_cut = num_wires_cut / 100;
+	if(num_wires_cut % 2) num_wires_cut++;
 
-	/* Number of wires to be cut in the case when ylow = ycut+1 and
-	 * direction = DEC_DIRECTION (wire is going down and has edges 
-	 * in the switch box going through the cut */
-	num_wires_cut_border = num_wires_cut / (2*4); // 4 = wirelength
 
 	/* the interval at which the cuts should be made */
 	cut_step = ny / (L_num_cuts + 1);
@@ -191,81 +285,14 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 
 	/* Number of cuts already made */
 	counter = 0;
-	if(num_wires_cut == 0)
-		step = 100000000;
-	else
-		step = nodes_per_chan / num_wires_cut;
 
 	for(j = cut_step; j < ny && counter < L_num_cuts; j+=cut_step){
 		for(i = 0; i <= nx; i++){
-			cur_wires_cut_up = cur_wires_cut_down = 0;
-
-			for(itrack = 0; itrack < nodes_per_chan; itrack++){
-				inode = get_rr_node_index(i, j, CHANY, itrack, L_rr_node_indices);
-
-				if(L_rr_node[inode].direction == INC_DIRECTION){
-					if((itrack/2) % step != 0 || 
-					cur_wires_cut_up >= num_wires_cut/2){
-						/* Increase delay of this wire */
-						increase_delay_rr_yedges(j, inode, L_rr_node);
-						continue;
-					}
-
-					cur_wires_cut_up++;
-				}
-				else{
-					assert(L_rr_node[inode].direction == DEC_DIRECTION);
-					if((itrack/2) % step != 0 || 
-					cur_wires_cut_down >= num_wires_cut/2){
-						/* Increase delay of this wire */
-						increase_delay_rr_yedges(j, inode, L_rr_node);
-						continue;
-					}
-
-					cur_wires_cut_down++;
-				}
-
-				/* actually cut the edges */
-				cut_rr_yedges(j, inode, L_rr_node); 
-			}
-
-			assert(cur_wires_cut_down >= num_wires_cut/2);
-			assert(cur_wires_cut_up >= num_wires_cut/2);
-
-			/* Now cut edges at the switch box, from CHANX to CHANY
-			   and from CHANY to CHANY (the case where ylow = y_cut+1
-			   and direction = DEC_DIRECTION) */
-			tj = j+1;
-			if(tj >= ny)
-				continue;
-
-			cur_wires_cut_down = 0;
-			/* From CHANY to other channels when ylow = ycut+1 */
-			for(itrack = 0; itrack < nodes_per_chan; itrack++){
-				inode = get_rr_node_index(i, tj, CHANY, itrack, L_rr_node_indices);
-
-				if(L_rr_node[inode].direction == DEC_DIRECTION
-				&& L_rr_node[inode].ylow == tj){
-					if(cur_wires_cut_down < num_wires_cut_border){
-						cut_rr_yedges(j, inode, L_rr_node);
-						cur_wires_cut_down++;
-					}
-					else{
-						/* Increase delay of this wire*/
-						increase_delay_rr_yedges(j, inode, L_rr_node);
-					}
-				}
-			}
-
-			/* From CHANX to CHANY, cut only the edges at the switches */
-			if(i > 0 && i < nx){
-				for(itrack = 0; itrack < nodes_per_chan; itrack++){
-					inode = get_rr_node_index(i, j, CHANX, itrack, L_rr_node_indices);
-
-					//printf("Cutting edges between CHANX and CHANY\n");
-					cut_rr_xedges(j, inode, L_rr_node);
-				}
-			}
+			offset = (i * nodes_per_chan) / nx;
+			if(offset % 2) offset++;
+			offset = offset%nodes_per_chan;
+			process_rr_graph_edges(nodes_per_chan, seg_details, L_rr_node, 
+				L_rr_node_indices, directionality, num_wires_cut, j, i, offset);
 		}
 		counter++;
 	}
