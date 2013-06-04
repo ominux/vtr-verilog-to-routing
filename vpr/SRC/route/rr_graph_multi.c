@@ -158,15 +158,20 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 	int cur_wires_cut_up, cur_wires_cut_down, num_wires_cut_border;
 	int increased_delay_up, increased_delay_down;
 	int tj, step;
+	int cnt;
 
 	cur_wires_cut_up = cur_wires_cut_down = 0;
 	increased_delay_up = increased_delay_down = 0;
 
-	step = nodes_per_chan / num_wires_cut;
+	if(num_wires_cut > 0)
+		step = nodes_per_chan / num_wires_cut;
+	else
+		step = 900900;
 
+	cnt = 0;
 	/* Cut the first num_wires_cut/2 wires beginning at offset and wrapping around */
 	for(itrack = offset; cur_wires_cut_up < num_wires_cut/4 ||
-			cur_wires_cut_down < num_wires_cut/4; itrack=(itrack+1)%nodes_per_chan){
+			cur_wires_cut_down < num_wires_cut/4; itrack=(itrack+1)%nodes_per_chan, cnt++){
 		//printf("itrack_cont:%d nodes_per_chan:%d\n", itrack, nodes_per_chan);
 		inode = get_rr_node_index(i, cut_pos, CHANY, itrack, L_rr_node_indices);
 
@@ -178,7 +183,7 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 	}
 
 	/* Now cut interleaved wires continuing from where it stopped */
-	for(; itrack != offset;	itrack=(itrack+1)%nodes_per_chan){
+	for(; cnt < nodes_per_chan; itrack=(itrack+1)%nodes_per_chan, cnt++){
 		//printf("itrack:%d nodes_per_chan:%d\n", itrack, nodes_per_chan);
 		inode = get_rr_node_index(i, cut_pos, CHANY, itrack, L_rr_node_indices);
 
@@ -207,8 +212,8 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 
 	assert(cur_wires_cut_down == num_wires_cut/2);
 	assert(cur_wires_cut_up == num_wires_cut/2);
-	/*printf("delay_up:%d delay_down:%d cut_down:%d cut_up:%d num_wires_cut:%d\n",
-		increased_delay_up, increased_delay_down, cur_wires_cut_down, cur_wires_cut_up, num_wires_cut);*/
+	printf("delay_up:%d delay_down:%d cut_down:%d cut_up:%d nodes_per_chan:%d\n",
+		increased_delay_up, increased_delay_down, cur_wires_cut_down, cur_wires_cut_up, nodes_per_chan);
 	assert(increased_delay_up + increased_delay_down + cur_wires_cut_down + cur_wires_cut_up
 			== nodes_per_chan);
 
@@ -290,7 +295,7 @@ void cut_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_details,
 		for(i = 0; i <= nx; i++){
 			offset = (i * nodes_per_chan) / nx;
 			if(offset % 2) offset++;
-			offset = offset%nodes_per_chan;
+			offset = offset%nodes_per_chan; /* to keep offset between 0 and nodes_per_chan-1 */
 			process_rr_graph_edges(nodes_per_chan, seg_details, L_rr_node, 
 				L_rr_node_indices, directionality, num_wires_cut, j, i, offset);
 		}
