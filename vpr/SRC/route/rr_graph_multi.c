@@ -233,29 +233,6 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 			cut_rr_xedges(cut_pos, inode, L_rr_node);
 		}
 	}
-
-	return;
-	/* Number of wires to be cut in the case when ylow = ycut+1 and
-	 * direction = DEC_DIRECTION (wire is going down and has edges 
-	 * in the switch box going through the cut */
-	num_wires_cut_border = num_wires_cut / (2*4); // 4 = wirelength
-
-	cur_wires_cut_down = 0;
-	/* From CHANY to other channels when ylow = ycut+1 */
-	for(itrack = 0; itrack < nodes_per_chan; itrack++){
-		inode = get_rr_node_index(i, tj, CHANY, itrack, L_rr_node_indices);
-
-		if(L_rr_node[inode].direction == DEC_DIRECTION && L_rr_node[inode].ylow == tj){
-			if(cur_wires_cut_down < num_wires_cut_border){
-				cut_rr_yedges(cut_pos, inode, L_rr_node);
-				cur_wires_cut_down++;
-			}
-			else{
-				/* Increase delay of this wire*/
-				increase_delay_rr_yedges(cut_pos, inode, L_rr_node);
-			}
-		}
-	}
 }
 
 /* 
