@@ -353,45 +353,6 @@ void try_place(struct s_placer_opts placer_opts,
 
 		remember_net_delay_original_ptr = net_delay;
 
-		/*#define PRINT_LOWER_BOUND */
-#ifdef PRINT_LOWER_BOUND
-		/*print the crit_path, assuming delay between blocks that are*
-		 *block_dist apart*/
-
-		if (placer_opts.block_dist <= nx)
-		place_delay_value =
-		delta_clb_to_clb[placer_opts.block_dist][0];
-		else if (placer_opts.block_dist <= ny)
-		place_delay_value =
-		delta_clb_to_clb[0][placer_opts.block_dist];
-		else
-		place_delay_value = delta_clb_to_clb[nx][ny];
-
-		vpr_printf(TIO_MESSAGE_INFO, "\n");
-		vpr_printf(TIO_MESSAGE_INFO, "Lower bound assuming delay of %g\n", place_delay_value);
-
-		load_constant_net_delay(net_delay, place_delay_value);
-		load_timing_graph_net_delays(net_delay);
-		do_timing_analysis(slacks, FALSE, FALSE, TRUE);
-
-		if (getEchoEnabled()) {
-			if(isEchoFileEnabled(E_ECHO_PLACEMENT_CRITICAL_PATH))
-				print_critical_path(getEchoFileName(E_ECHO_PLACEMENT_CRITICAL_PATH));
-			if(isEchoFileEnabled(E_ECHO_PLACEMENT_LOWER_BOUND_SINK_DELAYS))
-				print_sink_delays(getEchoFileName(E_ECHO_PLACEMENT_LOWER_BOUND_SINK_DELAYS));
-			if(isEchoFileEnabled(E_ECHO_PLACEMENT_LOGIC_SINK_DELAYS))
-				print_sink_delays(getEchoFileName(E_ECHO_PLACEMENT_LOGIC_SINK_DELAYS));
-		}
-
-		/*also print sink delays assuming 0 delay between blocks, 
-		 * this tells us how much logic delay is on each path */
-
-		load_constant_net_delay(net_delay, 0);
-		load_timing_graph_net_delays(net_delay);
-		do_timing_analysis(slacks, FALSE, FALSE, TRUE);
-
-#endif
-
 	}
 
 	width_fac = placer_opts.place_chan_width;
@@ -514,23 +475,11 @@ void try_place(struct s_placer_opts placer_opts,
 				cost, bb_cost, timing_cost, delay_cost);
 	vpr_printf(TIO_MESSAGE_INFO, "\n");
 
-#ifndef SPEC
-	vpr_printf(TIO_MESSAGE_INFO, "%9s %9s %11s %11s %11s %11s %8s %8s %7s %7s %7s %9s %7s\n",
-			"---------", "---------", "-----------", "-----------", "-----------", "-----------", 
-			"--------", "--------", "-------", "-------", "-------", "---------", "-------");
-	vpr_printf(TIO_MESSAGE_INFO, "%9s %9s %11s %11s %11s %11s %8s %8s %7s %7s %7s %9s %7s\n",
-			"T", "Cost", "Av BB Cost", "Av TD Cost", "Av Tot Del",
-			"P to P Del", "d_max", "Ac Rate", "Std Dev", "R limit", "Exp",
-			"Tot Moves", "Alpha");
-	vpr_printf(TIO_MESSAGE_INFO, "%9s %9s %11s %11s %11s %11s %8s %8s %7s %7s %7s %9s %7s\n",
-			"---------", "---------", "-----------", "-----------", "-----------", "-----------", 
-			"--------", "--------", "-------", "-------", "-------", "---------", "-------");
-#endif
-
 	sprintf(msg, "Initial Placement.  Cost: %g  BB Cost: %g  TD Cost %g  Delay Cost: %g \t Channel Factor: %d", 
 		cost, bb_cost, timing_cost, delay_cost, width_fac);
 	update_screen(MAJOR, msg, PLACEMENT, FALSE);
 
+	/* Outer loop begins */
 	while (exit_crit(t, cost, annealing_sched) == 0) {
 
 		if (placer_opts.place_algorithm == NET_TIMING_DRIVEN_PLACE
@@ -579,6 +528,7 @@ void try_place(struct s_placer_opts placer_opts,
 
 		inner_crit_iter_count = 1;
 
+		/* Inner loop begins */
 		for (inner_iter = 0; inner_iter < move_lim; inner_iter++) {
 			swap_result = try_swap(t, &cost, &bb_cost, &timing_cost, rlim,
 					old_region_occ_x,
