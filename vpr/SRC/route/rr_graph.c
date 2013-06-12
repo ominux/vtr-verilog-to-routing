@@ -470,6 +470,11 @@ void build_rr_graph(
 			
 			opin_to_track_map[i] = alloc_and_load_pin_to_track_map(DRIVER,
 				nodes_per_chan, Fc_out[i], &types[i], perturb_opins, directionality);
+		
+			conn_block_homogeneity = get_conn_block_homogeneity(&types[i],
+				opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, 4);
+			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Homogeneity: %f   Wire Homogeneity: %f\n", 
+				types[i].name, conn_block_homogeneity.pin_homogeneity, conn_block_homogeneity.wire_homogeneity);
 		} 
 	}
 	/* END OPINP MAP */
@@ -1669,7 +1674,121 @@ static void load_uniform_switch_pattern(INP t_type_ptr type,
 		INP int *pin_num_ordering, INP int *side_ordering,
 		INP int *width_ordering, INP int *height_ordering, INP int nodes_per_chan, INP int Fc,
 		enum e_directionality directionality) {
+#if 1
+	//Need: Fc, W, L. Currently only have Fc and W (nodes_per_chan)
+	int classes;
+	int pin_index;
+	int gcd, jumps;
+	int base;
+	bool want_gcd, all_F_used;
+		
 
+	int nf, bank, wire, count, P;
+	int itrack, iheight, iwidth, iside;
+	int j, k, i, ipin;	
+	
+	int *pin_num_ordering_r, *side_ordering_r, *height_ordering_r, *width_ordering_r;
+	int pin, pin_count;
+	pin = pin_count = 0;
+
+
+	classes = 4;
+	itrack = j = bank = wire = k = i = ipin = base = count = P = iheight = iwidth = iside = 0;
+	all_F_used = false;	
+
+	/* Determine the number of full banks */
+	nf = (nodes_per_chan - (nodes_per_chan % classes)) / classes;
+	P = nodes_per_chan % classes;	
+
+	/* allocate memory for the three new structures */
+	pin_num_ordering_r = (int*) my_malloc(num_phys_pins * sizeof(int));
+	side_ordering_r = (int*) my_malloc(num_phys_pins * sizeof(int));
+	height_ordering_r = (int*) my_malloc(num_phys_pins * sizeof(int));
+	width_ordering_r = (int*) my_malloc(num_phys_pins * sizeof(int));
+	for(i=0;i<4;i++){
+		for(j=0;j<num_phys_pins;j++){
+			pin = pin_num_ordering[j];
+			if (side_ordering[j] == i){
+				pin_num_ordering_r[pin_count] = pin;
+				side_ordering_r[pin_count] = i;
+				height_ordering_r[pin_count] = height_ordering[j];
+				width_ordering_r[pin_count] = width_ordering[j];
+				pin_count++;
+				printf("pin %d  side %d  height %d  width %d\n", pin, i, height_ordering[j], width_ordering[j]);
+			}	
+		}
+		
+	}
+	
+	
+	/* sequential method */
+	for (i = 0; i < num_phys_pins*Fc; i++){
+		
+		pin_index = floor(i / Fc);
+                ipin = pin_num_ordering_r[pin_index];
+                iside = side_ordering_r[pin_index];
+	        iwidth = width_ordering_r[pin_index];
+	        iheight = height_ordering_r[pin_index];
+	#if 0
+		itrack = i % nodes_per_chan;
+		tracks_connected_to_pin[ipin][iwidth][iheight][iside][i % Fc] = itrack;
+	#else 		
+		if (all_F_used){
+			bank = nf;
+			wire = count % classes;
+			if ((count % (nodes_per_chan-1)) == 0){
+				all_F_used = false;
+				base = 0;
+				count = -1; //so that it will be 0 for next F iteration
+			}
+		} else {
+			wire = count % classes;
+			//if (nf % classes == 0 
+			//	&& count % nf == 0
+			//	&& count != 0){
+			//	base++;
+			//	printf("hit. base: %d\n", base);
+			//}
+			bank = (base + count) % nf;
+			if (count != 0 
+				&& bank - (base % nf) == 0
+				&& wire == 0){
+				base++;
+				bank++;
+				bank = bank % nf;
+			}
+			if (count == nf*classes - 1){
+				if (P > 0){
+					all_F_used = true;	//P exists
+				} else {
+					count = -1;		//no P, so start over
+					base = 0;
+					all_F_used = false;
+				}
+			}			
+		}
+		count++;
+
+		itrack = (bank * classes) + wire;
+		
+		//printf("W: %d  nf: %d  bank: %d  wire: %d  itrack: %d  ipin %d  iside %d  ioff %d i: %d\n", nodes_per_chan, nf, bank, wire, itrack, ipin, iside, ioff, i);	
+		//if (i == 100) assert(false);
+		tracks_connected_to_pin[ipin][iwidth][iheight][iside][i % Fc] = itrack;
+	
+		//Check that the new track doesn't already exist for this pin/side/offset
+		for (k=0;k<i%Fc;k++){
+			if (tracks_connected_to_pin[ipin][iwidth][iheight][iside][k] == itrack){
+				assert(false);
+			}
+		}
+	#endif
+	}
+	free(pin_num_ordering_r);
+	free(side_ordering_r);
+	free(width_ordering_r);
+	free(height_ordering_r);
+	printf("END\n");
+#else
 	/* Loads the tracks_connected_to_pin array with an even distribution of     *
 	 * switches across the tracks for each pin.  For example, each pin connects *
 	 * to every 4.3rd track in a channel, with exactly which tracks a pin       *
@@ -1724,6 +1843,7 @@ static void load_uniform_switch_pattern(INP t_type_ptr type,
 			}
 		}
 	}
+#endif
 }
 
 static void load_perturbed_switch_pattern(INP t_type_ptr type,
@@ -2056,7 +2176,7 @@ static void build_unidir_rr_opins(INP int i, INP int j,
 
 	/* Go through each pin and find its fanout. */
 	for (int pin_index = 0; pin_index < type->num_pins; ++pin_index) {
-		/* Skip global pins and pins */
+		/* Skip global pins and pins not of DRIVER type */
 		int class_index = type->pin_class[pin_index];
 		if (type->class_inf[class_index].type != DRIVER) {
 			continue;
