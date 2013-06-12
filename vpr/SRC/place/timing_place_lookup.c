@@ -990,6 +990,7 @@ void compute_delay_lookup_tables(struct s_router_opts router_opts,
 	static int original_num_nets;
 	static int original_num_blocks;
 	static int longest_length;
+	int b_num_cuts;
 
 	load_simplified_device();
 
@@ -997,8 +998,15 @@ void compute_delay_lookup_tables(struct s_router_opts router_opts,
 			&original_num_nets, &original_num_blocks);
 	setup_chan_width(router_opts, chan_width_dist);
 
+	/* ANDRE: change the number of cuts to zero to avoid running the cut routine
+	 * at build_rr_graph. This is because placement uses only deltas to estimate
+	 * the delay between two points, and having a non-homogeneous chip only
+	 * generates noise */
+	b_num_cuts = num_cuts;
+	num_cuts = 0;
 	alloc_routing_structs(router_opts, det_routing_arch, segment_inf,
 			timing_inf, directs, num_directs);
+	num_cuts = b_num_cuts;
 
 	longest_length = get_longest_segment_length(det_routing_arch, segment_inf);
 

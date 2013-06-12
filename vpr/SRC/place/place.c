@@ -1657,6 +1657,8 @@ static float comp_td_point_to_point_delay(int inet, int ipin) {
 	int delta_x, delta_y;
 	t_type_ptr source_type, sink_type;
 	float delay_source_to_sink;
+	/* ANDRE: Variables used for increased delay */
+	int y, cut_step, y1, y2, counter, times_crossed;
 
 	delay_source_to_sink = 0.;
 
@@ -1691,6 +1693,24 @@ static float comp_td_point_to_point_delay(int inet, int ipin) {
 		vpr_printf(TIO_MESSAGE_ERROR, "in comp_td_point_to_point_delay: Bad delay_source_to_sink value delta(%d, %d) delay of %g\n", delta_x, delta_y, delay_source_to_sink);
 		vpr_printf(TIO_MESSAGE_ERROR, "in comp_td_point_to_point_delay: Delay is less than 0\n");
 		exit(1);
+	}
+
+	/* ANDRE: Checks the number of times this connection crosses the cuts */
+	if(num_cuts > 0 && delay_increase > 0.0){
+		y1 = std::min(block[source_block].y, block[sink_block].y);
+		y2 = std::max(block[source_block].y, block[sink_block].y);
+
+		cut_step = ny / (num_cuts + 1);
+		times_crossed = 0;
+
+		counter = 0;
+		for(y = cut_step; y < ny && counter < num_cuts; y+=cut_step){
+			if(y1 <= y && y2 > y)
+				times_crossed++;
+			counter++;
+		}
+
+		delay_source_to_sink += (float)times_crossed * delay_increase;
 	}
 
 	return (delay_source_to_sink);
