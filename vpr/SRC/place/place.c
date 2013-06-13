@@ -531,8 +531,7 @@ void try_place(struct s_placer_opts placer_opts,
 		/* Inner loop begins */
 		for (inner_iter = 0; inner_iter < move_lim; inner_iter++) {
 			swap_result = try_swap(t, &cost, &bb_cost, &timing_cost, rlim,
-					old_region_occ_x,
-					old_region_occ_y, 
+					old_region_occ_x, old_region_occ_y, 
 					placer_opts.place_algorithm, placer_opts.timing_tradeoff,
 					inverse_prev_bb_cost, inverse_prev_timing_cost, &delay_cost);
 			if (swap_result == ACCEPTED) {
@@ -553,8 +552,7 @@ void try_place(struct s_placer_opts placer_opts,
 
 
 			if (placer_opts.place_algorithm == NET_TIMING_DRIVEN_PLACE
-					|| placer_opts.place_algorithm
-							== PATH_TIMING_DRIVEN_PLACE) {
+				|| placer_opts.place_algorithm == PATH_TIMING_DRIVEN_PLACE) {
 
 				/* Do we want to re-timing analyze the circuit to get updated slack and criticality values? 
 				 * We do this only once in a while, since it is expensive.
@@ -1246,8 +1244,7 @@ static enum swap_result try_swap(float t, float *cost, float *bb_cost, float *ti
 	y_from = block[b_from].y;
 	z_from = block[b_from].z;
 
-	if (!find_to(x_from, y_from, block[b_from].type, rlim, &x_to,
-			&y_to))
+	if (!find_to(x_from, y_from, block[b_from].type, rlim, &x_to, &y_to))
 		return REJECTED;
 
 	z_to = 0;
@@ -1297,12 +1294,11 @@ static enum swap_result try_swap(float t, float *cost, float *bb_cost, float *ti
 						/* Brute force bounding box recomputation, once only for speed. */
 						get_non_updateable_bb(inet, &ts_bb_coord_new[inet]);
 				} else {
-					update_bb(inet, &ts_bb_coord_new[inet],
-							&ts_bb_edge_new[inet], 
-							blocks_affected.moved_blocks[iblk].xold, 
-							blocks_affected.moved_blocks[iblk].yold + block[bnum].type->pin_height[iblk_pin],
-							blocks_affected.moved_blocks[iblk].xnew, 
-							blocks_affected.moved_blocks[iblk].ynew + block[bnum].type->pin_height[iblk_pin]);
+					update_bb(inet, &ts_bb_coord_new[inet],	&ts_bb_edge_new[inet], 
+						blocks_affected.moved_blocks[iblk].xold, 
+						blocks_affected.moved_blocks[iblk].yold + block[bnum].type->pin_height[iblk_pin],
+						blocks_affected.moved_blocks[iblk].xnew, 
+						blocks_affected.moved_blocks[iblk].ynew + block[bnum].type->pin_height[iblk_pin]);
 				}
 			}
 		}
@@ -1511,9 +1507,7 @@ static boolean find_to(int x_from, int y_from, t_type_ptr type, float rlim, int 
 		} else {
 			num_tries++;
 		}
-		if(nx / 4 < rlx || 
-			ny / 4 < rly ||
-			num_legal_pos[block_index] < active_area) {
+		if(nx / 4 < rlx || ny / 4 < rly || num_legal_pos[block_index] < active_area) {
 			ipos = my_irand(num_legal_pos[block_index] - 1);
 			*x_to = legal_pos[block_index][ipos].x;
 			*y_to = legal_pos[block_index][ipos].y;
@@ -2304,7 +2298,6 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 	if (xnew < xold) { /* Move to left. */
 
 		/* Update the xmax fields for coordinates and number of edges first. */
-
 		if (xold == curr_bb_coord->xmax) { /* Old position at xmax. */
 			if (curr_bb_edge->xmax == 1) {
 				get_bb_from_scratch(inet, bb_coord_new, bb_edge_new);
@@ -2315,7 +2308,6 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 				bb_coord_new->xmax = curr_bb_coord->xmax;
 			}
 		}
-
 		else { /* Move to left, old postion was not at xmax. */
 			bb_coord_new->xmax = curr_bb_coord->xmax;
 			bb_edge_new->xmax = curr_bb_edge->xmax;
@@ -2327,23 +2319,18 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 			bb_coord_new->xmin = xnew;
 			bb_edge_new->xmin = 1;
 		}
-
 		else if (xnew == curr_bb_coord->xmin) { /* Moved to xmin */
 			bb_coord_new->xmin = xnew;
 			bb_edge_new->xmin = curr_bb_edge->xmin + 1;
 		}
-
 		else { /* Xmin unchanged. */
 			bb_coord_new->xmin = curr_bb_coord->xmin;
 			bb_edge_new->xmin = curr_bb_edge->xmin;
 		}
-	}
-
-	/* End of move to left case. */
+	} /* End of move to left case. */
 	else if (xnew > xold) { /* Move to right. */
 
 		/* Update the xmin fields for coordinates and number of edges first. */
-
 		if (xold == curr_bb_coord->xmin) { /* Old position at xmin. */
 			if (curr_bb_edge->xmin == 1) {
 				get_bb_from_scratch(inet, bb_coord_new, bb_edge_new);
@@ -2354,30 +2341,25 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 				bb_coord_new->xmin = curr_bb_coord->xmin;
 			}
 		}
-
 		else { /* Move to right, old position was not at xmin. */
 			bb_coord_new->xmin = curr_bb_coord->xmin;
 			bb_edge_new->xmin = curr_bb_edge->xmin;
 		}
 
 		/* Now do the xmax fields for coordinates and number of edges. */
-
 		if (xnew > curr_bb_coord->xmax) { /* Moved past xmax. */
 			bb_coord_new->xmax = xnew;
 			bb_edge_new->xmax = 1;
 		}
-
 		else if (xnew == curr_bb_coord->xmax) { /* Moved to xmax */
 			bb_coord_new->xmax = xnew;
 			bb_edge_new->xmax = curr_bb_edge->xmax + 1;
 		}
-
 		else { /* Xmax unchanged. */
 			bb_coord_new->xmax = curr_bb_coord->xmax;
 			bb_edge_new->xmax = curr_bb_edge->xmax;
 		}
-	}
-	/* End of move to right case. */
+	} /* End of move to right case. */
 	else { /* xnew == xold -- no x motion. */
 		bb_coord_new->xmin = curr_bb_coord->xmin;
 		bb_coord_new->xmax = curr_bb_coord->xmax;
@@ -2386,11 +2368,9 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 	}
 
 	/* Now account for the y-direction motion. */
-
 	if (ynew < yold) { /* Move down. */
 
 		/* Update the ymax fields for coordinates and number of edges first. */
-
 		if (yold == curr_bb_coord->ymax) { /* Old position at ymax. */
 			if (curr_bb_edge->ymax == 1) {
 				get_bb_from_scratch(inet, bb_coord_new, bb_edge_new);
@@ -2401,34 +2381,28 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 				bb_coord_new->ymax = curr_bb_coord->ymax;
 			}
 		}
-
 		else { /* Move down, old postion was not at ymax. */
 			bb_coord_new->ymax = curr_bb_coord->ymax;
 			bb_edge_new->ymax = curr_bb_edge->ymax;
 		}
 
 		/* Now do the ymin fields for coordinates and number of edges. */
-
 		if (ynew < curr_bb_coord->ymin) { /* Moved past ymin */
 			bb_coord_new->ymin = ynew;
 			bb_edge_new->ymin = 1;
 		}
-
 		else if (ynew == curr_bb_coord->ymin) { /* Moved to ymin */
 			bb_coord_new->ymin = ynew;
 			bb_edge_new->ymin = curr_bb_edge->ymin + 1;
 		}
-
 		else { /* ymin unchanged. */
 			bb_coord_new->ymin = curr_bb_coord->ymin;
 			bb_edge_new->ymin = curr_bb_edge->ymin;
 		}
-	}
-	/* End of move down case. */
+	} /* End of move down case. */
 	else if (ynew > yold) { /* Moved up. */
 
 		/* Update the ymin fields for coordinates and number of edges first. */
-
 		if (yold == curr_bb_coord->ymin) { /* Old position at ymin. */
 			if (curr_bb_edge->ymin == 1) {
 				get_bb_from_scratch(inet, bb_coord_new, bb_edge_new);
@@ -2439,24 +2413,20 @@ static void update_bb(int inet, struct s_bb *bb_coord_new,
 				bb_coord_new->ymin = curr_bb_coord->ymin;
 			}
 		}
-
 		else { /* Moved up, old position was not at ymin. */
 			bb_coord_new->ymin = curr_bb_coord->ymin;
 			bb_edge_new->ymin = curr_bb_edge->ymin;
 		}
 
 		/* Now do the ymax fields for coordinates and number of edges. */
-
 		if (ynew > curr_bb_coord->ymax) { /* Moved past ymax. */
 			bb_coord_new->ymax = ynew;
 			bb_edge_new->ymax = 1;
 		}
-
 		else if (ynew == curr_bb_coord->ymax) { /* Moved to ymax */
 			bb_coord_new->ymax = ynew;
 			bb_edge_new->ymax = curr_bb_edge->ymax + 1;
 		}
-
 		else { /* ymax unchanged. */
 			bb_coord_new->ymax = curr_bb_coord->ymax;
 			bb_edge_new->ymax = curr_bb_edge->ymax;
@@ -2849,6 +2819,9 @@ static void alloc_and_load_for_fast_cost_update(float place_cost_exp) {
 
 	int low, high, i;
 
+	/* ANDRE: Variables to implement the increased cost */
+	int cut_step, counter, y;
+
 	/* Access arrays below as chan?_place_cost_fac[subhigh][sublow].  Since   *
 	 * subhigh must be greater than or equal to sublow, we only need to       *
 	 * allocate storage for the lower half of a matrix.                       */
@@ -2902,6 +2875,27 @@ static void alloc_and_load_for_fast_cost_update(float place_cost_exp) {
 			chany_place_cost_fac[high][low] =
 					chany_place_cost_fac[high - 1][low] + chan_width_y[high];
 		}
+	}
+
+	/* ANDRE: Decreases the summation of the channel widths to account
+	 * for the decreased capacity at the cutlines */
+	if(num_cuts > 0 && percent_wires_cut > 0){
+
+		cut_step = ny / (num_cuts + 1);
+
+		for(high = 1; high <= nx; high++){
+			for(low = 0; low < high; low++){
+				counter = 0;
+				for(y = cut_step; y < ny && counter < num_cuts; y+=cut_step){
+					if(low <= y && high > y){
+						chany_place_cost_fac[high][low] -=
+							((chan_width_y[y] * percent_wires_cut) / 100);
+					}
+					counter++;
+				}
+			}
+		}
+
 	}
 
 	/* Now compute the inverse of the average number of tracks per channel * 
