@@ -172,7 +172,6 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 	/* Cut the first num_wires_cut/2 wires beginning at offset and wrapping around */
 	for(itrack = offset; cur_wires_cut_up < num_wires_cut/4 ||
 			cur_wires_cut_down < num_wires_cut/4; itrack=(itrack+1)%nodes_per_chan, cnt++){
-		//printf("itrack_cont:%d nodes_per_chan:%d\n", itrack, nodes_per_chan);
 		inode = get_rr_node_index(i, cut_pos, CHANY, itrack, L_rr_node_indices);
 
 		if(L_rr_node[inode].direction == INC_DIRECTION)
@@ -184,7 +183,6 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 
 	/* Now cut interleaved wires continuing from where it stopped */
 	for(; cnt < nodes_per_chan; itrack=(itrack+1)%nodes_per_chan, cnt++){
-		//printf("itrack:%d nodes_per_chan:%d\n", itrack, nodes_per_chan);
 		inode = get_rr_node_index(i, cut_pos, CHANY, itrack, L_rr_node_indices);
 
 		if(L_rr_node[inode].direction == INC_DIRECTION){
