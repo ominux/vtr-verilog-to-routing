@@ -2819,9 +2819,6 @@ static void alloc_and_load_for_fast_cost_update(float place_cost_exp) {
 
 	int low, high, i;
 
-	/* ANDRE: Variables to implement the increased cost */
-	int cut_step, counter, y;
-
 	/* Access arrays below as chan?_place_cost_fac[subhigh][sublow].  Since   *
 	 * subhigh must be greater than or equal to sublow, we only need to       *
 	 * allocate storage for the lower half of a matrix.                       */
@@ -2875,27 +2872,6 @@ static void alloc_and_load_for_fast_cost_update(float place_cost_exp) {
 			chany_place_cost_fac[high][low] =
 					chany_place_cost_fac[high - 1][low] + chan_width_y[high];
 		}
-	}
-
-	/* ANDRE: Decreases the summation of the channel widths to account
-	 * for the decreased capacity at the cutlines */
-	if(num_cuts > 0 && percent_wires_cut > 0){
-
-		cut_step = ny / (num_cuts + 1);
-
-		for(high = 1; high <= nx; high++){
-			for(low = 0; low < high; low++){
-				counter = 0;
-				for(y = cut_step; y < ny && counter < num_cuts; y+=cut_step){
-					if(low <= y && high > y){
-						chany_place_cost_fac[high][low] -=
-							((chan_width_y[y] * percent_wires_cut) / 100);
-					}
-					counter++;
-				}
-			}
-		}
-
 	}
 
 	/* Now compute the inverse of the average number of tracks per channel * 
