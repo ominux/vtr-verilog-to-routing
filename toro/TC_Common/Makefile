@@ -28,12 +28,12 @@ PICsun8 = -G -KPIC
 PIC = $(PIC$(ISM))
 
 CFLAGSlinux_x86_64 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_X86_64
-CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -Wno-strict-aliasing -static -fPIC -DLINUX_I686
+CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_I686
 CFLAGSsun8 = +w -xarch=v9 -library=iostream,Cstd -DLP64 -DSUN8
 CFLAGS = $(CFLAGS$(ISM)) \
 	-I. \
 	-I../TIO_InputOutputHandlers \
-	-I../../libcommon_c/pcre/SRC
+	-I../../libpcre/SRC
 
 ######################################################################
 # Linker options

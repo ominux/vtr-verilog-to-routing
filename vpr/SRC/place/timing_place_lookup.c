@@ -1,20 +1,17 @@
-#include <cstdio>
-#include <cstring>
-#include <cmath>
-using namespace std;
-
-#include <assert.h>
-
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
-#include "place_and_route.h"
 #include "route_common.h"
+#include "place_and_route.h"
 #include "route_tree_timing.h"
 #include "route_timing.h"
-#include "route_export.h"
-#include "rr_graph.h"
 #include "timing_place_lookup.h"
+#include "rr_graph.h"
+#include "route_export.h"
+#include <assert.h>
 #include "read_xml_arch_file.h"
 
 /*this file contains routines that generate the array containing*/
@@ -220,8 +217,6 @@ static void alloc_net(void) {
 		/* FIXME: We *really* shouldn't be allocating write-once copies */
 		len = strlen("TEMP_NET");
 		clb_net[i].name = (char *) my_malloc((len + 1) * sizeof(char));
-		clb_net[i].is_routed = FALSE;
-		clb_net[i].is_fixed = FALSE;
 		clb_net[i].is_global = FALSE;
 		strcpy(clb_net[NET_USED].name, "TEMP_NET");
 
@@ -249,7 +244,7 @@ static void alloc_block(void) {
 
 	max_pins = 0;
 	for (i = 0; i < NUM_TYPES_USED; i++) {
-		max_pins = max(max_pins, type_descriptors[i].num_pins);
+		max_pins = std::max(max_pins, type_descriptors[i].num_pins);
 	}
 
 	block = (struct s_block *) my_malloc(num_blocks * sizeof(struct s_block));
@@ -268,7 +263,7 @@ static void alloc_block(void) {
 
 /**************************************/
 static void load_simplified_device(void) {
-	int i, j, k;
+	int i, j;
 
 	/* Backup original globals */
 	EMPTY_TYPE_BACKUP = EMPTY_TYPE;
@@ -305,12 +300,9 @@ static void load_simplified_device(void) {
 			} else {
 				grid[i][j].type = FILL_TYPE;
 			}
-			grid[i][j].width_offset = 0;
-			grid[i][j].height_offset = 0;
-			grid[i][j].blocks = (int*)my_malloc(grid[i][j].type->capacity * sizeof(int));
-			for (k = 0; k < grid[i][j].type->capacity; k++) {
-				grid[i][j].blocks[k] = EMPTY;
-			}
+			grid[i][j].blocks = (int*)my_malloc(
+					grid[i][j].type->capacity * sizeof(int));
+			grid[i][j].offset = 0;
 		}
 	}
 }
@@ -342,9 +334,7 @@ static void reset_placement(void) {
 		for (j = 0; j <= ny + 1; j++) {
 			grid[i][j].usage = 0;
 			for (k = 0; k < grid[i][j].type->capacity; k++) {
-				if (grid[i][j].blocks[k] != INVALID) {
-					grid[i][j].blocks[k] = EMPTY;
-				}
+				grid[i][j].blocks[k] = EMPTY;
 			}
 		}
 	}
@@ -415,7 +405,7 @@ static void setup_chan_width(struct s_router_opts router_opts,
 
 	max_pins_per_clb = 0;
 	for (i = 0; i < num_types; i++) {
-		max_pins_per_clb = max(max_pins_per_clb, type_descriptors[i].num_pins);
+		max_pins_per_clb = std::max(max_pins_per_clb, type_descriptors[i].num_pins);
 	}
 
 	if (router_opts.fixed_channel_width == NO_FIXED_CHANNEL_WIDTH)
@@ -425,7 +415,7 @@ static void setup_chan_width(struct s_router_opts router_opts,
 	else
 		width_fac = router_opts.fixed_channel_width;
 
-	init_chan(width_fac, 0, chan_width_dist);
+	init_chan(width_fac, chan_width_dist);
 }
 
 /**************************************/
@@ -457,15 +447,12 @@ static void alloc_routing_structs(struct s_router_opts router_opts,
 	}
 
 	build_rr_graph(graph_type, num_types, dummy_type_descriptors, nx, ny, grid,
-			chan_width_max, NULL, det_routing_arch.switch_block_type,
+			chan_width_x[0], NULL, det_routing_arch.switch_block_type,
 			det_routing_arch.Fs, det_routing_arch.num_segment,
 			det_routing_arch.num_switch, segment_inf,
 			det_routing_arch.global_route_switch,
 			det_routing_arch.delayless_switch, timing_inf,
-			det_routing_arch.wire_to_ipin_switch,
-			router_opts.base_cost_type,
-			router_opts.trim_empty_channels,
-			router_opts.trim_obs_channels,
+			det_routing_arch.wire_to_ipin_switch, router_opts.base_cost_type,
 			NULL, 0, TRUE, /* do not send in direct connections because we care about general placement timing instead of special pin placement timing */
 			&warnings);
 
@@ -536,27 +523,29 @@ static float assign_blocks_and_route_net(t_type_ptr source_type,
 		int sink_x_loc, int sink_y_loc, struct s_router_opts router_opts,
 		struct s_det_routing_arch det_routing_arch, t_segment_inf * segment_inf,
 		t_timing_inf timing_inf) {
-
 	/*places blocks at the specified locations, and routes a net between them */
 	/*returns the delay of this net */
 
-	/* Only one block per tile */
-	int source_z_loc = 0;
-	int sink_z_loc = 0;
+	float pres_fac, net_delay_value;
 
-	float net_delay_value = IMPOSSIBLE; /*set to known value for debug purposes */
+	int source_z_loc, sink_z_loc;
+
+	/* Only one block per tile */
+	source_z_loc = 0;
+	sink_z_loc = 0;
+
+	net_delay_value = IMPOSSIBLE; /*set to known value for debug purposes */
 
 	assign_locations(source_type, source_x_loc, source_y_loc, source_z_loc,
 			sink_type, sink_x_loc, sink_y_loc, sink_z_loc);
 
 	load_net_rr_terminals(rr_node_indices);
 
-	int itry = 1;
-	float pres_fac = 0.0; /* ignore congestion */
+	pres_fac = 0; /* ignore congestion */
 
 	/* Route this net with a dummy criticality of 0 by calling 
 	timing_driven_route_net with slacks set to NULL. */
-	timing_driven_route_net(NET_USED, itry, pres_fac,
+	timing_driven_route_net(NET_USED, pres_fac,
 			router_opts.max_criticality, router_opts.criticality_exp,
 			router_opts.astar_fac, router_opts.bend_cost, 
 			pin_criticality, sink_order, rt_node_of_sink, 
@@ -959,13 +948,13 @@ static void compute_delta_arrays(struct s_router_opts router_opts,
 		struct s_det_routing_arch det_routing_arch, t_segment_inf * segment_inf,
 		t_timing_inf timing_inf, int longest_length) {
 
-	vpr_printf_info("Computing delta_io_to_io lookup matrix, may take a few seconds, please wait...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Computing delta_io_to_io lookup matrix, may take a few seconds, please wait...\n");
 	compute_delta_io_to_io(router_opts, det_routing_arch, segment_inf, timing_inf);
-	vpr_printf_info("Computing delta_io_to_clb lookup matrix, may take a few seconds, please wait...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Computing delta_io_to_clb lookup matrix, may take a few seconds, please wait...\n");
 	compute_delta_io_to_clb(router_opts, det_routing_arch, segment_inf, timing_inf);
-	vpr_printf_info("Computing delta_clb_to_io lookup matrix, may take a few seconds, please wait...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Computing delta_clb_to_io lookup matrix, may take a few seconds, please wait...\n");
 	compute_delta_clb_to_io(router_opts, det_routing_arch, segment_inf, timing_inf);
-	vpr_printf_info("Computing delta_clb_to_clb lookup matrix, may take a few seconds, please wait...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Computing delta_clb_to_clb lookup matrix, may take a few seconds, please wait...\n");
 	compute_delta_clb_to_clb(router_opts, det_routing_arch, segment_inf, timing_inf, longest_length);
 
 #ifdef PRINT_ARRAYS

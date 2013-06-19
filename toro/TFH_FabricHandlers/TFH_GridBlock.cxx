@@ -157,27 +157,7 @@ TFH_GridBlock_c& TFH_GridBlock_c::operator=(
 bool TFH_GridBlock_c::operator<( 
       const TFH_GridBlock_c& gridBlock ) const
 {
-   bool isLessThan = false;
-
-   if( this->vpr_gridPoint_.x < gridBlock.vpr_gridPoint_.x )
-   {
-      isLessThan = true;
-   }
-   else if( this->vpr_gridPoint_.x == gridBlock.vpr_gridPoint_.x )
-   {
-      if( this->vpr_gridPoint_.y < gridBlock.vpr_gridPoint_.y )
-      {
-         isLessThan = true;
-      }
-      else if( this->vpr_gridPoint_.y == gridBlock.vpr_gridPoint_.y )
-      {
-         if( this->vpr_gridPoint_.z < gridBlock.vpr_gridPoint_.z )
-         {
-            isLessThan = true;
-         }
-      }
-   }
-   return( isLessThan );
+   return( this->vpr_gridPoint_.operator<( gridBlock.vpr_gridPoint_ ));
 }
 
 //===========================================================================//

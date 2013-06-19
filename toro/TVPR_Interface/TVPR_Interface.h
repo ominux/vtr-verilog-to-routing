@@ -66,10 +66,6 @@ protected:
 
 private:
 
-   bool ShowInternalError_( t_vpr_error* vpr_error ) const;
-
-private:
-
    class TVPR_DataStructures_c
    {
    public:

@@ -1,7 +1,5 @@
-#include <cstdlib>
-#include <cstring>
-using namespace std;
-
+#include <stdlib.h>
+#include <string.h>
 #include "hash.h"
 #include "util.h"
 
@@ -193,11 +191,10 @@ void get_hash_stats(struct s_hash **hash_table, char *hash_table_name){
 
 	avg_num = (float) total_elements / ((float)HASHSIZE - (float)num_NULL);
 	
-	vpr_printf_info("\n");
-	vpr_printf_info("The hash table '%s' is of size %d.\n",
-			hash_table_name, HASHSIZE);
-	vpr_printf_info("It has: %d keys that are never used; total of %d elements; "
-			"an average linked-list length of %.1f; and a maximum linked-list length of %d.\n", 
-			num_NULL, total_elements, avg_num, max_num); 
-	vpr_printf_info("\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
+	vpr_printf(TIO_MESSAGE_INFO, "The hash table '%s' is of size %d.\n",
+		hash_table_name, HASHSIZE);
+	vpr_printf(TIO_MESSAGE_INFO, "It has: %d keys that are never used; total of %d elements; an average linked-list length of %.1f; and a maximum linked-list length of %d.\n", 
+		num_NULL, total_elements, avg_num, max_num); 
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
 }

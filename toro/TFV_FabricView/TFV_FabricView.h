@@ -4,7 +4,6 @@
 //           Inline methods include:
 //           - GetName
 //           - GetRegion
-//           - GetPolygon
 //           - GetLayerRange
 //
 //===========================================================================//
@@ -37,8 +36,6 @@ using namespace std;
 #include "TGS_Rect.h"
 #include "TGS_Region.h"
 
-#include "TGO_Polygon.h"
-
 #include "TFV_Typedefs.h"
 #include "TFV_FabricLayer.h"
 
@@ -55,13 +52,10 @@ public:
 
    TFV_FabricView_c( void );
    TFV_FabricView_c( const string& srName,
-                     const TGS_Region_c& region,
-                     const TGO_Polygon_c* ppolygon = 0 );
+                     const TGS_Region_c& region );
    TFV_FabricView_c( const char* pszName,
-                     const TGS_Region_c& region,
-                     const TGO_Polygon_c* ppolygon = 0 );
-   TFV_FabricView_c( const TGS_Region_c& region,
-                     const TGO_Polygon_c* ppolygon = 0 );
+                     const TGS_Region_c& region );
+   TFV_FabricView_c( const TGS_Region_c& region );
    TFV_FabricView_c( const TFV_FabricView_c& fabricView );
    ~TFV_FabricView_c( void );
 
@@ -73,17 +67,13 @@ public:
 
    const char* GetName( void ) const;
    const TGS_Region_c& GetRegion( void ) const;
-   const TGO_Polygon_c& GetPolygon( void ) const;
    const TGS_LayerRange_t& GetLayerRange( void ) const;
 
    bool Init( const string& srName,
-              const TGS_Region_c& region,
-              const TGO_Polygon_c* ppolygon = 0 );
+              const TGS_Region_c& region );
    bool Init( const char* pszName,
-              const TGS_Region_c& region,
-              const TGO_Polygon_c* ppolygon = 0 );
-   bool Init( const TGS_Region_c& region,
-              const TGO_Polygon_c* ppolygon = 0 );
+              const TGS_Region_c& region );
+   bool Init( const TGS_Region_c& region );
    bool Init( const TFV_FabricView_c& fabricView );
 
    void Clear( void );
@@ -258,7 +248,6 @@ private:
 
    string           srName_; // Define name asso. with this fabric view
    TGS_Region_c     region_; // Define region dims asso. with this fabric view
-   TGO_Polygon_c    polygon_;// Optional polygon asso. with this fabric view
    TGS_LayerRange_t layerRange_; 
                              // Define layer range asso. with this fabric view
 
@@ -285,13 +274,6 @@ inline const TGS_Region_c& TFV_FabricView_c::GetRegion(
       void ) const
 {
    return( this->region_ );
-}
-
-//===========================================================================//
-inline const TGO_Polygon_c& TFV_FabricView_c::GetPolygon( 
-      void ) const
-{
-   return( this->polygon_ );
 }
 
 //===========================================================================//

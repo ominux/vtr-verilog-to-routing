@@ -1,10 +1,7 @@
-#include <cmath>
-using namespace std;
-
-#include <assert.h>
-
+#include <math.h>
 #include "util.h"
 #include "vpr_types.h"
+#include <assert.h>
 #include "globals.h"
 #include "rr_graph_util.h"
 #include "rr_graph_area.h"
@@ -130,7 +127,7 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 
 	num_inputs_to_cblock = (int *) my_calloc(num_rr_nodes, sizeof(int));
 
-	maxlen = max(nx, ny) + 1;
+	maxlen = std::max(nx, ny) + 1;
 	cblock_counted = (boolean *) my_calloc(maxlen, sizeof(boolean));
 	shared_buffer_trans = (float *) my_calloc(maxlen, sizeof(float));
 
@@ -155,13 +152,6 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 				to_node = rr_node[from_node].edges[iedge];
 				to_rr_type = rr_node[to_node].type;
 
-				/* Ignore any uninitialized rr_graph nodes */
-				if ((rr_node[to_node].type == SOURCE) 
-						&& (rr_node[to_node].xlow == 0) && (rr_node[to_node].ylow == 0)
-						&& (rr_node[to_node].xhigh == 0) && (rr_node[to_node].yhigh == 0)) {
-					continue;
-				}
-
 				switch (to_rr_type) {
 
 				case CHANX:
@@ -170,7 +160,8 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 
 					if (switch_inf[iswitch].buffered) {
 						iseg = seg_index_of_sblock(from_node, to_node);
-						shared_buffer_trans[iseg] = max(shared_buffer_trans[iseg],
+						shared_buffer_trans[iseg] = std::max(
+								shared_buffer_trans[iseg],
 								sharable_switch_trans[iswitch]);
 
 						ntrans_no_sharing += unsharable_switch_trans[iswitch]
@@ -188,7 +179,7 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 
 				case IPIN:
 					num_inputs_to_cblock[to_node]++;
-					max_inputs_to_cblock = max(max_inputs_to_cblock, 
+					max_inputs_to_cblock = std::max(max_inputs_to_cblock,
 							num_inputs_to_cblock[to_node]);
 
 					iseg = seg_index_of_cblock(from_rr_type, to_node);
@@ -201,13 +192,10 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 					break;
 
 				default:
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in count_routing_transistors:\n"
-						 "\tUnexpected connection from node %d (type %d) to node %d (type %d).\n",
-						from_node, from_rr_type, to_node, to_rr_type);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in count_routing_transistors:\n");
+					vpr_printf(TIO_MESSAGE_ERROR, "\tUnexpected connection from node %d (type %d) to node %d (type %d).\n",
+							from_node, from_rr_type, to_node, to_rr_type);
+					exit(1);
 					break;
 
 				} /* End switch on to_rr_type. */
@@ -251,7 +239,7 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 						+ sharable_switch_trans[iswitch];
 				ntrans_sharing += unsharable_switch_trans[iswitch];
 
-				shared_opin_buffer_trans = max(shared_opin_buffer_trans,
+				shared_opin_buffer_trans = std::max(shared_opin_buffer_trans,
 						sharable_switch_trans[iswitch]);
 			}
 
@@ -279,13 +267,13 @@ void count_bidir_routing_transistors(int num_switch, float R_minW_nmos,
 	ntrans_sharing += input_cblock_trans;
 	ntrans_no_sharing += input_cblock_trans;
 
-	vpr_printf_info("\n");
-	vpr_printf_info("Routing area (in minimum width transistor areas)...\n");
-	vpr_printf_info("\tAssuming no buffer sharing (pessimistic). Total: %#g, per logic tile: %#g\n", 
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Routing area (in minimum width transistor areas)...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\tAssuming no buffer sharing (pessimistic). Total: %#g, per logic tile: %#g\n", 
 			ntrans_no_sharing, ntrans_no_sharing / (float) (nx * ny));
-	vpr_printf_info("\tAssuming buffer sharing (slightly optimistic). Total: %#g, per logic tile: %#g\n", 
+	vpr_printf(TIO_MESSAGE_INFO, "\tAssuming buffer sharing (slightly optimistic). Total: %#g, per logic tile: %#g\n", 
 			ntrans_sharing, ntrans_sharing / (float) (nx * ny));
-	vpr_printf_info("\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
 }
 
 void count_unidir_routing_transistors(t_segment_inf * segment_inf,
@@ -331,7 +319,7 @@ void count_unidir_routing_transistors(t_segment_inf * segment_inf,
 			R_minW_pmos);
 
 	num_inputs_to_cblock = (int *) my_calloc(num_rr_nodes, sizeof(int));
-	maxlen = max(nx, ny) + 1;
+	maxlen = std::max(nx, ny) + 1;
 	cblock_counted = (boolean *) my_calloc(maxlen, sizeof(boolean));
 
 	ntrans = 0;
@@ -376,13 +364,6 @@ void count_unidir_routing_transistors(t_segment_inf * segment_inf,
 				to_node = rr_node[from_node].edges[iedge];
 				to_rr_type = rr_node[to_node].type;
 
-				/* Ignore any uninitialized rr_graph nodes */
-				if ((rr_node[to_node].type == SOURCE) 
-						&& (rr_node[to_node].xlow == 0) && (rr_node[to_node].ylow == 0)
-						&& (rr_node[to_node].xhigh == 0) && (rr_node[to_node].yhigh == 0)) {
-					continue;
-				}
-
 				switch (to_rr_type) {
 
 				case CHANX:
@@ -391,7 +372,7 @@ void count_unidir_routing_transistors(t_segment_inf * segment_inf,
 
 				case IPIN:
 					num_inputs_to_cblock[to_node]++;
-					max_inputs_to_cblock = max(max_inputs_to_cblock,
+					max_inputs_to_cblock = std::max(max_inputs_to_cblock,
 							num_inputs_to_cblock[to_node]);
 					iseg = seg_index_of_cblock(from_rr_type, to_node);
 
@@ -402,13 +383,10 @@ void count_unidir_routing_transistors(t_segment_inf * segment_inf,
 					break;
 
 				default:
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in count_routing_transistors:\n"
-						"\tUnexpected connection from node %d (type %d) to node %d (type %d).\n", 
-						from_node, from_rr_type, to_node, to_rr_type);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in count_routing_transistors:\n");
+					vpr_printf(TIO_MESSAGE_ERROR, "\tUnexpected connection from node %d (type %d) to node %d (type %d).\n",
+							from_node, from_rr_type, to_node, to_rr_type);
+					exit(1);
 					break;
 
 				} /* End switch on to_rr_type. */
@@ -447,9 +425,9 @@ void count_unidir_routing_transistors(t_segment_inf * segment_inf,
 
 	ntrans += input_cblock_trans;
 
-	vpr_printf_info("\n");
-	vpr_printf_info("Routing area (in minimum width transistor areas)...\n");
-	vpr_printf_info("\tTotal routing area: %#g, per logic tile: %#g\n", ntrans, ntrans / (float) (nx * ny));
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Routing area (in minimum width transistor areas)...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\tTotal routing area: %#g, per logic tile: %#g\n", ntrans, ntrans / (float) (nx * ny));
 }
 
 static float get_cblock_trans(int *num_inputs_to_cblock,
@@ -565,7 +543,7 @@ static float trans_per_buf(float Rbuf, float R_minW_nmos, float R_minW_pmos) {
 		 * ones.                                                                  */
 
 		num_stage = nint(log10(R_minW_nmos / Rbuf) / log10(4.));
-		num_stage = max(num_stage, 1);
+		num_stage = std::max(num_stage, 1);
 		stage_ratio = pow((float)(R_minW_nmos / Rbuf), (float)( 1. / (float) num_stage));
 
 		Rstage = R_minW_nmos;

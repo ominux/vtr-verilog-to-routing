@@ -1,8 +1,5 @@
-#include <cstring>
-using namespace std;
-
 #include <assert.h>
-
+#include <string.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "physical_types.h"
@@ -77,7 +74,6 @@ static void mark_direct_of_pins(int start_pin_index, int end_pin_index, int ityp
  * print tabs given number of tabs to file
  */
 void print_tabs(FILE * fpout, int num_tab) {
-
 	int i;
 	for (i = 0; i < num_tab; i++) {
 		fprintf(fpout, "\t");
@@ -88,7 +84,6 @@ void print_tabs(FILE * fpout, int num_tab) {
 void sync_grid_to_blocks(INP int L_num_blocks,
 		INP const struct s_block block_list[], INP int L_nx, INP int L_ny,
 		INOUTP struct s_grid_tile **L_grid) {
-
 	int i, j, k;
 
 	/* Reset usage and allocate blocks list if needed */
@@ -103,7 +98,7 @@ void sync_grid_to_blocks(INP int L_num_blocks,
 
 					/* Set them as unconnected */
 					for (k = 0; k < L_grid[i][j].type->capacity; ++k) {
-						L_grid[i][j].blocks[k] = EMPTY;
+						L_grid[i][j].blocks[k] = OPEN;
 					}
 				}
 			}
@@ -113,48 +108,39 @@ void sync_grid_to_blocks(INP int L_num_blocks,
 	/* Go through each block */
 	for (i = 0; i < L_num_blocks; ++i) {
 		/* Check range of block coords */
-		if (block[i].x < 0 || block[i].y < 0
-				|| (block[i].x + block[i].type->width - 1) > (L_nx + 1)
+		if (block[i].x < 0 || block[i].x > (L_nx + 1) || block[i].y < 0
 				|| (block[i].y + block[i].type->height - 1) > (L_ny + 1)
 				|| block[i].z < 0 || block[i].z > (block[i].type->capacity)) {
-			vpr_printf_error(__FILE__, __LINE__,
-					"Block %d is at invalid location (%d, %d, %d).\n", 
+			vpr_printf(TIO_MESSAGE_ERROR, "Block %d is at invalid location (%d, %d, %d).\n", 
 					i, block[i].x, block[i].y, block[i].z);
 			exit(1);
 		}
 
 		/* Check types match */
 		if (block[i].type != L_grid[block[i].x][block[i].y].type) {
-			vpr_printf_error(__FILE__, __LINE__,
-					"A block is in a grid location (%d x %d) with a conflicting type.\n", 
+			vpr_printf(TIO_MESSAGE_ERROR, "A block is in a grid location (%d x %d) with a conflicting type.\n", 
 					block[i].x, block[i].y);
 			exit(1);
 		}
 
 		/* Check already in use */
-		if ((EMPTY != L_grid[block[i].x][block[i].y].blocks[block[i].z])
-				&& (INVALID != L_grid[block[i].x][block[i].y].blocks[block[i].z])) {
-			vpr_printf_error(__FILE__, __LINE__,
-					"Location (%d, %d, %d) is used more than once.\n", 
+		if (OPEN != L_grid[block[i].x][block[i].y].blocks[block[i].z]) {
+			vpr_printf(TIO_MESSAGE_ERROR, "Location (%d, %d, %d) is used more than once.\n", 
 					block[i].x, block[i].y, block[i].z);
 			exit(1);
 		}
 
-		if (L_grid[block[i].x][block[i].y].width_offset != 0 || L_grid[block[i].x][block[i].y].height_offset != 0) {
-			vpr_printf_error(__FILE__, __LINE__,
-					"Large block not aligned in placment for block %d at (%d, %d, %d).",
+		if (L_grid[block[i].x][block[i].y].offset != 0) {
+			vpr_printf(TIO_MESSAGE_ERROR, "Large block not aligned in placment for block %d at (%d, %d, %d).",
 					i, block[i].x, block[i].y, block[i].z);
 			exit(1);
 		}
 
 		/* Set the block */
-		for (int width = 0; width < block[i].type->width; ++width) {
-			for (int height = 0; height < block[i].type->height; ++height) {
-				L_grid[block[i].x + width][block[i].y + height].blocks[block[i].z] = i;
-				L_grid[block[i].x + width][block[i].y + height].usage++;
-				assert(L_grid[block[i].x + width][block[i].y + height].width_offset == width);
-				assert(L_grid[block[i].x + width][block[i].y + height].height_offset == height);
-			}
+		for (j = 0; j < block[i].type->height; j++) {
+			L_grid[block[i].x][block[i].y + j].blocks[block[i].z] = i;
+			L_grid[block[i].x][block[i].y + j].usage++;
+			assert(L_grid[block[i].x][block[i].y + j].offset == j);
 		}
 	}
 }
@@ -173,10 +159,8 @@ boolean is_opin(int ipin, t_type_ptr type) {
 		return (FALSE);
 }
 
-void get_class_range_for_block(INP int iblk, 
-		OUTP int *class_low,
+void get_class_range_for_block(INP int iblk, OUTP int *class_low,
 		OUTP int *class_high) {
-
 	/* Assumes that the placement has been done so each block has a set of pins allocated to it */
 	t_type_ptr type;
 
@@ -187,7 +171,6 @@ void get_class_range_for_block(INP int iblk,
 }
 
 int get_max_primitives_in_pb_type(t_pb_type *pb_type) {
-
 	int i, j;
 	int max_size, temp_size;
 	if (pb_type->modes == 0) {
@@ -211,7 +194,6 @@ int get_max_primitives_in_pb_type(t_pb_type *pb_type) {
 
 /* finds maximum number of nets that can be contained in pb_type, this is bounded by the number of driving pins */
 int get_max_nets_in_pb_type(const t_pb_type *pb_type) {
-
 	int i, j;
 	int max_nets, temp_nets;
 	if (pb_type->modes == 0) {
@@ -238,7 +220,6 @@ int get_max_nets_in_pb_type(const t_pb_type *pb_type) {
 }
 
 int get_max_depth_of_pb_type(t_pb_type *pb_type) {
-
 	int i, j;
 	int max_depth, temp_depth;
 	max_depth = pb_type->depth;
@@ -258,7 +239,6 @@ int get_max_depth_of_pb_type(t_pb_type *pb_type) {
  * given a primitive type and a logical block, is the mapping legal
  */
 boolean primitive_type_feasible(int iblk, const t_pb_type *cur_pb_type) {
-
 	t_model_ports *port;
 	int i, j;
 	boolean second_pass;
@@ -280,11 +260,13 @@ boolean primitive_type_feasible(int iblk, const t_pb_type *cur_pb_type) {
 			if (cur_pb_type->ports[i].model_port == port) {
 				for (j = cur_pb_type->ports[i].num_pins; j < port->size; j++) {
 					if (port->dir == IN_PORT && !port->is_clock) {
-						if (logical_block[iblk].input_nets[port->index][j] != OPEN) {
+						if (logical_block[iblk].input_nets[port->index][j]
+								!= OPEN) {
 							return FALSE;
 						}
 					} else if (port->dir == OUT_PORT) {
-						if (logical_block[iblk].output_nets[port->index][j] != OPEN) {
+						if (logical_block[iblk].output_nets[port->index][j]
+								!= OPEN) {
 							return FALSE;
 						}
 					} else {
@@ -359,7 +341,6 @@ t_pb_graph_pin* get_pb_graph_node_pin_from_model_port_pin(t_model_ports *model_p
 }
 
 t_pb_graph_pin* get_pb_graph_node_pin_from_vpack_net(int inet, int ipin) {
-
 	int ilogical_block;
 	t_model_ports *port;
 
@@ -408,17 +389,18 @@ t_pb_graph_pin* get_pb_graph_node_pin_from_vpack_net(int inet, int ipin) {
 }
 
 t_pb_graph_pin* get_pb_graph_node_pin_from_clb_net(int inet, int ipin) {
-
 	int iblock, target_pin;
+	t_pb_graph_node *pb_graph_node;
 
 	iblock = clb_net[inet].node_block[ipin];
+	pb_graph_node = block[iblock].pb->pb_graph_node;
+
 	target_pin = clb_net[inet].node_block_pin[ipin];
 	
 	return get_pb_graph_node_pin_from_block_pin(iblock, target_pin);
 }
 
 t_pb_graph_pin* get_pb_graph_node_pin_from_block_pin(int iblock, int ipin) {
-
 	int i, count;
 	const t_pb_type *pb_type;
 	t_pb_graph_node *pb_graph_node;
@@ -468,7 +450,6 @@ t_pb_graph_pin* get_pb_graph_node_pin_from_block_pin(int iblock, int ipin) {
  For now, assume primitives that have a lot of pins are scarcer than those without so use primitives with less pins before those with more
  */
 float compute_primitive_base_cost(INP t_pb_graph_node *primitive) {
-
 	return (primitive->pb_type->num_input_pins
 			+ primitive->pb_type->num_output_pins
 			+ primitive->pb_type->num_clock_pins);
@@ -525,7 +506,6 @@ int num_ext_inputs_logical_block(int iblk) {
 
 
 void free_cb(t_pb *pb) {
-
 	const t_pb_type * pb_type;
 	int i, total_nodes;
 
@@ -547,7 +527,6 @@ void free_cb(t_pb *pb) {
 }
 
 void free_pb(t_pb *pb) {
-
 	const t_pb_type * pb_type;
 	int i, j, mode;
 	struct s_linked_vptr *revalid_molecule;
@@ -557,8 +536,12 @@ void free_pb(t_pb *pb) {
 
 	if (pb_type->blif_model == NULL) {
 		mode = pb->mode;
-		for (i = 0; i < pb_type->modes[mode].num_pb_type_children && pb->child_pbs != NULL; i++) {
-			for (j = 0; j < pb_type->modes[mode].pb_type_children[i].num_pb	&& pb->child_pbs[i] != NULL; j++) {
+		for (i = 0;
+				i < pb_type->modes[mode].num_pb_type_children
+						&& pb->child_pbs != NULL; i++) {
+			for (j = 0;
+					j < pb_type->modes[mode].pb_type_children[i].num_pb
+							&& pb->child_pbs[i] != NULL; j++) {
 				if (pb->child_pbs[i][j].name != NULL || pb->child_pbs[i][j].child_pbs != NULL) {
 					free_pb(&pb->child_pbs[i][j]);
 				}
@@ -600,7 +583,7 @@ void free_pb(t_pb *pb) {
 			free(pb->lut_pin_remap);
 		}
 		pb->lut_pin_remap = NULL;
-		if (pb->logical_block != EMPTY && pb->logical_block != INVALID && logical_block != NULL) {
+		if (pb->logical_block != OPEN && logical_block != NULL) {
 			logical_block[pb->logical_block].clb_index = NO_CLUSTER;
 			logical_block[pb->logical_block].pb = NULL;
 			/* If any molecules were marked invalid because of this logic block getting packed, mark them valid */
@@ -629,7 +612,6 @@ void free_pb(t_pb *pb) {
 }
 
 void free_pb_stats(t_pb *pb) {
-
 	int i;
 	t_pb_graph_node *pb_graph_node = pb->pb_graph_node;
 
@@ -677,7 +659,7 @@ int ** alloc_and_load_net_pin_index() {
 
 	/* Compute required size. */
 	for (itype = 0; itype < num_types; itype++)
-		max_pins_per_clb = max(max_pins_per_clb, type_descriptors[itype].num_pins);
+		max_pins_per_clb = std::max(max_pins_per_clb, type_descriptors[itype].num_pins);
 	
 	/* Allocate for maximum size. */
 	temp_net_pin_index = (int **) alloc_matrix(0, num_blocks - 1, 0,
@@ -965,11 +947,11 @@ void parse_direct_pin_name(char * src_string, int line, int * start_pin_index,
 
 		match_count = sscanf(source_string, "%s %s", pb_type_name, port_name);
 		if (match_count != 2){
-			vpr_printf_error(__FILE__, __LINE__,
-					"[LINE %d] Invalid pin - %s, name should be in the format "
-					"\"pb_type_name\".\"port_name\" or \"pb_type_name\".\"port_name [end_pin_index:start_pin_index]\". "
-					"The end_pin_index and start_pin_index can be the same.\n", 
-					line, src_string);
+			vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Invalid pin - %s, "
+					"name should be in the format \"pb_type_name\".\"port_name\" or "
+					"\"pb_type_name\".\"port_name [end_pin_index:start_pin_index]\". "
+					" The end_pin_index and start_pin_index can be the same.\n", line,
+					src_string);
 			exit(1);
 		}
 	} else {
@@ -984,25 +966,23 @@ void parse_direct_pin_name(char * src_string, int line, int * start_pin_index,
 								pb_type_name, port_name, 
 								end_pin_index, start_pin_index);
 		if (match_count != 4){
-			vpr_printf_error(__FILE__, __LINE__,
-					"[LINE %d] Invalid pin - %s, name should be in the format "
-					"\"pb_type_name\".\"port_name\" or \"pb_type_name\".\"port_name [end_pin_index:start_pin_index]\". "
-					"The end_pin_index and start_pin_index can be the same.\n", 
-					line, src_string);
+			vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Invalid pin - %s, "
+					"name should be in the format \"pb_type_name\".\"port_name\" or "
+					"\"pb_type_name\".\"port_name [end_pin_index:start_pin_index]\". "
+					" The end_pin_index and start_pin_index can be the same.\n", line,
+					src_string);
 			exit(1);
 		}
 		if (*end_pin_index < 0 || *start_pin_index < 0) {
-			vpr_printf_error(__FILE__, __LINE__,
-					"[LINE %d] Invalid pin - %s, the pin_index in "
-					"[end_pin_index:start_pin_index] should not be a negative value.\n", 
-					line, src_string);
+			vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Invalid pin - %s, "
+					"the pin_index [end_pin_index:start_pin_index] should not "
+					"be a negative value.\n", line, src_string);
 			exit(1);
 		}
 		if ( *end_pin_index < *start_pin_index) {
-			vpr_printf_error(__FILE__, __LINE__,
-					"[LINE %d] Invalid from_pin - %s, the end_pin_index in "
-					"[end_pin_index:start_pin_index] should not be less than start_pin_index.\n", 
-					line, src_string);
+			vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Invalid from_pin - %s, "
+					"the end_pin_index in [end_pin_index:start_pin_index] should "
+					"not be less than start_pin_index.\n", line, src_string);
 			exit(1);
 		}
 	}
@@ -1028,9 +1008,9 @@ static void mark_direct_of_pins(int start_pin_index, int end_pin_index, int ityp
 							
 			// Check whether the pins are marked, errors out if so
 			if (direct_type_from_blk_pin[itype][iblk_pin] != OPEN) {
-				vpr_printf_error(__FILE__, __LINE__,
-						"[LINE %d] Invalid pin - %s, this pin is in more than one direct connection.\n", 
-						line, src_string);
+				vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Invalid pin - %s, "
+					"this pin is in more than one direct connection.\n", line, 
+					src_string);
 				exit(1);
 			} else {
 				direct_type_from_blk_pin[itype][iblk_pin] = direct_type;
@@ -1066,11 +1046,10 @@ static void mark_direct_of_ports (int idirect, int direct_type, char * pb_type_n
 
 					// Check whether the end_pin_index is valid
 					if (end_pin_index > num_port_pins) {
-						vpr_printf_error(__FILE__, __LINE__,
-								"[LINE %d] Invalid pin - %s, the end_pin_index in "
-								"[end_pin_index:start_pin_index] should "
-								"be less than the num_port_pins %d.\n", 
-								line, src_string, num_port_pins);
+						vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Invalid pin - %s, "
+								"the end_pin_index in [end_pin_index:start_pin_index] should "
+								"be less than the num_port_pins %d.\n", line,
+								src_string, num_port_pins);
 						exit(1);
 					}
 
@@ -1172,4 +1151,5 @@ void alloc_and_load_idirect_from_blk_pin(t_direct_inf* directs, int num_directs,
 	/* Returns the pointer to the 2D arrays by reference. */
 	*idirect_from_blk_pin = temp_idirect_from_blk_pin;
 	*direct_type_from_blk_pin = temp_direct_type_from_blk_pin;
+
 }

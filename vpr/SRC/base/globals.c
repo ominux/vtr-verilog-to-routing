@@ -55,7 +55,6 @@ int ny = 0;
 
 int *chan_width_x = NULL; /* [0..ny] */
 int *chan_width_y = NULL; /* [0..nx] */
-int chan_width_max = 0;
 
 struct s_grid_tile **grid = NULL; /* [0..(nx+1)][0..(ny+1)] Physical block list */
 

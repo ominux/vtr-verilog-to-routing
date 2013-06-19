@@ -8,11 +8,6 @@
  *           - PrintHandlerExists
  *           - PrintHandlerFilter
  *           - PrintHandlerMessage
- *           - PrintHandlerInfo
- *           - PrintHandlerWarning
- *           - PrintHandlerError
- *           - PrintHandlerTrace
- *           - PrintHandlerDirect
  *
  *===========================================================================*/
 
@@ -48,7 +43,7 @@ using namespace std;
  * 07/02/12 jeffr : Original
  *===========================================================================*/
 extern "C" void PrintHandlerNew( 
-      const char* pszLogFileName )
+      char* pszLogFileName )
 {
    /* Allocate a skin handler 'singleton' for program message handling */
    TIO_SkinHandler_c& skinHandler = TIO_SkinHandler_c::GetInstance( );
@@ -98,11 +93,9 @@ extern "C" void PrintHandlerDelete( void )
  *---------------------------------------------------------------------------*
  * Version history
  * 07/02/12 jeffr : Original
- * 06/19/13 jeffr : Added support for "enableFileLines" parameter
  *===========================================================================*/
 extern "C" void PrintHandlerInit( 
       unsigned char enableTimeStamps,
-      unsigned char enableFileLines,
       unsigned long maxWarningCount,
       unsigned long maxErrorCount )
 {
@@ -110,9 +103,6 @@ extern "C" void PrintHandlerInit(
 
    /* Enable optional print handler message time stamps */
    printHandler.SetTimeStampsEnabled( static_cast< bool >( enableTimeStamps == (unsigned char) 0 ));
-
-   /* Enable optional print handler message file lines */
-   printHandler.SetFileLinesEnabled( static_cast< bool >( enableFileLines == (unsigned char) 0 ));
 
    /* Define optional print handler max warning/error counts */
    printHandler.SetMaxWarningCount( maxWarningCount );
@@ -142,9 +132,9 @@ extern "C" int PrintHandlerExists(
  * 07/02/12 jeffr : Original
  *===========================================================================*/
 extern "C" void PrintHandlerFilter( 
-            TIO_MessageMode_t messageMode,
-            TIO_FilterMode_t  filterMode,
-      const char*             pszFilter )
+      TIO_MessageMode_t messageMode,
+      TIO_FilterMode_t  filterMode,
+      char*             pszFilter )
 {
    TIO_PrintHandler_c& printHandler = TIO_PrintHandler_c::GetInstance( );
 
@@ -217,8 +207,8 @@ extern "C" void PrintHandlerFilter(
  * 07/02/12 jeffr : Original
  *===========================================================================*/
 extern "C" unsigned char PrintHandlerMessage( 
-            TIO_MessageMode_t messageMode,
-      const char*             pszMessage,
+      TIO_MessageMode_t messageMode,
+      char*             pszMessage,
       ... )
 {
    va_list vaArgs;                      /* Make a variable argument list */
@@ -250,116 +240,4 @@ extern "C" unsigned char PrintHandlerMessage(
    va_end( vaArgs );                    /* Reset variable argument list */
 
    return( ok );
-}
-
-/*===========================================================================*
- * Function       : PrintHandlerInfo
- * Author         : Jeff Rudolph
- *---------------------------------------------------------------------------*
- * Version history
- * 06/18/13 jeffr : Original
- *===========================================================================*/
-extern "C" void PrintHandlerInfo(
-      const char* pszMessage,
-      ... )
-{
-   va_list vaArgs;                      /* Make a variable argument list */
-   va_start( vaArgs, pszMessage );      /* Initialize variable argument list */
-
-   TIO_PrintHandler_c& printHandler = TIO_PrintHandler_c::GetInstance( );
-   printHandler.Info( TIO_PRINT_INFO, pszMessage, vaArgs );
-
-   va_end( vaArgs );                    /* Reset variable argument list */
-}
-
-/*===========================================================================*
- * Function       : PrintHandlerWarning
- * Author         : Jeff Rudolph
- *---------------------------------------------------------------------------*
- * Version history
- * 06/18/13 jeffr : Original
- *===========================================================================*/
-extern "C" unsigned char PrintHandlerWarning(
-      const char*        pszFileName,
-            unsigned int lineNum,
-      const char*        pszMessage,
-      ... )
-{
-   va_list vaArgs;                      /* Make a variable argument list */
-   va_start( vaArgs, pszMessage );      /* Initialize variable argument list */
-
-   TIO_PrintHandler_c& printHandler = TIO_PrintHandler_c::GetInstance( );
-   unsigned char ok = printHandler.Warning( TIO_PRINT_WARNING, 
-                                            pszFileName, lineNum, 
-                                            pszMessage, vaArgs );
-
-   va_end( vaArgs );                    /* Reset variable argument list */
-
-   return( ok );
-}
-
-/*===========================================================================*
- * Function       : PrintHandlerError
- * Author         : Jeff Rudolph
- *---------------------------------------------------------------------------*
- * Version history
- * 06/18/13 jeffr : Original
- *===========================================================================*/
-extern "C" unsigned char PrintHandlerError(
-      const char*        pszFileName,
-            unsigned int lineNum,
-      const char*        pszMessage,
-      ... )
-{
-   va_list vaArgs;                      /* Make a variable argument list */
-   va_start( vaArgs, pszMessage );      /* Initialize variable argument list */
-
-   TIO_PrintHandler_c& printHandler = TIO_PrintHandler_c::GetInstance( );
-   unsigned char ok = printHandler.Error( TIO_PRINT_ERROR, 
-                                            pszFileName, lineNum, 
-                                            pszMessage, vaArgs );
-
-   va_end( vaArgs );                    /* Reset variable argument list */
-
-   return( ok );
-}
-
-/*===========================================================================*
- * Function       : PrintHandlerTrace
- * Author         : Jeff Rudolph
- *---------------------------------------------------------------------------*
- * Version history
- * 06/18/13 jeffr : Original
- *===========================================================================*/
-extern "C" void PrintHandlerTrace(
-      const char* pszMessage,
-      ... )
-{
-   va_list vaArgs;                      /* Make a variable argument list */
-   va_start( vaArgs, pszMessage );      /* Initialize variable argument list */
-
-   TIO_PrintHandler_c& printHandler = TIO_PrintHandler_c::GetInstance( );
-   printHandler.Trace( TIO_PRINT_TRACE, pszMessage, vaArgs );
-
-   va_end( vaArgs );                    /* Reset variable argument list */
-}
-
-/*===========================================================================*
- * Function       : PrintHandlerDirect
- * Author         : Jeff Rudolph
- *---------------------------------------------------------------------------*
- * Version history
- * 06/18/13 jeffr : Original
- *===========================================================================*/
-extern "C" void PrintHandlerDirect(
-      const char* pszMessage,
-      ... )
-{
-   va_list vaArgs;                      /* Make a variable argument list */
-   va_start( vaArgs, pszMessage );      /* Initialize variable argument list */
-
-   TIO_PrintHandler_c& printHandler = TIO_PrintHandler_c::GetInstance( );
-   printHandler.Direct( TIO_PRINT_DIRECT, pszMessage, vaArgs );
-
-   va_end( vaArgs );                    /* Reset variable argument list */
 }

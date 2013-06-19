@@ -1,6 +1,9 @@
 //===========================================================================//
 // Purpose : Declaration and inline definitions for a TFM_Config class.
 //
+//           Inline methods include:
+//           - IsValid
+//
 //===========================================================================//
 
 //---------------------------------------------------------------------------//
@@ -26,7 +29,6 @@
 using namespace std;
 
 #include "TGS_Region.h"
-#include "TGO_Polygon.h"
 
 //===========================================================================//
 // Purpose        : Class declaration
@@ -53,8 +55,20 @@ public:
 
 public:
 
-   TGS_Region_c  fabricRegion;  // Fabric floorplan region boundary
-   TGO_Polygon_c ioPolygon;     // Fabric floorplan polygon boundary (for IOs)
+   TGS_Region_c fabricRegion;   // Fabric floorplan region boundary
 };
+
+//===========================================================================//
+// Purpose        : Class inline definition(s)
+// Author         : Jeff Rudolph
+//---------------------------------------------------------------------------//
+// Version history
+// 05/20/12 jeffr : Original
+//===========================================================================//
+inline bool TFM_Config_c::IsValid( 
+      void ) const
+{
+   return( true );
+}
 
 #endif

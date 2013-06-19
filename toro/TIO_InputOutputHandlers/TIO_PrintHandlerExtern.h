@@ -23,8 +23,6 @@
 #ifndef TIO_PRINT_HANDLER_EXTERN_H
 #define TIO_PRINT_HANDLER_EXTERN_H
 
-#include "TIO_Typedefs.h"
-
 /*---------------------------------------------------------------------------*
  * Define typedefs
  *---------------------------------------------------------------------------*/
@@ -57,30 +55,18 @@ extern "C"
 {
 #endif
 
-void PrintHandlerNew( const char* pszLogFileName );
+void PrintHandlerNew( char* pszLogFileName );
 void PrintHandlerDelete( void );
 void PrintHandlerInit( unsigned char enableTimeStamps,
-                       unsigned char enableFileLines,
                        unsigned long maxWarningCount,
                        unsigned long maxErrorCount );
 int PrintHandlerExists( void );
 void PrintHandlerFilter( TIO_MessageMode_t messageMode,
                          TIO_FilterMode_t filterMode,
-                         const char* pszFilter );
-
+                         char* pszFilter );
 unsigned char PrintHandlerMessage( TIO_MessageMode_t messageMode,
-                                   const char* pszMessage, ... );
-
-void PrintHandlerInfo( const char* pszMessage, ... );
-unsigned char PrintHandlerWarning( const char* pszFileName,
-                                   unsigned int lineNum,
-                                   const char* pszMessage, ... );
-unsigned char PrintHandlerError( const char* pszFileName,
-                                 unsigned int lineNum,
-                                 const char* pszMessage, ... );
-void PrintHandlerTrace( const char* pszMessage, ... );
-void PrintHandlerDirect( const char* pszMessage, ... );
-
+                                   char* pszMessage,
+                                   ... );
 #ifdef __cplusplus
 }
 #endif

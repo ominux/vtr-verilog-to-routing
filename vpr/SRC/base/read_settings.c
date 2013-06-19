@@ -1,7 +1,5 @@
-#include <cstring>
-#include <cassert>
-using namespace std;
-
+#include <string.h>
+#include <assert.h>
 #include "read_xml_util.h"
 #include "read_settings.h"
 

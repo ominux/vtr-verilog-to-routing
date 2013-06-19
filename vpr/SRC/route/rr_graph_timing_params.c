@@ -1,6 +1,4 @@
-#include <cstdio>
-using namespace std;
-
+#include <assert.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
@@ -34,7 +32,7 @@ void add_rr_graph_C_from_switches(float C_ipin_cblock) {
 	boolean buffered;
 	float *Couts_to_add; /* UDSD */
 
-	maxlen = max(nx, ny) + 1;
+	maxlen = std::max(nx, ny) + 1;
 	cblock_counted = (boolean *) my_calloc(maxlen, sizeof(boolean));
 	buffer_Cin = (float *) my_calloc(maxlen, sizeof(float));
 
@@ -86,7 +84,7 @@ void add_rr_graph_C_from_switches(float C_ipin_cblock) {
 							rr_node[to_node].C += Cout;
 						}
 						isblock = seg_index_of_sblock(inode, to_node);
-						buffer_Cin[isblock] = max(buffer_Cin[isblock], Cin);
+						buffer_Cin[isblock] = std::max(buffer_Cin[isblock], Cin);
 					}
 
 				}
@@ -145,10 +143,7 @@ void add_rr_graph_C_from_switches(float C_ipin_cblock) {
 				/* UDSD by ICK Start */
 				to_node = rr_node[inode].edges[iedge];
 				to_rr_type = rr_node[to_node].type;
-
-				if (to_rr_type != CHANX && to_rr_type != CHANY)
-					continue;
-
+				assert(to_rr_type == CHANX || to_rr_type == CHANY || to_rr_type == IPIN);
 				if (rr_node[to_node].drivers != SINGLE) {
 					Cout = switch_inf[switch_index].Cout;
 					to_node = rr_node[inode].edges[iedge]; /* Will be CHANX or CHANY or IPIN */
@@ -178,13 +173,10 @@ void add_rr_graph_C_from_switches(float C_ipin_cblock) {
 						 * instead I will fail if there are conflicting Couts */
 						if (Couts_to_add[to_node]
 								!= switch_inf[switch_index].Cout) {
-							t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-								__LINE__, __FILE__);
-							sprintf(vpr_error->message,
-								"A single driver resource (%i) is driven by different Cout's (%e!=%e)\n",
+							vpr_printf(TIO_MESSAGE_ERROR, "A single driver resource (%i) is driven by different Cout's (%e!=%e)\n",
 									to_node, Couts_to_add[to_node],
 									switch_inf[switch_index].Cout);
-							throw vpr_error;
+							exit(1);
 						}
 					}
 					Couts_to_add[to_node] = switch_inf[switch_index].Cout;

@@ -51,13 +51,6 @@ bool TC_FormatStringDateTimeStamp( char* pszDateTimeStamp,
                                    const char* pszPrefix = 0,
                                    const char* pszPostfix = 0 );
 
-bool TC_FormatStringFileNameLineNum( char* pszFileNameLineNum, 
-                                     size_t lenFileNameLineNum,
-                                     const char* pszFileName,
-                                     unsigned int fileNum,
-                                     const char* pszPrefix = 0,
-                                     const char* pszPostfix = 0 );
-
 void TC_ExtractStringSideMode( TC_SideMode_t sideMode, string* psrSideMode );
 void TC_ExtractStringTypeMode( TC_TypeMode_t typeMode, string* psrTypeMode );
 

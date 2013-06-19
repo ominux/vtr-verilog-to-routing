@@ -179,7 +179,6 @@ void TOS_ControlSwitches_c::Init(
 
    this->messageOptions.minGridPrecision = 0.01;
    this->messageOptions.timeStampsEnable = false;
-   this->messageOptions.fileLinesEnable = false;
 
    this->messageOptions.info.acceptList.Clear( );
    this->messageOptions.info.rejectList.Clear( );
@@ -231,7 +230,6 @@ void TOS_ControlSwitches_c::Apply(
 
    // Initialize print handler based on any applicable options
    printHandler.SetTimeStampsEnabled( messageOptions_.timeStampsEnable );
-   printHandler.SetFileLinesEnabled( messageOptions_.fileLinesEnable );
    printHandler.SetMaxErrorCount( executeOptions_.maxErrorCount );
    printHandler.SetMaxWarningCount( executeOptions_.maxWarningCount );
 

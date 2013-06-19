@@ -33,11 +33,10 @@ CFLAGSsun8 = +w -xarch=v9 -library=iostream,Cstd -DLP64 -DSUN8
 CFLAGS = $(CFLAGS$(ISM)) \
 	-I. \
 	-I../TTP_TilePlaneObjects \
-	-I../TGO_GeometricObjects \
 	-I../TGS_GeometricShapes \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
-	-I../../libcommon_c/pcre/SRC
+	-I../../libpcre/SRC 
 
 ######################################################################
 # Linker options
@@ -144,9 +143,6 @@ $(OBJECTS): $(ISM)/%.o:%.cxx
 
 ../$(ISM)/libTTPT_TilePlaneObjects.a:
 	cd ../TTP_TilePlaneObjects ; $(MAKE) $(BUILD_TARGET)
-
-../$(ISM)/libTGO_GeometricObjects.a:
-	cd ../TGO_GeometricObjects ; $(MAKE) $(BUILD_TARGET)
 
 ../$(ISM)/libTGS_GeometricShapes.a:
 	cd ../TGS_GeometricShapes ; $(MAKE) $(BUILD_TARGET)

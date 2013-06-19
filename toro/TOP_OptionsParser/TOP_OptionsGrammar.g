@@ -96,7 +96,6 @@ using namespace std;
 
 #token FORMAT_MIN_GRID         "[Ff][Oo][Rr][Mm][Aa][Tt][_][Mm][Ii][Nn][_][Gg][Rr][Ii][Dd]"
 #token FORMAT_TIME_STAMPS      "[Ff][Oo][Rr][Mm][Aa][Tt][_][Tt][Ii][Mm][Ee][_][Ss][Tt][Aa][Mm][Pp][Ss]"
-#token FORMAT_FILE_LINES       "[Ff][Oo][Rr][Mm][Aa][Tt][_][Ff][Ii][Ll][Ee][_][Ll][Ii][Nn][Ee]{[Ss]}"
 #token DISPLAY_INFO_ACCEPT     "{[Dd][Ii][Ss][Pp][Ll][Aa][Yy][_]}[Ii][Nn][Ff][Oo]{[_][Aa][Cc][Cc][Ee][Pp][Tt]}"
 #token DISPLAY_INFO_REJECT     "{[Dd][Ii][Ss][Pp][Ll][Aa][Yy][_]}[Ii][Nn][Ff][Oo][_][Rr][Ee][Jj][Ee][Cc][Tt]"
 #token DISPLAY_WARNING_ACCEPT  "{[Dd][Ii][Ss][Pp][Ll][Aa][Yy][_]}[Ww][Aa][Rr][Nn][Ii][Nn][Gg]{[Ss]}{[_][Aa][Cc][Cc][Ee][Pp][Tt]}"
@@ -177,8 +176,6 @@ using namespace std;
 #token ROUTE_TIMING_MAX_CRIT     "[Rr][Oo][Uu][Tt][Ee][_][Tt][Ii][Mm][Ii][Nn][Gg][_][Mm][Aa][Xx][_][Cc][Rr][Ii][Tt]{[Ii][Cc][Aa][Ll][Ii][Tt][Yy]}"
 #token ROUTE_TIMING_SLACK_CRIT   "[Rr][Oo][Uu][Tt][Ee][_]{[Tt][Ii][Mm][Ii][Nn][Gg][_]}[Ss][Ll][Aa][Cc][Kk][_][Cc][Rr][Ii][Tt]{[Ii][Cc][Aa][Ll][Ii][Tt][Yy]}"
 
-#token ROUTE_TRIM_EMPTY_CHANNELS "[Rr][Oo][Uu][Tt][Ee][_][Tt][Rr][Ii][Mm][_][Ee][Mm][Pp][Tt][Yy][_][Cc][Hh][Aa][Nn][Nn][Ee][Ll]{[Ss]}"
-#token ROUTE_TRIM_OBS_CHANNELS   "[Rr][Oo][Uu][Tt][Ee][_][Tt][Rr][Ii][Mm][_][Oo][Bb][Ss][_][Cc][Hh][Aa][Nn][Nn][Ee][Ll]{[Ss]}"
 #token ROUTE_PREROUTED_ENABLE    "[Rr][Oo][Uu][Tt][Ee][_][Pp][Rr][Ee]{[_]}[Rr][Oo][Uu][Tt][Ee]{[Dd]|[Ss]}[_][Ee][Nn][Aa][Bb][Ll][Ee]"
 #token ROUTE_PREROUTED_ORDER     "[Rr][Oo][Uu][Tt][Ee][_][Pp][Rr][Ee]{[_]}[Rr][Oo][Uu][Tt][Ee]{[Dd]|[Ss]}[_][Oo][Rr][Dd][Ee][Rr]"
 
@@ -399,7 +396,6 @@ messageOptions
    >>
       FORMAT_MIN_GRID { EQUAL } floatNum[ &pmessageOptions_->minGridPrecision ]
    |  FORMAT_TIME_STAMPS { EQUAL } boolType[ &pmessageOptions_->timeStampsEnable ]
-   |  FORMAT_FILE_LINES { EQUAL } boolType[ &pmessageOptions_->fileLinesEnable ]
 
    |  DISPLAY_INFO_ACCEPT { EQUAL } displayNameList[ &pmessageOptions_->info.acceptList ]
    |  DISPLAY_INFO_REJECT { EQUAL } displayNameList[ &pmessageOptions_->info.rejectList ]
@@ -548,8 +544,6 @@ routeOptions
    |  ROUTE_TIMING_MAX_CRIT { EQUAL } floatNum[ &prouteOptions_->timingMaxCriticality ]
    |  ROUTE_TIMING_SLACK_CRIT { EQUAL } floatNum[ &prouteOptions_->slackCriticality ]
 
-   |  ROUTE_TRIM_EMPTY_CHANNELS { EQUAL } boolType[ &prouteOptions_->trimEmptyChannels ]
-   |  ROUTE_TRIM_OBS_CHANNELS { EQUAL } boolType[ &prouteOptions_->trimObsChannels ]
    |  ROUTE_PREROUTED_ENABLE { EQUAL } boolType[ &prouteOptions_->preRouted.enable ]
    |  ROUTE_PREROUTED_ORDER { EQUAL } routeOrderMode[ &prouteOptions_->preRouted.orderMode ]
    <<

@@ -62,7 +62,7 @@ CFLAGS = $(CFLAGS$(ISM)) $(PCCTSINC)\
 	-I../TGS_GeometricShapes \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
-	-I../../libcommon_c/pcre/SRC \
+	-I../../libpcre/SRC \
 	-I../../libpccts/pcctsGeneric -I../../pccts/h
 
 ######################################################################

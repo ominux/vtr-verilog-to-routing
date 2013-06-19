@@ -1,30 +1,16 @@
-#include <cstdio>
-#include <cstring>
-#include <cmath>
+#include <stdio.h>
+#include <string.h>
 #include <algorithm>
-using namespace std;
-
-#include <assert.h>
-
+#include <math.h>
 #include "vpr_types.h"
 #include "vpr_utils.h"
 #include "globals.h"
 #include "graphics.h"
 #include "path_delay.h"
 #include "draw.h"
+#include <assert.h>
 #include "read_xml_arch_file.h"
 #include "util.h"
-
-#ifdef WIN32 /* For runtime tracking in WIN32. The clock() function defined in time.h will *
-			  * track CPU runtime.														   */
-#include <time.h>
-#else /* For X11. The clock() function in time.h will not output correct time difference   *
-	   * for X11, because the graphics is processed by the Xserver rather than local CPU,  *
-	   * which means tracking CPU time will not be the same as the actual wall clock time. *
-	   * Thus, so use gettimeofday() in sys/time.h to track actual calendar time.          */
-#include <sys/time.h>
-#endif
-//#define TIME_DRAWSCREEN /* Enable if want to track runtime for drawscreen() */
 
 #ifdef DEBUG
 #include "rr_graph.h"
@@ -123,7 +109,7 @@ static void drawnets(void);
 static void drawroute(enum e_draw_net_type draw_net_type);
 static void draw_congestion(void);
 
-static void highlight_blocks(float x, float y, t_event_buttonPressed button_info);
+static void highlight_blocks(float x, float y);
 static void get_block_center(int bnum, float *x, float *y);
 static void deselect_all(void);
 
@@ -132,9 +118,8 @@ static void draw_rr_edges(int from_node);
 static void draw_rr_pin(int inode, enum color_types color);
 static void draw_rr_chanx(int inode, int itrack);
 static void draw_rr_chany(int inode, int itrack);
-static void get_rr_pin_draw_coords(int inode, int iside, 
-		int width_offset, int height_offset, 
-		float *xcen, float *ycen);
+static void get_rr_pin_draw_coords(int inode, int iside, int ioff, float *xcen,
+		float *ycen);
 static void draw_pin_to_chan_edge(int pin_node, int chan_node);
 static void draw_pin_to_pin(int opin, int ipin);
 static void draw_x(float x, float y, float size);
@@ -226,55 +211,12 @@ void update_screen(int priority, char *msg, enum pic_type pic_on_screen_val,
 
 static void drawscreen() {
 
-#ifdef TIME_DRAWSCREEN
-	/* This can be used to test how long it takes for the redrawing routing to finish   *
-	 * updating the screen for a given input which would cause the screen to be redrawn.*/
-
-#ifdef WIN32
-	clock_t drawscreen_begin,drawscreen_end;
-	drawscreen_begin = clock();
-
-#else /* For X11. The clock() function in time.h does not output correct time difference *
-       * in Linux, so use gettimeofday() in sys/time.h for accurate runtime tracking. */
-	struct timeval begin;
-	gettimeofday(&begin,NULL);  /* get start time */
-
-	unsigned long begin_time;
-	begin_time = begin.tv_sec * 1000000 + begin.tv_usec;
-#endif
-#endif
-
 	/* This is the screen redrawing routine that event_loop assumes exists.  *
 	 * It erases whatever is on screen, then calls redraw_screen to redraw   *
 	 * it.                                                                   */
 
 	clearscreen();
 	redraw_screen();
-
-#ifdef TIME_DRAWSCREEN
-
-#ifdef WIN32
-	drawscreen_end = clock();
-
-	#ifdef CLOCKS_PER_SEC /* This macro has to do with the version of compiler being used */
-		printf("Drawscreen took %f seconds.\n", (float)(drawscreen_end - drawscreen_begin) / CLOCKS_PER_SEC);
-	#else
-		printf("Drawscreen took %f seconds.\n", (float)(drawscreen_end - drawscreen_begin) / CLK_PER_SEC);
-	#endif
-
-#else /* X11 */
-	struct timeval end;
-	gettimeofday(&end,NULL);  /* get end time */
-
-	unsigned long end_time;
-	end_time = end.tv_sec * 1000000 + end.tv_usec;
-
-	unsigned long time_diff_microsec;
-	time_diff_microsec = end_time - begin_time;
-
-	printf("Drawscreen took %ld microseconds\n", time_diff_microsec);
-#endif /* WIN32 */
-#endif /* TIME_DRAWSCREEN */
 }
 
 static void redraw_screen() {
@@ -520,7 +462,7 @@ void init_draw_coords(float width_val) {
 	tile_width = width_val;
 	pin_size = 0.3;
 	for (i = 0; i < num_types; ++i) {
-		pin_size = min(pin_size,
+		pin_size = std::min(pin_size,
 				(tile_width / (4.0F * type_descriptors[i].num_pins)));
 	}
 
@@ -558,7 +500,7 @@ static void drawplace(void) {
 	for (i = 0; i <= (nx + 1); i++) {
 		for (j = 0; j <= (ny + 1); j++) {
 			/* Only the first block of a group should control drawing */
-			if (grid[i][j].width_offset > 0 || grid[i][j].height_offset > 0)
+			if (grid[i][j].offset > 0)
 				continue;
 
 			/* Don't draw corners */
@@ -606,7 +548,7 @@ static void drawplace(void) {
 				bnum = grid[i][j].blocks[k];
 
 				/* Draw background */
-				if (bnum != EMPTY && bnum != INVALID) {
+				if (bnum != EMPTY) {
 					setcolor(block_color[bnum]);
 					fillrect(x1, y1, x2, y2);
 				} else {
@@ -627,13 +569,13 @@ static void drawplace(void) {
 				drawrect(x1, y1, x2, y2);
 
 				/* Draw text if the space has parts of the netlist */
-				if (bnum != EMPTY && bnum != INVALID) {
+				if (bnum != EMPTY) {
 					drawtext((x1 + x2) / 2.0, (y1 + y2) / 2.0, block[bnum].name,
 							tile_width);
 				}
 
 				/* Draw text for block type so that user knows what block */
-				if (grid[i][j].width_offset == 0 && grid[i][j].height_offset == 0) {
+				if (grid[i][j].offset == 0) {
 					if (i > 0 && i <= nx && j > 0 && j <= ny) {
 						drawtext((x1 + x2) / 2.0, y1 + (tile_width / 4.0),
 								grid[i][j].type->name, tile_width);
@@ -817,8 +759,7 @@ void draw_rr(void) {
 			break;
 
 		default:
-			vpr_printf_error(__FILE__, __LINE__, 
-					"in draw_rr: Unexpected rr_node type: %d.\n", rr_node[inode].type);
+			vpr_printf(TIO_MESSAGE_ERROR, "in draw_rr: Unexpected rr_node type: %d.\n", rr_node[inode].type);
 			exit(1);
 		}
 	}
@@ -1040,8 +981,7 @@ static void draw_rr_edges(int inode) {
 				draw_pin_to_pin(inode, to_node);
 				break;
 			default:
-				vpr_printf_error(__FILE__, __LINE__, 
-						"in draw_rr_edges: node %d (type: %d) connects to node %d (type: %d).\n",
+				vpr_printf(TIO_MESSAGE_ERROR, "in draw_rr_edges: node %d (type: %d) connects to node %d (type: %d).\n",
 						inode, from_type, to_node, to_type);
 				exit(1);
 				break;
@@ -1092,8 +1032,7 @@ static void draw_rr_edges(int inode) {
 				break;
 
 			default:
-				vpr_printf_error(__FILE__, __LINE__, 
-						"in draw_rr_edges: node %d (type: %d) connects to node %d (type: %d).\n",
+				vpr_printf(TIO_MESSAGE_ERROR, "in draw_rr_edges: node %d (type: %d) connects to node %d (type: %d).\n",
 						inode, from_type, to_node, to_type);
 				exit(1);
 				break;
@@ -1144,8 +1083,7 @@ static void draw_rr_edges(int inode) {
 				break;
 
 			default:
-				vpr_printf_error(__FILE__, __LINE__, 
-						"in draw_rr_edges: node %d (type: %d) connects to node %d (type: %d).\n",
+				vpr_printf(TIO_MESSAGE_ERROR, "in draw_rr_edges: node %d (type: %d) connects to node %d (type: %d).\n",
 						inode, from_type, to_node, to_type);
 				exit(1);
 				break;
@@ -1153,8 +1091,7 @@ static void draw_rr_edges(int inode) {
 			break;
 
 		default: /* from_type */
-			vpr_printf_error(__FILE__, __LINE__, 
-					"draw_rr_edges called with node %d of type %d.\n", 
+			vpr_printf(TIO_MESSAGE_ERROR, "draw_rr_edges called with node %d of type %d.\n", 
 					inode, from_type);
 			exit(1);
 			break;
@@ -1356,13 +1293,13 @@ static void draw_chany_to_chany_edge(int from_node, int from_track, int to_node,
 				y1 = tile_y[to_ylow - 1] + tile_width;
 			} else { /* DEC wire starts at top edge */
 				if (!(from_yhigh > to_yhigh)) {
-					vpr_printf_info("from_yhigh (%d) !> to_yhigh (%d).\n", 
+					vpr_printf(TIO_MESSAGE_INFO, "from_yhigh (%d) !> to_yhigh (%d).\n", 
 							from_yhigh, to_yhigh);
-					vpr_printf_info("from is (%d, %d) to (%d, %d) track %d.\n",
+					vpr_printf(TIO_MESSAGE_INFO, "from is (%d, %d) to (%d, %d) track %d.\n",
 							rr_node[from_node].xhigh, rr_node[from_node].yhigh,
 							rr_node[from_node].xlow, rr_node[from_node].ylow,
 							rr_node[from_node].ptc_num);
-					vpr_printf_info("to is (%d, %d) to (%d, %d) track %d.\n",
+					vpr_printf(TIO_MESSAGE_INFO, "to is (%d, %d) to (%d, %d) track %d.\n",
 							rr_node[to_node].xhigh, rr_node[to_node].yhigh,
 							rr_node[to_node].xlow, rr_node[to_node].ylow,
 							rr_node[to_node].ptc_num);
@@ -1442,7 +1379,7 @@ static void draw_rr_pin(int inode, enum color_types color) {
 	 * than one side of a clb.  Also note that this routine can change the     *
 	 * current color to BLACK.                                                 */
 
-	int ipin, i, j, iside;
+	int ipin, i, j, iside, ioff;
 	float xcen, ycen;
 	char str[BUFSIZE];
 	t_type_ptr type;
@@ -1451,15 +1388,15 @@ static void draw_rr_pin(int inode, enum color_types color) {
 	j = rr_node[inode].ylow;
 	ipin = rr_node[inode].ptc_num;
 	type = grid[i][j].type;
-	int width_offset = grid[i][j].width_offset;
-	int height_offset = grid[i][j].height_offset;
+	ioff = grid[i][j].offset;
 
 	setcolor(color);
 	/* TODO: This is where we can hide fringe physical pins and also identify globals (hide, color, show) */
 	for (iside = 0; iside < 4; iside++) {
-		if (type->pinloc[grid[i][j].width_offset][grid[i][j].height_offset][iside][ipin]) { /* Pin exists on this side. */
-			get_rr_pin_draw_coords(inode, iside, width_offset, height_offset, &xcen, &ycen);
-			fillrect(xcen - pin_size, ycen - pin_size, xcen + pin_size, ycen + pin_size);
+		if (type->pinloc[grid[i][j].offset][iside][ipin]) { /* Pin exists on this side. */
+			get_rr_pin_draw_coords(inode, iside, ioff, &xcen, &ycen);
+			fillrect(xcen - pin_size, ycen - pin_size, xcen + pin_size,
+					ycen + pin_size);
 			sprintf(str, "%d", ipin);
 			setcolor(BLACK);
 			drawtext(xcen, ycen, str, 2 * pin_size);
@@ -1468,9 +1405,8 @@ static void draw_rr_pin(int inode, enum color_types color) {
 	}
 }
 
-static void get_rr_pin_draw_coords(int inode, int iside, 
-		int width_offset, int height_offset, 
-		float *xcen, float *ycen) {
+static void get_rr_pin_draw_coords(int inode, int iside, int ioff, float *xcen,
+		float *ycen) {
 
 	/* Returns the coordinates at which the center of this pin should be drawn. *
 	 * inode gives the node number, and iside gives the side of the clb or pad  *
@@ -1480,8 +1416,8 @@ static void get_rr_pin_draw_coords(int inode, int iside,
 	float offset, xc, yc, step;
 	t_type_ptr type;
 
-	i = rr_node[inode].xlow + width_offset;
-	j = rr_node[inode].ylow + height_offset;
+	i = rr_node[inode].xlow;
+	j = rr_node[inode].ylow + ioff; /* Need correct tile of block */
 
 	xc = tile_x[i];
 	yc = tile_y[j];
@@ -1518,8 +1454,7 @@ static void get_rr_pin_draw_coords(int inode, int iside,
 		break;
 
 	default:
-		vpr_printf_error(__FILE__, __LINE__, 
-				"in get_rr_pin_draw_coords: Unexpected iside %d.\n", iside);
+		vpr_printf(TIO_MESSAGE_ERROR, "in get_rr_pin_draw_coords: Unexpected iside %d.\n", iside);
 		exit(1);
 		break;
 	}
@@ -1634,8 +1569,7 @@ static void drawroute(enum e_draw_net_type draw_net_type) {
 					break;
 
 				default:
-					vpr_printf_error(__FILE__, __LINE__, 
-							"in drawroute: Unexpected connection from an rr_node of type %d to one of type %d.\n",
+					vpr_printf(TIO_MESSAGE_ERROR, "in drawroute: Unexpected connection from an rr_node of type %d to one of type %d.\n",
 							prev_type, rr_type);
 					exit(1);
 				}
@@ -1671,8 +1605,7 @@ static void drawroute(enum e_draw_net_type draw_net_type) {
 					break;
 
 				default:
-					vpr_printf_error(__FILE__, __LINE__, 
-							"in drawroute: Unexpected connection from an rr_node of type %d to one of type %d.\n",
+					vpr_printf(TIO_MESSAGE_ERROR, "in drawroute: Unexpected connection from an rr_node of type %d to one of type %d.\n",
 							prev_type, rr_type);
 					exit(1);
 				}
@@ -1720,27 +1653,21 @@ static int get_track_num(int inode, int **chanx_track, int **chany_track) {
 		return (chany_track[i][j]);
 
 	default:
-		vpr_printf_error(__FILE__, __LINE__, 
-				"in get_track_num: Unexpected node type %d for node %d.\n", rr_type, inode);
+		vpr_printf(TIO_MESSAGE_ERROR, "in get_track_num: Unexpected node type %d for node %d.\n", rr_type, inode);
 		exit(1);
 	}
 }
 
-
-/* If an rr_node has been clicked on, it will be highlighted in MAGENTA.
- * If so, and toggle nets is selected, highlight the whole net in that colour.
- * There is a problem in net highlighting though -- VB TODO -- fix it.
- */
 static void highlight_nets(char *message) {
 	int inet;
 	struct s_trace *tptr;
 
 	for (inet = 0; inet < num_nets; inet++) {
 		for (tptr = trace_head[inet]; tptr != NULL; tptr = tptr->next) {
-			if (rr_node_color[tptr->index] == MAGENTA) {
+			if (rr_node_color[tptr->index] != BLACK) {
 				net_color[inet] = rr_node_color[tptr->index];
-				sprintf(message, "%s  ||  Net: %d (%s)", message, inet,
-						clb_net[inet].name);
+				sprintf(message, "%s  ||  Net:%d %d", message, inet,
+						trace_head[inet]->index);
 				break;
 			}
 		}
@@ -1748,17 +1675,11 @@ static void highlight_nets(char *message) {
 	update_message(message);
 }
 
-
-/* This routine is called when the routing resource graph is shown, and someone 
- * clicks outside a block. That click might represent a click on a wire -- we call
- * this routine to determine which wire (if any) was clicked on.  If a wire was
- * clicked upon, we highlight it in Magenta, and its fanout in red. 
- */
 static void highlight_rr_nodes(float x, float y) {
 	int inode;
-	int hit_node = OPEN;  // i.e. -1, no node selected.
+	int hit = 0;
 	char message[250] = "";
-	int iedge;
+	int edge;
 
 	if (draw_rr_toggle == DRAW_NO_RR && !show_nets) {
 		update_message(default_message);
@@ -1766,51 +1687,39 @@ static void highlight_rr_nodes(float x, float y) {
 		return;
 	}
 
-   const float tolerance = 0;  // x_rr_node_left etc. already have a tolerance (line_fuz).
 	for (inode = 0; inode < num_rr_nodes; inode++) {
-		if ( x >= x_rr_node_left[inode] - tolerance &&
-           x <= x_rr_node_right[inode] + tolerance &&
-		     y >= y_rr_node_bottom[inode] - tolerance && 
-           y <= y_rr_node_top[inode] + tolerance) {
-			hit_node = inode;
-         break;
+		if (x >= x_rr_node_left[inode] && x <= x_rr_node_right[inode]
+				&& y >= y_rr_node_bottom[inode] && y <= y_rr_node_top[inode]) {
+			t_rr_type rr_type = rr_node[inode].type;
+			int xlow = rr_node[inode].xlow;
+			int xhigh = rr_node[inode].xhigh;
+			int ylow = rr_node[inode].ylow;
+			int yhigh = rr_node[inode].yhigh;
+			int ptc_num = rr_node[inode].ptc_num;
+			rr_node_color[inode] = MAGENTA;
+			sprintf(message, "%s%s %d: %s (%d,%d) -> (%d,%d) track: %d",
+					message, (hit ? "   |   " : ""), inode, name_type[rr_type],
+					xlow, ylow, xhigh, yhigh, ptc_num);
+
+#ifdef DEBUG
+			print_rr_node(stdout, rr_node, inode);
+#endif
+			for (edge = 0; edge < rr_node[inode].num_edges; edge++) {
+				if (rr_node_color[rr_node[inode].edges[edge]] == BLACK
+						&& rr_node[rr_node[inode].edges[edge]].capacity
+								> rr_node[rr_node[inode].edges[edge]].occ)
+					rr_node_color[rr_node[inode].edges[edge]] = GREEN;
+				else if (rr_node_color[rr_node[inode].edges[edge]] == BLACK
+						&& rr_node[rr_node[inode].edges[edge]].capacity
+								== rr_node[rr_node[inode].edges[edge]].occ)
+					rr_node_color[rr_node[inode].edges[edge]] = BLUE;
+
+			}
+			hit = 1;
 		}
 	}
 
-   if (hit_node != OPEN) {
-      t_rr_type rr_type = rr_node[inode].type;
-		int xlow = rr_node[inode].xlow;
-		int xhigh = rr_node[inode].xhigh;
-		int ylow = rr_node[inode].ylow;
-		int yhigh = rr_node[inode].yhigh;
-		int ptc_num = rr_node[inode].ptc_num;
-		rr_node_color[inode] = MAGENTA;
-      sprintf(message, "Selected node #%d: %s (%d,%d) -> (%d,%d) track: %d, %d edges, occ: %d, capacity: %d",
-				inode, name_type[rr_type],
-            xlow, ylow, xhigh, yhigh, ptc_num, 
-            rr_node[inode].num_edges, rr_node[inode].occ, rr_node[inode].capacity);
-
-#ifdef DEBUG
-		print_rr_node(stdout, rr_node, inode);
-#endif
-      /* Highlight the fanout nodes in red. */
-		for (iedge = 0; iedge < rr_node[inode].num_edges; iedge++) {
-         int fanout_node = rr_node[inode].edges[iedge];
-			rr_node_color[fanout_node] = RED;
-      }
-
-      /* Highlight the nodes that can fanin to this node in blue. */
-      for (inode = 0; inode < num_rr_nodes; inode++) {
-			for (iedge = 0; iedge < rr_node[inode].num_edges; iedge++) {
-            int fanout_node = rr_node[inode].edges[iedge];
-            if (fanout_node == hit_node) 
-				   rr_node_color[inode] = BLUE;   
-            // May change to a different colour if this is confusing, as input pins are already blue.
-         }
-      }
-   }
-
-	if (hit_node == OPEN) {
+	if (!hit) {
 		update_message(default_message);
 		drawscreen();
 		return;
@@ -1820,11 +1729,10 @@ static void highlight_rr_nodes(float x, float y) {
 		highlight_nets(message);
 	} else
 		update_message(message);
-
 	drawscreen();
 }
 
-static void highlight_blocks(float x, float y, t_event_buttonPressed button_info) {
+static void highlight_blocks(float x, float y) {
 
 	/* This routine is called when the user clicks in the graphics area. *
 	 * It determines if a clb was clicked on.  If one was, it is         *
@@ -1849,7 +1757,7 @@ static void highlight_blocks(float x, float y, t_event_buttonPressed button_info
 		if (x <= tile_x[i] + tile_width) {
 			if (x >= tile_x[i]) {
 				for (j = 0; j <= (ny + 1) && !hit; j++) {
-					if (grid[i][j].width_offset != 0 || grid[i][j].height_offset != 0)
+					if (grid[i][j].offset != 0)
 						continue;
 					type = grid[i][j].type;
 					if (y <= tile_y[j + type->height - 1] + tile_width) {
@@ -1926,9 +1834,8 @@ static void highlight_blocks(float x, float y, t_event_buttonPressed button_info
 	drawscreen(); /* Need to erase screen. */
 }
 
-
 static void deselect_all(void) {
-	/* Sets the color of all clbs, nets and rr_nodes to the default.  */
+	/* Sets the color of all clbs and nets to the default.  */
 
 	int i;
 
@@ -1990,7 +1897,7 @@ static void draw_pin_to_chan_edge(int pin_node, int chan_node) {
 	/* TODO: Fix this for global routing, currently for detailed only */
 
 	t_rr_type chan_type;
-	int grid_x, grid_y, pin_num, chan_xlow, chan_ylow;
+	int grid_x, grid_y, pin_num, chan_xlow, chan_ylow, ioff, height;
 	float x1, x2, y1, y2;
 	int start, end, i;
 	int itrack;
@@ -2008,17 +1915,12 @@ static void draw_pin_to_chan_edge(int pin_node, int chan_node) {
 	itrack = rr_node[chan_node].ptc_num;
 	type = grid[grid_x][grid_y].type;
 
+	ioff = grid[grid_x][grid_y].offset;
 	/* large block begins at primary tile (offset == 0) */
-	int width_offset = grid[grid_x][grid_y].width_offset;
-	int height_offset = grid[grid_x][grid_y].height_offset;
-	grid_x = grid_x - width_offset;
-	grid_y = grid_y - height_offset;
-
-	int width = grid[grid_x][grid_y].type->width;
-	int height = grid[grid_x][grid_y].type->height;
+	grid_y = grid_y - ioff;
+	height = grid[grid_x][grid_y].type->height;
 	chan_ylow = rr_node[chan_node].ylow;
 	chan_xlow = rr_node[chan_node].xlow;
-
 	start = -1;
 	end = -1;
 
@@ -2035,27 +1937,25 @@ static void draw_pin_to_chan_edge(int pin_node, int chan_node) {
 			}
 		}
 
-		start = max(start, grid_x);
-		end = min(end, grid_x); /* Width is 1 always */
+		start = std::max(start, grid_x);
+		end = std::min(end, grid_x); /* Width is 1 always */
 		assert(end >= start);
 		/* Make sure we are nearby */
 
 		if ((grid_y + height - 1) == chan_ylow) {
 			iside = TOP;
-			width_offset = width - 1;
-			height_offset = height - 1;
+			ioff = height - 1;
 			draw_pin_off = pin_size;
 		} else {
 			assert((grid_y - 1) == chan_ylow);
 
 			iside = BOTTOM;
-			width_offset = 0;
-			height_offset = 0;
+			ioff = 0;
 			draw_pin_off = -pin_size;
 		}
-		assert(grid[grid_x][grid_y].type->pinloc[width_offset][height_offset][iside][pin_num]);
+		assert(grid[grid_x][grid_y].type->pinloc[ioff][iside][pin_num]);
 
-		get_rr_pin_draw_coords(pin_node, iside, width_offset, height_offset, &x1, &y1);
+		get_rr_pin_draw_coords(pin_node, iside, ioff, &x1, &y1);
 		y1 += draw_pin_off;
 
 		y2 = tile_y[rr_node[chan_node].ylow] + tile_width + 1. + itrack;
@@ -2080,8 +1980,8 @@ static void draw_pin_to_chan_edge(int pin_node, int chan_node) {
 			}
 		}
 
-		start = max(start, grid_y);
-		end = min(end, (grid_y + height - 1)); /* Width is 1 always */
+		start = std::max(start, grid_y);
+		end = std::min(end, (grid_y + height - 1)); /* Width is 1 always */
 		assert(end >= start);
 		/* Make sure we are nearby */
 
@@ -2094,20 +1994,20 @@ static void draw_pin_to_chan_edge(int pin_node, int chan_node) {
 			draw_pin_off = -pin_size;
 		}
 		for (i = start; i <= end; i++) {
-			height_offset = i - grid_y;
-			assert(height_offset >= 0 && height_offset < type->height);
+			ioff = i - grid_y;
+			assert(ioff >= 0 && ioff < type->height);
 			/* Once we find the location, break out, this will leave ioff pointing
 			 * to the correct offset.  If an offset is not found, the assertion after
 			 * this will fail.  With the correct routing graph, the assertion will not
 			 * be triggered.  This also takes care of connecting a wire once to multiple
 			 * physical pins on the same side. */
-			if (grid[grid_x][grid_y].type->pinloc[width_offset][height_offset][iside][pin_num]) {
+			if (grid[grid_x][grid_y].type->pinloc[ioff][iside][pin_num]) {
 				break;
 			}
 		}
-		assert(grid[grid_x][grid_y].type->pinloc[width_offset][height_offset][iside][pin_num]);
+		assert(grid[grid_x][grid_y].type->pinloc[ioff][iside][pin_num]);
 
-		get_rr_pin_draw_coords(pin_node, iside, width_offset, height_offset, &x1, &y1);
+		get_rr_pin_draw_coords(pin_node, iside, ioff, &x1, &y1);
 		x1 += draw_pin_off;
 
 		x2 = tile_x[chan_xlow] + tile_width + 1 + itrack;
@@ -2122,8 +2022,7 @@ static void draw_pin_to_chan_edge(int pin_node, int chan_node) {
 		break;
 
 	default:
-		vpr_printf_error(__FILE__, __LINE__, 
-				"in draw_pin_to_chan_edge: Invalid channel node %d.\n", chan_node);
+		vpr_printf(TIO_MESSAGE_ERROR, "in draw_pin_to_chan_edge: Invalid channel node %d.\n", chan_node);
 		exit(1);
 	}
 
@@ -2142,7 +2041,7 @@ static void draw_pin_to_pin(int opin_node, int ipin_node) {
 	/* This routine draws an edge from the opin rr node to the ipin rr node */
 	int opin_grid_x, opin_grid_y, opin_pin_num, opin;
 	int ipin_grid_x, ipin_grid_y, ipin_pin_num, ipin;
-	int width_offset, height_offset;
+	int ofs, pin_ofs;
 	boolean found;
 	float x1, x2, y1, y2;
 	float xend, yend;
@@ -2153,64 +2052,53 @@ static void draw_pin_to_pin(int opin_node, int ipin_node) {
 	assert(rr_node[ipin_node].type == IPIN);
 	iside = (enum e_side)0;
 	x1 = y1 = x2 = y2 = 0;
-	width_offset = 0;
-	height_offset = 0;
+	pin_ofs = 0;
 	pin_side = TOP;
 
 	/* get opin coordinate */
 	opin_grid_x = rr_node[opin_node].xlow;
 	opin_grid_y = rr_node[opin_node].ylow;
-	opin_grid_x = opin_grid_x - grid[opin_grid_x][opin_grid_y].width_offset;
-	opin_grid_y = opin_grid_y - grid[opin_grid_x][opin_grid_y].height_offset;
-
+	opin_grid_y = opin_grid_y - grid[opin_grid_x][opin_grid_y].offset;
 	opin = rr_node[opin_node].ptc_num;
 	opin_pin_num = rr_node[opin_node].ptc_num;
 	type = grid[opin_grid_x][opin_grid_y].type;
 	
 	found = FALSE;
-	for (int width = 0; width < type->width && !found; ++width) {
-		for (int height = 0; height < type->height && !found; ++height) {
-			for (iside = (enum e_side)0; iside < 4 && !found; iside = (enum e_side)(iside + 1)) {
-				/* Find first location of pin */
-				if (1 == type->pinloc[width][height][iside][opin]) {
-					width_offset = width;
-					height_offset = height;
-					pin_side = iside;
-					found = TRUE;
-				}
+	for (ofs = 0; ofs < type->height && !found; ++ofs) {
+		for (iside = (enum e_side)0; iside < 4 && !found; iside = (enum e_side)(iside + 1)) {
+			/* Find first location of pin */
+			if (1 == type->pinloc[ofs][iside][opin]) {
+				pin_ofs = ofs;
+				pin_side = iside;
+				found = TRUE;
 			}
 		}
 	}
 	assert(found);
-	get_rr_pin_draw_coords(opin_node, pin_side, width_offset, height_offset, &x1, &y1);
+	get_rr_pin_draw_coords(opin_node, pin_side, pin_ofs, &x1, &y1);
+	
 
 	/* get ipin coordinate */
 	ipin_grid_x = rr_node[ipin_node].xlow;
 	ipin_grid_y = rr_node[ipin_node].ylow;
-	ipin_grid_x = ipin_grid_x - grid[ipin_grid_x][ipin_grid_y].width_offset;
-	ipin_grid_y = ipin_grid_y - grid[ipin_grid_x][ipin_grid_y].height_offset;
-
+	ipin_grid_y = ipin_grid_y - grid[ipin_grid_x][ipin_grid_y].offset;
 	ipin = rr_node[ipin_node].ptc_num;
 	ipin_pin_num = rr_node[ipin_node].ptc_num;
 	type = grid[ipin_grid_x][ipin_grid_y].type;
 	
 	found = FALSE;
-	for (int width = 0; width < type->width && !found; ++width) {
-		for (int height = 0; height < type->height && !found; ++height) {
-			for (iside = (enum e_side)0; iside < 4 && !found; iside = (enum e_side)(iside + 1)) {
-				/* Find first location of pin */
-				if (1 == type->pinloc[width][height][iside][ipin]) {
-					width_offset = width;
-					height_offset = height;
-					pin_side = iside;
-					found = TRUE;
-				}
+	for (ofs = 0; ofs < type->height && !found; ++ofs) {
+		for (iside = (enum e_side)0; iside < 4 && !found; iside = (enum e_side)(iside + 1)) {
+			/* Find first location of pin */
+			if (1 == type->pinloc[ofs][iside][ipin]) {
+				pin_ofs = ofs;
+				pin_side = iside;
+				found = TRUE;
 			}
 		}
 	}
 	assert(found);
-	get_rr_pin_draw_coords(ipin_node, pin_side, width_offset, height_offset, &x2, &y2);
-
+	get_rr_pin_draw_coords(ipin_node, pin_side, pin_ofs, &x2, &y2);
 	drawline(x1, y1, x2, y2);	
 	xend = x2 + (x1 - x2) / 10.;
 	yend = y2 + (y1 - y2) / 10.;

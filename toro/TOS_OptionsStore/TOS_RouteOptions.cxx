@@ -45,8 +45,6 @@ TOS_RouteOptions_c::TOS_RouteOptions_c(
       abstractMode( TOS_ROUTE_ABSTRACT_UNDEFINED ),
       windowSize( 0 ),
       channelWidth( 0 ),
-      trimEmptyChannels( false ),
-      trimObsChannels( false ),
       maxIterations( 0 ),
       histCongestionFactor( 0.0 ),
       initCongestionFactor( 0.0 ),
@@ -69,8 +67,6 @@ TOS_RouteOptions_c::TOS_RouteOptions_c(
       TOS_RouteAbstractMode_t  abstractMode_,
       unsigned int             windowSize_,
       unsigned int             channelWidth_,
-      bool                     trimEmptyChannels_,
-      bool                     trimObsChannels_,
       unsigned int             maxIterations_,
       double                   histCongestionFactor_,
       double                   initCongestionFactor_,
@@ -88,8 +84,6 @@ TOS_RouteOptions_c::TOS_RouteOptions_c(
       abstractMode( abstractMode_ ), 
       windowSize( windowSize_ ), 
       channelWidth( channelWidth_ ), 
-      trimEmptyChannels( trimEmptyChannels_ ),
-      trimObsChannels( trimObsChannels_ ),
       maxIterations( maxIterations_ ), 
       histCongestionFactor( histCongestionFactor_ ), 
       initCongestionFactor( initCongestionFactor_ ), 
@@ -160,9 +154,6 @@ void TOS_RouteOptions_c::Print(
    printHandler.Write( pfile, spaceLen, "ROUTE_TIMING_MAX_CRIT      = %0.*f\n", precision, this->timingMaxCriticality );
    printHandler.Write( pfile, spaceLen, "ROUTE_TIMING_SLACK_CRIT    = %0.*f\n", precision, this->slackCriticality );
 
-   printHandler.Write( pfile, spaceLen, "\n" );
-   printHandler.Write( pfile, spaceLen, "ROUTE_TRIM_EMPTY_CHANNELS  = %s\n", TIO_BOOL_STR( this->trimEmptyChannels ));
-   printHandler.Write( pfile, spaceLen, "ROUTE_TRIM_OBS_CHANNELS    = %s\n", TIO_BOOL_STR( this->trimObsChannels ));
    printHandler.Write( pfile, spaceLen, "ROUTE_PREROUTED_ENABLE     = %s\n", TIO_BOOL_STR( this->preRouted.enable ));
    printHandler.Write( pfile, spaceLen, "ROUTE_PREROUTED_ORDER      = %s\n", TIO_SR_STR( srOrderMode ));
 }

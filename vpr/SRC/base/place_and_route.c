@@ -1,9 +1,7 @@
+#include <assert.h>
+#include <stdio.h>
 #include <sys/types.h>
-
-#include <cstdio>
-#include <ctime>
-using namespace std;
-
+#include <time.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "vpr_utils.h"
@@ -44,19 +42,9 @@ void post_place_sync(INP int L_num_blocks,
 
 void free_pb_data(t_pb *pb);
 
-#ifdef TORO_FABRIC_CHANNEL_OVERRIDE
-//===========================================================================//
-#include "TFH_FabricChannelHandler.h"
-
-static bool init_chan_override(int* chan_override_max);
-static bool init_chan_override_widths(TFH_SelectChannelMode_t selectChannel, 
-		int nxny, int* chan_width_xy, int* chan_override_max);
-//===========================================================================//
-#endif
-
 /************************* Subroutine Definitions ****************************/
 
-boolean place_and_route(enum e_operation operation,
+void place_and_route(enum e_operation operation,
 		struct s_placer_opts placer_opts, char *place_file, char *net_file,
 		char *arch_file, char *route_file,
 		struct s_annealing_sched annealing_sched,
@@ -68,16 +56,21 @@ boolean place_and_route(enum e_operation operation,
 
 	/* This routine controls the overall placement and routing of a circuit. */
 	char msg[BUFSIZE];
-
-	boolean success = FALSE;
+	int width_fac, i;
+	boolean success, Fc_clipped;
+	float **net_delay = NULL;
+	t_slack * slacks = NULL;
 	t_chunk net_delay_ch = {NULL, 0, NULL};
 
 	/*struct s_linked_vptr *net_delay_chunk_list_head;*/
 	t_ivec **clb_opins_used_locally = NULL; /* [0..num_blocks-1][0..num_class-1] */
+	int max_pins_per_clb;
 	clock_t begin, end;
 
-	int max_pins_per_clb = 0;
-	for (int i = 0; i < num_types; ++i) {
+	Fc_clipped = FALSE;
+
+	max_pins_per_clb = 0;
+	for (i = 0; i < num_types; i++) {
 		if (type_descriptors[i].num_pins > max_pins_per_clb) {
 			max_pins_per_clb = type_descriptors[i].num_pins;
 		}
@@ -88,16 +81,17 @@ boolean place_and_route(enum e_operation operation,
 		read_place(place_file, net_file, arch_file, nx, ny, num_blocks, block);
 		sync_grid_to_blocks(num_blocks, block, nx, ny, grid);
 	} else {
-		assert((PLACE_ONCE == placer_opts.place_freq) || (PLACE_ALWAYS == placer_opts.place_freq));
+		assert(
+				(PLACE_ONCE == placer_opts.place_freq) || (PLACE_ALWAYS == placer_opts.place_freq));
 		begin = clock();
 		try_place(placer_opts, annealing_sched, chan_width_dist, router_opts,
 				det_routing_arch, segment_inf, timing_inf, directs, num_directs);
 		print_place(place_file, net_file, arch_file);
 		end = clock();
 #ifdef CLOCKS_PER_SEC
-		vpr_printf_info("Placement took %g seconds.\n", (float)(end - begin) / CLOCKS_PER_SEC);
+		vpr_printf(TIO_MESSAGE_INFO, "Placement took %g seconds.\n", (float)(end - begin) / CLOCKS_PER_SEC);
 #else
-		vpr_printf_info("Placement took %g seconds.\n", (float)(end - begin) / CLK_PER_SEC);
+		vpr_printf(TIO_MESSAGE_INFO, "Placement took %g seconds.\n", (float)(end - begin) / CLK_PER_SEC);
 #endif
 	}
 	begin = clock();
@@ -106,9 +100,9 @@ boolean place_and_route(enum e_operation operation,
 	fflush(stdout);
 
 	if (!router_opts.doRouting)
-		return(TRUE);
+		return;
 
-	int width_fac = router_opts.fixed_channel_width;
+	width_fac = router_opts.fixed_channel_width;
 
 	/* If channel width not fixed, use binary search to find min W */
 	if (NO_FIXED_CHANNEL_WIDTH == width_fac) {
@@ -117,13 +111,11 @@ boolean place_and_route(enum e_operation operation,
 				router_opts.verify_binary_search, annealing_sched, router_opts,
 				det_routing_arch, segment_inf, timing_inf, chan_width_dist,
 				models, directs, num_directs);
-		success = (g_solution_inf.channel_width > 0 ? TRUE : FALSE);
 	} else {
 		g_solution_inf.channel_width = width_fac;
 		if (det_routing_arch.directionality == UNI_DIRECTIONAL) {
 			if (width_fac % 2 != 0) {
-				vpr_printf_error(__FILE__, __LINE__, 
-						"in pack_place_and_route.c: Given odd chan width (%d) for udsd architecture.\n",
+				vpr_printf(TIO_MESSAGE_ERROR, "in pack_place_and_route.c: Given odd chan width (%d) for udsd architecture.\n",
 						width_fac);
 				exit(1);
 			}
@@ -134,21 +126,21 @@ boolean place_and_route(enum e_operation operation,
 
 		clb_opins_used_locally = alloc_route_structs();
 
-		t_slack *slacks = alloc_and_load_timing_graph(timing_inf);
-		float **net_delay = alloc_net_delay(&net_delay_ch, clb_net, num_nets);
+		slacks = alloc_and_load_timing_graph(timing_inf);
+		net_delay = alloc_net_delay(&net_delay_ch, clb_net,
+					num_nets);
 
-		boolean Fc_clipped = FALSE;
 		success = try_route(width_fac, router_opts, det_routing_arch,
 				segment_inf, timing_inf, net_delay, slacks, chan_width_dist,
 				clb_opins_used_locally, &Fc_clipped, directs, num_directs);
 
 		if (Fc_clipped) {
-			vpr_printf_warning(__FILE__, __LINE__, 
-					"Fc_output was too high and was clipped to full (maximum) connectivity.\n");
+			vpr_printf(TIO_MESSAGE_WARNING, "Fc_output was too high and was clipped to full (maximum) connectivity.\n");
 		}
 
 		if (success == FALSE) {
-			vpr_printf_info("Circuit is unroutable with a channel width factor of %d.\n", width_fac);
+			vpr_printf(TIO_MESSAGE_INFO, "Circuit is unrouteable with a channel width factor of %d.\n", width_fac);
+			vpr_printf(TIO_MESSAGE_INFO, "\n");
 			sprintf(msg, "Routing failed with a channel width factor of %d. ILLEGAL routing shown.", width_fac);
 		}
 
@@ -156,7 +148,8 @@ boolean place_and_route(enum e_operation operation,
 			check_route(router_opts.route_type, det_routing_arch.num_switch, clb_opins_used_locally);
 			get_serial_num();
 
-			vpr_printf_info("Circuit successfully routed with a channel width factor of %d.\n", width_fac);
+			vpr_printf(TIO_MESSAGE_INFO, "Circuit successfully routed with a channel width factor of %d.\n", width_fac);
+			vpr_printf(TIO_MESSAGE_INFO, "\n");
 
 			routing_stats(router_opts.full_stats, router_opts.route_type,
 					det_routing_arch.num_switch, segment_inf,
@@ -171,23 +164,28 @@ boolean place_and_route(enum e_operation operation,
 				print_sink_delays(getEchoFileName(E_ECHO_ROUTING_SINK_DELAYS));
 			}
 
-			sprintf(msg, "Routing succeeded with a channel width factor of %d.\n\n", width_fac);
+			sprintf(msg, "Routing succeeded with a channel width factor of %d.\n\n",
+					width_fac);
+
+
 		}
 
 		init_draw_coords(max_pins_per_clb);
 		update_screen(MAJOR, msg, ROUTING, timing_inf.timing_analysis_enabled);
 		
+
 		if (timing_inf.timing_analysis_enabled) {
 			assert(slacks->slack);
 
 			if (getEchoEnabled() && isEchoFileEnabled(E_ECHO_POST_FLOW_TIMING_GRAPH)) {
-				print_timing_graph_as_blif (getEchoFileName(E_ECHO_POST_FLOW_TIMING_GRAPH), models);
+				print_timing_graph_as_blif (getEchoFileName(E_ECHO_POST_FLOW_TIMING_GRAPH),
+						models);
 			}
 
 			if(GetPostSynthesisOption())
-			{
-				verilog_writer();
-			}
+			  {
+			    verilog_writer();
+			  }
 
 			free_timing_graph(slacks);
 
@@ -199,7 +197,7 @@ boolean place_and_route(enum e_operation operation,
 	}
 
 	if (clb_opins_used_locally != NULL) {
-		for (int i = 0; i < num_blocks; ++i) {
+		for (i = 0; i < num_blocks; i++) {
 			free_ivec_vector(clb_opins_used_locally[i], 0,
 					block[i].type->num_class - 1);
 		}
@@ -213,9 +211,9 @@ boolean place_and_route(enum e_operation operation,
 
 	end = clock();
 #ifdef CLOCKS_PER_SEC
-	vpr_printf_info("Routing took %g seconds.\n", (float)(end - begin) / CLOCKS_PER_SEC);
+	vpr_printf(TIO_MESSAGE_INFO, "Routing took %g seconds.\n", (float) (end - begin) / CLOCKS_PER_SEC);
 #else
-	vpr_printf_info("Routing took %g seconds.\n", (float)(end - begin) / CLK_PER_SEC);
+	vpr_printf(TIO_MESSAGE_INFO, "Routing took %g seconds.\n", (float)(end - begin) / CLK_PER_SEC);
 #endif
 
 	/*WMF: cleaning up memory usage */
@@ -226,8 +224,6 @@ boolean place_and_route(enum e_operation operation,
 		free(g_trace_free_head);
 	if (g_linked_f_pointer_free_head)
 		free(g_linked_f_pointer_free_head);*/
-
-	return(success);
 }
 
 static int binary_search_place_and_route(struct s_placer_opts placer_opts,
@@ -275,7 +271,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 	max_pins_per_clb = 0;
 	for (i = 0; i < num_types; i++) {
-		max_pins_per_clb = max(max_pins_per_clb, type_descriptors[i].num_pins);
+		max_pins_per_clb = std::max(max_pins_per_clb, type_descriptors[i].num_pins);
 	}
 
 	clb_opins_used_locally = alloc_route_structs();
@@ -303,8 +299,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 	/* Constraints must be checked to not break rr_graph generator */
 	if (det_routing_arch.directionality == UNI_DIRECTIONAL) {
 		if (current % 2 != 0) {
-			vpr_printf_error(__FILE__, __LINE__, 
-					"in pack_place_and_route.c: Tried odd chan width (%d) for udsd architecture.\n",
+			vpr_printf(TIO_MESSAGE_ERROR, "in pack_place_and_route.c: Tried odd chan width (%d) for udsd architecture.\n",
 					current);
 			exit(1);
 		}
@@ -312,8 +307,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 	else {
 		if (det_routing_arch.Fs % 3) {
-			vpr_printf_error(__FILE__, __LINE__, 
-					"Fs must be three in bidirectional mode.\n");
+			vpr_printf(TIO_MESSAGE_ERROR, "Fs must be three in bidirectional mode.\n");
 			exit(1);
 		}
 	}
@@ -325,8 +319,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 	while (final == -1) {
 
-		vpr_printf_info("\n");
-		vpr_printf_info("Using low: %d, high: %d, current: %d\n", low, high, current);
+		vpr_printf(TIO_MESSAGE_INFO, "Using low: %d, high: %d, current: %d\n", low, high, current);
 		fflush(stdout);
 
 		/* Check if the channel width is huge to avoid overflow.  Assume the *
@@ -334,22 +327,20 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 		 * going to overflow.                                                */
 		if (router_opts.fixed_channel_width != NO_FIXED_CHANNEL_WIDTH) {
 			if (current > router_opts.fixed_channel_width * 4) {
-				vpr_printf_error(__FILE__, __LINE__, 
-						"This circuit appears to be unroutable with the current router options. Last failed at %d.\n", low);
-				vpr_printf_info("Aborting routing procedure.\n");
+				vpr_printf(TIO_MESSAGE_ERROR, "This circuit appears to be unroutable with the current router options. Last failed at %d.\n", low);
+				vpr_printf(TIO_MESSAGE_INFO, "Aborting routing procedure.\n");
 				exit(1);
 			}
 		} else {
 			if (current > 1000) {
-				vpr_printf_error(__FILE__, __LINE__, 
-						"This circuit requires a channel width above 1000, probably is not going to route.\n");
-				vpr_printf_info("Aborting routing procedure.\n");
+				vpr_printf(TIO_MESSAGE_ERROR, "This circuit requires a channel width above 1000, probably is not going to route.\n");
+				vpr_printf(TIO_MESSAGE_INFO, "Aborting routing procedure.\n");
 				exit(1);
 			}
 		}
 
 		if ((current * 3) < det_routing_arch.Fs) {
-			vpr_printf_info("Width factor is now below specified Fs. Stop search.\n");
+			vpr_printf(TIO_MESSAGE_INFO, "Width factor is now below specified Fs. Stop search.\n");
 			final = high;
 			break;
 		}
@@ -381,8 +372,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 			/* If Fc_output is too high, set to full connectivity but warn the user */
 			if (Fc_clipped) {
-				vpr_printf_warning(__FILE__, __LINE__, 
-						"Fc_output was too high and was clipped to full (maximum) connectivity.\n");
+				vpr_printf(TIO_MESSAGE_WARNING, "Fc_output was too high and was clipped to full (maximum) connectivity.\n");
 			}
 
 			/* If we're re-placing constantly, save placement in case it is best. */
@@ -407,7 +397,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 			}
 		} else { /* last route not successful */
 			if (success && Fc_clipped) {
-				vpr_printf_info("Routing rejected, Fc_output was too high.\n");
+				vpr_printf(TIO_MESSAGE_INFO, "Routing rejected, Fc_output was too high.\n");
 				success = FALSE;
 			}
 			low = current;
@@ -423,8 +413,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 					if (low < router_opts.fixed_channel_width + 30) {
 						current = low + 5 * udsd_multiplier;
 					} else {
-						vpr_printf_error(__FILE__, __LINE__, 
-								"Aborting: Wneed = f(Fs) search found exceedingly large Wneed (at least %d).\n", low);
+						vpr_printf(TIO_MESSAGE_ERROR, "Aborting: Wneed = f(Fs) search found exceedingly large Wneed (at least %d).\n", low);
 						exit(1);
 					}
 				} else {
@@ -446,8 +435,8 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 	if (verify_binary_search) {
 
-		vpr_printf_info("\n");
-		vpr_printf_info("Verifying that binary search found min channel width...\n");
+		vpr_printf(TIO_MESSAGE_INFO, "\n");
+		vpr_printf(TIO_MESSAGE_INFO, "Verifying that binary search found min channel width...\n");
 
 		prev_success = TRUE; /* Actually final - 1 failed, but this makes router */
 		/* try final-2 and final-3 even if both fail: safer */
@@ -495,12 +484,11 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 	/* End binary search verification. */
 	/* Restore the best placement (if necessary), the best routing, and  *
 	 * * the best channel widths for final drawing and statistics output.  */
-	init_chan(final, &router_opts.fixed_channel_width, chan_width_dist);
-
+	init_chan(final, chan_width_dist);
 #if 0
 	if (placer_opts.place_freq == PLACE_ALWAYS)
 	{
-		vpr_printf_info("Reading best placement back in.\n");
+		vpr_printf(TIO_MESSAGE_INFO, "Reading best placement back in.\n");
 		placer_opts.place_chan_width = final;
 		read_place(place_file, net_file, arch_file, placer_opts,
 				router_opts, chan_width_dist, det_routing_arch,
@@ -510,15 +498,12 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 	free_rr_graph();
 
 	build_rr_graph(graph_type, num_types, type_descriptors, nx, ny, grid,
-			chan_width_max, NULL, det_routing_arch.switch_block_type,
+			chan_width_x[0], NULL, det_routing_arch.switch_block_type,
 			det_routing_arch.Fs, det_routing_arch.num_segment,
 			det_routing_arch.num_switch, segment_inf,
 			det_routing_arch.global_route_switch,
 			det_routing_arch.delayless_switch, timing_inf,
-			det_routing_arch.wire_to_ipin_switch, 
-			router_opts.base_cost_type,
-			router_opts.trim_empty_channels,
-			router_opts.trim_obs_channels,
+			det_routing_arch.wire_to_ipin_switch, router_opts.base_cost_type,
 			directs, num_directs, FALSE,
 			&warnings);
 
@@ -528,10 +513,9 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 			clb_opins_used_locally);
 	get_serial_num();
 	if (Fc_clipped) {
-		vpr_printf_warning(__FILE__, __LINE__, 
-				"Best routing Fc_output too high, clipped to full (maximum) connectivity.\n");
+		vpr_printf(TIO_MESSAGE_WARNING, "Best routing Fc_output too high, clipped to full (maximum) connectivity.\n");
 	}
-	vpr_printf_info("Best routing used a channel width factor of %d.\n", final);
+	vpr_printf(TIO_MESSAGE_INFO, "Best routing used a channel width factor of %d.\n", final);
 
 	routing_stats(full_stats, router_opts.route_type,
 			det_routing_arch.num_switch, segment_inf,
@@ -577,20 +561,24 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 }
 
-void init_chan(int cfactor, int* chan_override_max, t_chan_width_dist chan_width_dist) {
+void init_chan(int cfactor, t_chan_width_dist chan_width_dist) {
 
 	/* Assigns widths to channels (in tracks).  Minimum one track          * 
 	 * per channel.  io channels are io_rat * maximum in interior          * 
 	 * tracks wide.  The channel distributions read from the architecture  *
 	 * file are scaled by cfactor.                                         */
 
-	float chan_width_io = chan_width_dist.chan_width_io;
-	t_chan chan_x_dist = chan_width_dist.chan_x_dist;
-	t_chan chan_y_dist = chan_width_dist.chan_y_dist;
+	float x, separation, chan_width_io;
+	int nio, i;
+	t_chan chan_x_dist, chan_y_dist;
+
+	chan_width_io = chan_width_dist.chan_width_io;
+	chan_x_dist = chan_width_dist.chan_x_dist;
+	chan_y_dist = chan_width_dist.chan_y_dist;
 
 	/* io channel widths */
 
-	int nio = (int) floor(cfactor * chan_width_io + 0.5);
+	nio = (int) floor(cfactor * chan_width_io + 0.5);
 	if (nio == 0)
 		nio = 1; /* No zero width channels */
 
@@ -598,118 +586,50 @@ void init_chan(int cfactor, int* chan_override_max, t_chan_width_dist chan_width
 	chan_width_y[0] = chan_width_y[nx] = nio;
 
 	if (ny > 1) {
-		float separation = 1.0 / (ny - 2.0); /* Norm. distance between two channels. */
-		float y = 0.0; /* This avoids div by zero if ny = 2.0 */
-		chan_width_x[1] = (int) floor(cfactor * comp_width(&chan_x_dist, y, separation) + 0.5);
+		separation = 1. / (ny - 2.); /* Norm. distance between two channels. */
+		x = 0.; /* This avoids div by zero if ny = 2. */
+		chan_width_x[1] = (int) floor(
+				cfactor * comp_width(&chan_x_dist, x, separation) + 0.5);
 
 		/* No zero width channels */
-		chan_width_x[1] = max(chan_width_x[1], 1);
+		chan_width_x[1] = std::max(chan_width_x[1], 1);
 
-		for (int i = 1; i < ny - 1; ++i) {
-			y = (float) i / ((float) (ny - 2.0));
-			chan_width_x[i + 1] = (int) floor(cfactor * comp_width(&chan_x_dist, y, separation) + 0.5);
-			chan_width_x[i + 1] = max(chan_width_x[i + 1], 1);
+		for (i = 1; i < ny - 1; i++) {
+			x = (float) i / ((float) (ny - 2.));
+			chan_width_x[i + 1] = (int) floor(
+					cfactor * comp_width(&chan_x_dist, x, separation) + 0.5);
+			chan_width_x[i + 1] = std::max(chan_width_x[i + 1], 1);
 		}
 	}
 
 	if (nx > 1) {
-		float separation = 1.0 / (nx - 2.0); /* Norm. distance between two channels. */
-		float x = 0.0; /* Avoids div by zero if nx = 2.0 */
-		chan_width_y[1] = (int) floor(cfactor * comp_width(&chan_y_dist, x, separation) + 0.5);
+		separation = 1. / (nx - 2.); /* Norm. distance between two channels. */
+		x = 0.; /* Avoids div by zero if nx = 2. */
+		chan_width_y[1] = (int) floor(
+				cfactor * comp_width(&chan_y_dist, x, separation) + 0.5);
 
-		chan_width_y[1] = max(chan_width_y[1], 1);
+		chan_width_y[1] = std::max(chan_width_y[1], 1);
 
-		for (int i = 1; i < nx - 1; ++i) {
-			x = (float) i / ((float) (nx - 2.0));
-			chan_width_y[i + 1] = (int) floor(cfactor * comp_width(&chan_y_dist, x, separation) + 0.5);
-			chan_width_y[i + 1] = max(chan_width_y[i + 1], 1);
+		for (i = 1; i < nx - 1; i++) {
+			x = (float) i / ((float) (nx - 2.));
+			chan_width_y[i + 1] = (int) floor(
+					cfactor * comp_width(&chan_y_dist, x, separation) + 0.5);
+			chan_width_y[i + 1] = std::max(chan_width_y[i + 1], 1);
 		}
 	}
-
-#ifdef TORO_FABRIC_CHANNEL_OVERRIDE
-	if (chan_override_max) {
-		init_chan_override(chan_override_max);
-	}
-#endif
-
-	chan_width_max = 0;
-	for (int i = 0; i <= ny ; ++i) {
-		chan_width_max = max(chan_width_max,chan_width_x[i]);
-	}
-	for (int i = 0; i <= nx ; ++i) {
-		chan_width_max = max(chan_width_max,chan_width_y[i]);
-	}
-
 #ifdef VERBOSE
-	vpr_printf_info("\n");
-	vpr_printf_info("chan_width_x:\n");
-	for (int i = 0; i <= ny ; ++i) {
-		vpr_printf_info("%d  ", chan_width_x[i]);
-	vpr_printf_info("\n");
-	vpr_printf_info("chan_width_y:\n");
-	for (int i = 0; i <= nx ; ++i) {
-		vpr_printf_info("%d  ", chan_width_y[i]);
-	vpr_printf_info("\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
+	vpr_printf(TIO_MESSAGE_INFO, "chan_width_x:\n");
+	for (i = 0; i <= ny; i++)
+		vpr_printf(TIO_MESSAGE_INFO, "%d  ", chan_width_x[i]);
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
+	vpr_printf(TIO_MESSAGE_INFO, "chan_width_y:\n");
+	for (i = 0; i <= nx; i++)
+		vpr_printf(TIO_MESSAGE_INFO, "%d  ", chan_width_y[i]);
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
 #endif
 
 }
-
-#ifdef TORO_FABRIC_CHANNEL_OVERRIDE
-//===========================================================================//
-static bool init_chan_override(int* chan_override_max) {
-
-	/* Overrrides architecture-based channel widths based on optional fabric model channel widths. */
-	bool ok = true;
-
-	TFH_FabricChannelHandler_c& fabricChannelHandler = TFH_FabricChannelHandler_c::GetInstance();
-	if (fabricChannelHandler.IsValid()) {
-
-		vpr_printf_info("Overriding architecture channels based on fabric channel widths...\n");
-
-		// Override channel widths by x and y orientations
-		*chan_override_max = 0;
-		if (ok)
-			ok = init_chan_override_widths( TFH_SELECT_CHANNEL_X, ny, chan_width_x, chan_override_max);
-		if (ok)
-			ok = init_chan_override_widths( TFH_SELECT_CHANNEL_Y, nx, chan_width_y, chan_override_max);
-	}
-	return (ok);
-}
-
-//===========================================================================//
-static bool init_chan_override_widths(TFH_SelectChannelMode_t selectChannel, 
-					int nxny, int* chan_width_xy, int* chan_override_max) {
-	bool ok = true;
-
-	TFH_FabricChannelHandler_c& fabricChannelHandler = TFH_FabricChannelHandler_c::GetInstance();
-	if (fabricChannelHandler.IsValid()) {
-
-		for (size_t i = 0; i < fabricChannelHandler.GetLength(selectChannel); ++i) {
-
-			const TFH_ChannelWidth_t& channelWidth = *fabricChannelHandler.At(selectChannel, i);
-			int index = channelWidth.GetIndex( );
-			int count = channelWidth.GetCount( );
-
-			// Ignore any fabric channel widths beyond VPR's current grid size
-			if (index > nxny )
-				break;
-
-			if (chan_width_xy[index] != count) {
-
-				ok = vpr_printf_warning(__FILE__, __LINE__, 
-					"Replacing architecture %s channel[%d] width %d with fabric channel width %d.\n",
-					selectChannel == TFH_SELECT_CHANNEL_X ? "x" : "y",
-					index, chan_width_xy[index], count);
-
-				chan_width_xy[index] = count;
-				*chan_override_max = max(*chan_override_max, count);
-			}
-		}
-	}
-	return (ok);
-}
-//===========================================================================//
-#endif
 
 static float comp_width(t_chan * chan, float x, float separation) {
 
@@ -753,8 +673,7 @@ static float comp_width(t_chan * chan, float x, float separation) {
 		break;
 
 	default:
-		vpr_printf_error(__FILE__, __LINE__, 
-				"in comp_width: Unknown channel type %d.\n", chan->type);
+		vpr_printf(TIO_MESSAGE_ERROR, "in comp_width: Unknown channel type %d.\n", chan->type);
 		exit(1);
 		break;
 	}

@@ -1,6 +1,4 @@
-#include <cstdio>
-using namespace std;
-
+#include <stdio.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
@@ -8,30 +6,17 @@ using namespace std;
 #include "route_common.h"
 #include "route_breadth_first.h"
 
-#ifdef TORO_PREROUTED_ROUTING_ENABLE
-//===========================================================================//
-#include "TCH_PreRoutedHandler.h"
-//===========================================================================//
-#endif
-
 /********************* Subroutines local to this module *********************/
 
-static boolean breadth_first_route_net(int inet, int itry, float bend_cost);
+static boolean breadth_first_route_net(int inet, float bend_cost);
 
 static void breadth_first_expand_trace_segment(struct s_trace *start_ptr,
 		int remaining_connections_to_sink);
 
-static void breadth_first_expand_neighbours(int inode, float pcost, 
-		int inet, int itry, float bend_cost);
+static void breadth_first_expand_neighbours(int inode, float pcost, int inet,
+		float bend_cost);
 
 static void breadth_first_add_source_to_heap(int inet);
-
-#ifdef TORO_PREROUTED_ROUTING_ENABLE
-//===========================================================================//
-static bool breadth_first_order_prerouted_first(int try_count, 
-		struct s_router_opts router_opts, float pres_fac);
-//===========================================================================//
-#endif
 
 /************************ Subroutine definitions ****************************/
 
@@ -54,21 +39,23 @@ boolean try_breadth_first_route(struct s_router_opts router_opts,
 
 	for (itry = 1; itry <= router_opts.max_router_iterations; itry++) {
 
-		/* Reset "is_routed" and "is_fixed" flags to indicate nets not pre-routed (yet) */
 		for (inet = 0; inet < num_nets; inet++) {
-			clb_net[inet].is_routed = FALSE;
-			clb_net[inet].is_fixed = FALSE;
-		}
+			if (clb_net[inet].is_global == FALSE) { /* Skip global nets. */
 
-#ifdef TORO_PREROUTED_ROUTING_ENABLE
-		breadth_first_order_prerouted_first(itry, router_opts, pres_fac);
-#endif
+				pathfinder_update_one_cost(trace_head[inet], -1, pres_fac);
 
-		for (inet = 0; inet < num_nets; inet++) {
-			is_routable = try_breadth_first_route_net(inet, itry, pres_fac, 
-					router_opts);
-			if (!is_routable) {
-				return (FALSE);
+				is_routable = breadth_first_route_net(inet,
+						router_opts.bend_cost);
+
+				/* Impossible to route? (disconnected rr_graph) */
+
+				if (!is_routable) {
+					vpr_printf(TIO_MESSAGE_INFO, "Routing failed.\n");
+					return (FALSE);
+				}
+
+				pathfinder_update_one_cost(trace_head[inet], 1, pres_fac);
+
 			}
 		}
 
@@ -85,7 +72,7 @@ boolean try_breadth_first_route(struct s_router_opts router_opts,
 
 		success = feasible_routing();
 		if (success) {
-			vpr_printf_info("Successfully routed after %d routing iterations.\n", itry);
+			vpr_printf(TIO_MESSAGE_INFO, "Successfully routed after %d routing iterations.\n", itry);
 			return (TRUE);
 		}
 
@@ -94,47 +81,16 @@ boolean try_breadth_first_route(struct s_router_opts router_opts,
 		else
 			pres_fac *= router_opts.pres_fac_mult;
 
-		pres_fac = min(pres_fac, static_cast<float>(HUGE_POSITIVE_FLOAT / 1e5));
+		pres_fac = std::min(pres_fac, static_cast<float>(HUGE_POSITIVE_FLOAT / 1e5));
 
 		pathfinder_update_cost(pres_fac, router_opts.acc_fac);
 	}
 
-	vpr_printf_info("Routing failed.\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Routing failed.\n");
 	return (FALSE);
 }
 
-boolean try_breadth_first_route_net(int inet, int itry, float pres_fac, 
-		struct s_router_opts router_opts) {
-
-	boolean is_routed = FALSE;
-
-	if (clb_net[inet].is_fixed) { /* Skip pre-routed nets. */
-
-		is_routed = TRUE;
-
-	} else if (clb_net[inet].is_global) { /* Skip global nets. */
-
-		is_routed = TRUE;
-
-	} else {
-
-		pathfinder_update_one_cost(trace_head[inet], -1, pres_fac);
-		is_routed = breadth_first_route_net(inet, itry, router_opts.bend_cost);
-
-		/* Impossible to route? (disconnected rr_graph) */
-		if (is_routed) {
-			clb_net[inet].is_routed = TRUE;
-			vpack_net[clb_to_vpack_net_mapping[inet]].is_routed = TRUE;
-		} else {
-			vpr_printf_info("Routing failed.\n");
-		}
-
-		pathfinder_update_one_cost(trace_head[inet], 1, pres_fac);
-	}
-	return (is_routed);
-}
-
-static boolean breadth_first_route_net(int inet, int itry, float bend_cost) {
+static boolean breadth_first_route_net(int inet, float bend_cost) {
 
 	/* Uses a maze routing (Dijkstra's) algorithm to route a net.  The net       *
 	 * begins at the net output, and expands outward until it hits a target      *
@@ -166,7 +122,7 @@ static boolean breadth_first_route_net(int inet, int itry, float bend_cost) {
 		current = get_heap_head();
 
 		if (current == NULL) { /* Infeasible routing.  No possible path for net. */
-			vpr_printf_info("Cannot route net #%d (%s) to sink #%d -- no possible path.\n",
+			vpr_printf (TIO_MESSAGE_INFO, "Cannot route net #%d (%s) to sink #%d -- no possible path.\n",
 					inet, clb_net[inet].name, i);
 			reset_path_costs(); /* Clean up before leaving. */
 			return (FALSE);
@@ -186,7 +142,7 @@ static boolean breadth_first_route_net(int inet, int itry, float bend_cost) {
 				if (pcost > 0.99 * HUGE_POSITIVE_FLOAT) /* First time touched. */
 					add_to_mod_list(&rr_node_route_inf[inode].path_cost);
 
-				breadth_first_expand_neighbours(inode, new_pcost, inet, itry,
+				breadth_first_expand_neighbours(inode, new_pcost, inet,
 						bend_cost);
 			}
 
@@ -194,7 +150,7 @@ static boolean breadth_first_route_net(int inet, int itry, float bend_cost) {
 			current = get_heap_head();
 
 			if (current == NULL) { /* Impossible routing. No path for net. */
-				vpr_printf_info("Cannot route net #%d (%s) to sink #%d -- no possible path.\n",
+				vpr_printf (TIO_MESSAGE_INFO, "Cannot route net #%d (%s) to sink #%d -- no possible path.\n",
 						inet, clb_net[inet].name, i);
 				reset_path_costs();
 				return (FALSE);
@@ -300,8 +256,8 @@ static void breadth_first_expand_trace_segment(struct s_trace *start_ptr,
 	}
 }
 
-static void breadth_first_expand_neighbours(int inode, float pcost, 
-		int inet, int itry, float bend_cost) {
+static void breadth_first_expand_neighbours(int inode, float pcost, int inet,
+		float bend_cost) {
 
 	/* Puts all the rr_nodes adjacent to inode on the heap.  rr_nodes outside   *
 	 * the expanded bounding box specified in route_bb are not added to the     *
@@ -320,14 +276,6 @@ static void breadth_first_expand_neighbours(int inode, float pcost,
 				|| rr_node[to_node].yhigh < route_bb[inet].ymin
 				|| rr_node[to_node].ylow > route_bb[inet].ymax)
 			continue; /* Node is outside (expanded) bounding box. */
-
-#ifdef TORO_PREROUTED_ROUTING_ENABLE
-		int src_node = net_rr_terminals[inet][0];
-		int sink_node = net_rr_terminals[inet][iconn];
-		int from_node = inode;
-		if (restrict_prerouted_path(inet, itry, src_node, sink_node, from_node, to_node))
-			continue;
-#endif
 
 		tot_cost = pcost + get_rr_cong_cost(to_node);
 
@@ -355,52 +303,3 @@ static void breadth_first_add_source_to_heap(int inet) {
 
 	node_to_heap(inode, cost, NO_PREVIOUS, NO_PREVIOUS, OPEN, OPEN);
 }
-
-#ifdef TORO_PREROUTED_ROUTING_ENABLE
-//===========================================================================//
-static bool breadth_first_order_prerouted_first(
-		int try_count,
-		struct s_router_opts router_opts, 
-		float pres_fac) {
-
-	bool ok= TRUE;
-
-	// Verify at least one pre-routed constraint has been defined
-	TCH_PreRoutedHandler_c& preRoutedHandler = TCH_PreRoutedHandler_c::GetInstance();
-	if (preRoutedHandler.IsValid() &&
-		(preRoutedHandler.GetOrderMode() == TCH_ROUTE_ORDER_FIRST)) {
-
-		const TCH_NetList_t& tch_netList = preRoutedHandler.GetNetList();
-		for (size_t i = 0; i < tch_netList.GetLength(); ++i )
-		{
-			const TCH_Net_c& tch_net = *tch_netList[i];
-			if (tch_net.GetStatus() == TCH_ROUTE_STATUS_FLOAT)
-				continue;
-
-			int inet = tch_net.GetVPR_NetIndex();
-			vpr_printf_info("  Prerouting net %s...\n", clb_net[inet].name);
-
-			// Call existing VPR route code based on the given VPR net index
-			// (Note: this code will auto pre-route based on Toro callback handler)
-			bool is_routable = try_breadth_first_route_net(inet, try_count, pres_fac, 
-								router_opts);
-			if (!is_routable) {
-				ok = false;
-				break;
-			}
-
-			// Force net's "is_routed" or "is_fixed" state to TRUE 
-			// (ie. indicate that net has been pre-routed)
-			if (tch_net.GetStatus() == TCH_ROUTE_STATUS_ROUTED) {
-				clb_net[inet].is_routed = TRUE;
-				vpack_net[clb_to_vpack_net_mapping[inet]].is_routed = TRUE;
-			} else if (tch_net.GetStatus() == TCH_ROUTE_STATUS_FIXED) {
-				clb_net[inet].is_fixed = TRUE;
-				vpack_net[clb_to_vpack_net_mapping[inet]].is_fixed = TRUE;
-			}
-		}
-	}
-	return (ok);
-}
-//===========================================================================//
-#endif

@@ -1,8 +1,5 @@
-#include <cstdio>
-using namespace std;
-
 #include <assert.h>
-
+#include <stdio.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
@@ -42,8 +39,8 @@ void check_route(enum e_route_type route_type, int num_switch,
 	struct s_trace *tptr;
 	boolean * pin_done;
 
-	vpr_printf_info("\n");
-	vpr_printf_info("Checking to ensure routing is legal...\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Checking to ensure routing is legal...\n");
 
 	/* Recompute the occupancy from scratch and check for overuse of routing *
 	 * resources.  This was already checked in order to determine that this  *
@@ -52,11 +49,8 @@ void check_route(enum e_route_type route_type, int num_switch,
 	recompute_occupancy_from_scratch(clb_opins_used_locally);
 	valid = feasible_routing();
 	if (valid == FALSE) {
-		t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-			__LINE__, __FILE__);
-		sprintf(vpr_error->message,
-			"Error in check_route -- routing resources are overused.\n");
-		throw vpr_error;
+		vpr_printf(TIO_MESSAGE_ERROR, "Error in check_route -- routing resources are overused.\n");
+		exit(1);
 	}
 
 	check_locally_used_clb_opins(clb_opins_used_locally, route_type);
@@ -65,7 +59,7 @@ void check_route(enum e_route_type route_type, int num_switch,
 
 	max_pins = 0;
 	for (inet = 0; inet < num_nets; inet++)
-		max_pins = max(max_pins, (clb_net[inet].num_sinks + 1));
+		max_pins = std::max(max_pins, (clb_net[inet].num_sinks + 1));
 
 	pin_done = (boolean *) my_malloc(max_pins * sizeof(boolean));
 
@@ -83,11 +77,8 @@ void check_route(enum e_route_type route_type, int num_switch,
 
 		tptr = trace_head[inet];
 		if (tptr == NULL) {
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_route: net %d has no routing.\n", inet);
-			throw vpr_error;
+			vpr_printf(TIO_MESSAGE_ERROR, "in check_route: net %d has no routing.\n", inet);
+			exit(1);
 		}
 
 		inode = tptr->index;
@@ -110,22 +101,16 @@ void check_route(enum e_route_type route_type, int num_switch,
 
 			if (rr_node[prev_node].type == SINK) {
 				if (connected_to_route[inode] == FALSE) {
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in check_route: node %d does not link into existing routing for net %d.\n", inode, inet);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in check_route: node %d does not link into existing routing for net %d.\n", inode, inet);
+					exit(1);
 				}
 			}
 
 			else {
 				connects = check_adjacent(prev_node, inode);
 				if (!connects) {
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in check_route: found non-adjacent segments in traceback while checking net %d.\n", inet);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in check_route: found non-adjacent segments in traceback while checking net %d.\n", inet);
+					exit(1);
 				}
 
 				if (connected_to_route[inode] && rr_node[inode].type != SINK) {
@@ -133,11 +118,8 @@ void check_route(enum e_route_type route_type, int num_switch,
 					/* Note:  Can get multiple connections to the same logically-equivalent     *
 					 * SINK in some logic blocks.                                               */
 
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in check_route: net %d routing is not a tree.\n", inet);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in check_route: net %d routing is not a tree.\n", inet);
+					exit(1);
 				}
 
 				connected_to_route[inode] = TRUE; /* Mark as in path. */
@@ -151,20 +133,14 @@ void check_route(enum e_route_type route_type, int num_switch,
 		} /* End while */
 
 		if (rr_node[prev_node].type != SINK) {
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_route: net %d does not end with a SINK.\n", inet);
-			throw vpr_error;
+			vpr_printf(TIO_MESSAGE_ERROR, "in check_route: net %d does not end with a SINK.\n", inet);
+			exit(1);
 		}
 
 		for (ipin = 0; ipin < (clb_net[inet].num_sinks + 1); ipin++) {
 			if (pin_done[ipin] == FALSE) {
-				t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-					__LINE__, __FILE__);
-				sprintf(vpr_error->message,
-					"in check_route: net %d does not connect to pin %d.\n", inet, ipin);
-				throw vpr_error;
+				vpr_printf(TIO_MESSAGE_ERROR, "in check_route: net %d does not connect to pin %d.\n", inet, ipin);
+				exit(1);
 			}
 		}
 
@@ -174,8 +150,8 @@ void check_route(enum e_route_type route_type, int num_switch,
 
 	free(pin_done);
 	free(connected_to_route);
-	vpr_printf_info("Completed routing consistency check successfully.\n");
-	vpr_printf_info("\n");
+	vpr_printf(TIO_MESSAGE_INFO, "Completed routing consistency check successfully.\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\n");
 }
 
 static void check_sink(int inode, int inet, boolean * pin_done) {
@@ -213,21 +189,15 @@ static void check_sink(int inode, int inet, boolean * pin_done) {
 	}
 
 	if (ifound > 1 && type == IO_TYPE) {
-		t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-			__LINE__, __FILE__);
-		sprintf(vpr_error->message,
-			"in check_sink: found %d terminals of net %d of pad %d at location (%d, %d).\n", ifound, inet, ptc_num, i, j);
-		throw vpr_error;
+		vpr_printf(TIO_MESSAGE_ERROR, "in check_sink: found %d terminals of net %d of pad %d at location (%d, %d).\n", ifound, inet, ptc_num, i, j);
+		exit(1);
 	}
 
 	if (ifound < 1) {
-		t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-			__LINE__, __FILE__);
-		sprintf(vpr_error->message,
-				 "in check_sink: node %d does not connect to any terminal of net %s #%d.\n"
-				 "This error is usually caused by incorrectly specified logical equivalence in your architecture file.\n"
-				 "You should try to respecify what pins are equivalent or turn logical equivalence off.\n", inode, clb_net[inet].name, inet);
-		throw vpr_error;
+		vpr_printf(TIO_MESSAGE_ERROR, "in check_sink: node %d does not connect to any terminal of net %s #%d.\n"
+									  "This error is usually caused by incorrectly specified logical equivalence in your architecture file.\n"
+									  "You should try to respecify what pins are equivalent or turn logical equivalence off.\n", inode, clb_net[inet].name, inet);
+		exit(1);
 	}
 }
 
@@ -241,11 +211,8 @@ static void check_source(int inode, int inet) {
 
 	rr_type = rr_node[inode].type;
 	if (rr_type != SOURCE) {
-		t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-			__LINE__, __FILE__);
-		sprintf(vpr_error->message,
-			"in check_source: net %d begins with a node of type %d.\n", inet, rr_type);
-		throw vpr_error;
+		vpr_printf(TIO_MESSAGE_ERROR, "in check_source: net %d begins with a node of type %d.\n", inet, rr_type);
+		exit(1);
 	}
 
 	i = rr_node[inode].xlow;
@@ -254,23 +221,17 @@ static void check_source(int inode, int inet) {
 	bnum = clb_net[inet].node_block[0]; /* First node_block for net is the source */
 	type = grid[i][j].type;
 
-	if (block[bnum].x != i || block[bnum].y != j) {		
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_source: net SOURCE is in wrong location (%d,%d).\n", i, j);
-			throw vpr_error;
+	if (block[bnum].x != i || block[bnum].y != j) {
+		vpr_printf(TIO_MESSAGE_ERROR, "in check_source: net SOURCE is in wrong location (%d,%d).\n", i, j);
+		exit(1);
 	}
 
 	node_block_pin = clb_net[inet].node_block_pin[0];
 	iclass = type->pin_class[node_block_pin];
 
-	if (ptc_num != iclass) {		
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_source: net SOURCE is of wrong class (%d).\n", ptc_num);
-			throw vpr_error;
+	if (ptc_num != iclass) {
+		vpr_printf(TIO_MESSAGE_ERROR, "in check_source: net SOURCE is of wrong class (%d).\n", ptc_num);
+		exit(1);
 	}
 }
 
@@ -287,12 +248,9 @@ static void check_switch(struct s_trace *tptr, int num_switch) {
 
 	if (rr_node[inode].type != SINK) {
 		if (switch_type < 0 || switch_type >= num_switch) {
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_switch: rr_node %d left via switch type %d.\n"
-				"\tSwitch type is out of range.\n", inode, switch_type);
-			throw vpr_error;
+			vpr_printf(TIO_MESSAGE_ERROR, "in check_switch: rr_node %d left via switch type %d.\n", inode, switch_type);
+			vpr_printf(TIO_MESSAGE_ERROR, "\tSwitch type is out of range.\n");
+			exit(1);
 		}
 	}
 
@@ -301,12 +259,10 @@ static void check_switch(struct s_trace *tptr, int num_switch) {
 		/* Without feedthroughs, there should be no switch.  If feedthroughs are    *
 		 * allowed, change to treat a SINK like any other node (as above).          */
 
-		if (switch_type != OPEN) {			
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_switch: rr_node %d is a SINK, but attempts to use a switch of type %d.\n", inode, switch_type);
-			throw vpr_error;
+		if (switch_type != OPEN) {
+			vpr_printf(TIO_MESSAGE_ERROR, "in check_switch: rr_node %d is a SINK, but attempts to use a switch of type %d.\n", 
+					inode, switch_type);
+			exit(1);
 		}
 	}
 }
@@ -495,12 +451,9 @@ static boolean check_adjacent(int from_node, int to_node) {
 		return (TRUE);
 	else if (num_adj == 0)
 		return (FALSE);
-	
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_adjacent: num_adj = %d. Expected 0 or 1.\n", num_adj);
-			throw vpr_error;
+
+	vpr_printf(TIO_MESSAGE_ERROR, "in check_adjacent: num_adj = %d. Expected 0 or 1.\n", num_adj);
+	exit(1);
 }
 
 static int chanx_chany_adjacent(int chanx_node, int chany_node) {
@@ -534,41 +487,43 @@ static int pin_and_chan_adjacent(int pin_node, int chan_node) {
 	 * nodes are adjacent and 0 if they are not (any other value means there's *
 	 * a bug in this routine).                                                 */
 
-	int num_adj = 0;
+	int num_adj, pin_xlow, pin_ylow, pin_xhigh, pin_yhigh, chan_xlow, chan_ylow,
+			chan_xhigh, chan_yhigh;
+	int pin_ptc, i;
+	t_rr_type chan_type;
+	t_type_ptr pin_grid_type;
 
-	int pin_xlow = rr_node[pin_node].xlow;
-	int pin_ylow = rr_node[pin_node].ylow;
-	int pin_xhigh = rr_node[pin_node].xhigh;
-	int pin_yhigh = rr_node[pin_node].yhigh;
-	t_type_ptr pin_grid_type = grid[pin_xlow][pin_ylow].type;
-	int pin_ptc = rr_node[pin_node].ptc_num;
-
-	int chan_type = rr_node[chan_node].type;
-	int chan_xlow = rr_node[chan_node].xlow;
-	int chan_ylow = rr_node[chan_node].ylow;
-	int chan_xhigh = rr_node[chan_node].xhigh;
-	int chan_yhigh = rr_node[chan_node].yhigh;
+	num_adj = 0;
+	pin_xlow = rr_node[pin_node].xlow;
+	pin_ylow = rr_node[pin_node].ylow;
+	pin_xhigh = rr_node[pin_node].xhigh;
+	pin_yhigh = rr_node[pin_node].yhigh;
+	pin_grid_type = grid[pin_xlow][pin_ylow].type;
+	pin_ptc = rr_node[pin_node].ptc_num;
+	chan_type = rr_node[chan_node].type;
+	chan_xlow = rr_node[chan_node].xlow;
+	chan_ylow = rr_node[chan_node].ylow;
+	chan_xhigh = rr_node[chan_node].xhigh;
+	chan_yhigh = rr_node[chan_node].yhigh;
 
 	if (chan_type == CHANX) {
-		for (int width = 0; width < pin_grid_type->width; ++width) {
-			if (chan_ylow == pin_yhigh) { /* CHANX above CLB */
-				if (pin_grid_type->pinloc[width][pin_grid_type->height - 1][TOP][pin_ptc] == 1
-						&& pin_xlow <= chan_xhigh && pin_xhigh >= chan_xlow)
-					num_adj++;
-			} else if (chan_ylow == pin_ylow - 1) { /* CHANX below CLB */
-				if (pin_grid_type->pinloc[width][0][BOTTOM][pin_ptc] == 1
-						&& pin_xlow <= chan_xhigh && pin_xhigh >= chan_xlow)
-					num_adj++;
-			}
+		if (chan_ylow == pin_yhigh) { /* CHANX above CLB */
+			if (pin_grid_type->pinloc[pin_grid_type->height - 1][TOP][pin_ptc]
+					== 1 && pin_xlow <= chan_xhigh && pin_xhigh >= chan_xlow)
+				num_adj++;
+		} else if (chan_ylow == pin_ylow - 1) { /* CHANX below CLB */
+			if (pin_grid_type->pinloc[0][BOTTOM][pin_ptc] == 1
+					&& pin_xlow <= chan_xhigh && pin_xhigh >= chan_xlow)
+				num_adj++;
 		}
 	} else if (chan_type == CHANY) {
-		for (int height = 0; height < pin_grid_type->height; ++height) {
+		for (i = 0; i < pin_grid_type->height; i++) {
 			if (chan_xlow == pin_xhigh) { /* CHANY to right of CLB */
-				if (pin_grid_type->pinloc[pin_grid_type->width-1][height][RIGHT][pin_ptc] == 1
+				if (pin_grid_type->pinloc[i][RIGHT][pin_ptc] == 1
 						&& pin_ylow <= chan_yhigh && pin_yhigh >= chan_ylow)
 					num_adj++;
 			} else if (chan_xlow == pin_xlow - 1) { /* CHANY to left of CLB */
-				if (pin_grid_type->pinloc[0][height][LEFT][pin_ptc] == 1
+				if (pin_grid_type->pinloc[i][LEFT][pin_ptc] == 1
 						&& pin_ylow <= chan_yhigh && pin_yhigh >= chan_ylow)
 					num_adj++;
 			}
@@ -654,24 +609,20 @@ static void check_locally_used_clb_opins(t_ivec ** clb_opins_used_locally,
 
 				rr_type = rr_node[inode].type;
 				if (rr_type != OPIN) {
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in check_locally_used_opins: block #%d (%s)\n"
-						"\tClass %d local OPIN is wrong rr_type -- rr_node #%d of type %d.\n",
-						iblk, block[iblk].name, iclass, inode, rr_type);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in check_locally_used_opins: block #%d (%s)\n",
+							iblk, block[iblk].name);
+					vpr_printf(TIO_MESSAGE_ERROR, "\tClass %d local OPIN is wrong rr_type -- rr_node #%d of type %d.\n",
+							iclass, inode, rr_type);
+					exit(1);
 				}
 
 				ipin = rr_node[inode].ptc_num;
 				if (block[iblk].type->pin_class[ipin] != iclass) {
-					t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-						__LINE__, __FILE__);
-					sprintf(vpr_error->message,
-						"in check_locally_used_opins: block #%d (%s):\n"
-						"\tExpected class %d local OPIN has class %d -- rr_node #: %d.\n",
-						iblk, block[iblk].name, iclass,	block[iblk].type->pin_class[ipin], inode);
-					throw vpr_error;
+					vpr_printf(TIO_MESSAGE_ERROR, "in check_locally_used_opins: block #%d (%s):\n",
+							iblk, block[iblk].name);
+					vpr_printf(TIO_MESSAGE_ERROR, "\tExpected class %d local OPIN has class %d -- rr_node #: %d.\n",
+							iclass,	block[iblk].type->pin_class[ipin], inode);
+					exit(1);
 				}
 			}
 		}
@@ -683,12 +634,10 @@ static void check_node_and_range(int inode, enum e_route_type route_type) {
 	/* Checks that inode is within the legal range, then calls check_node to    *
 	 * check that everything else about the node is OK.                         */
 
-	if (inode < 0 || inode >= num_rr_nodes) { 		
-			t_vpr_error* vpr_error = alloc_and_load_vpr_error(VPR_ERROR_ROUTE, 
-				__LINE__, __FILE__);
-			sprintf(vpr_error->message,
-				"in check_node_and_range: rr_node #%d is out of legal, range (0 to %d).\n", inode, num_rr_nodes - 1);
-			throw vpr_error;
+	if (inode < 0 || inode >= num_rr_nodes) { 
+		vpr_printf(TIO_MESSAGE_ERROR, "in check_node_and_range: rr_node #%d is out of legal, range (0 to %d).\n", 
+				inode, num_rr_nodes - 1);
+		exit(1);
 	}
 	check_node(inode, route_type);
 }

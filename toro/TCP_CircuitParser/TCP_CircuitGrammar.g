@@ -907,8 +907,7 @@ netStatusMode[ TNO_StatusMode_t* pstatusMode ]
    >>
    stringText[ &srStatusMode ]
    <<
-      if(( TC_stricmp( srStatusMode.data( ), "open" ) == 0 ) ||
-         ( TC_stricmp( srStatusMode.data( ), "float" ) == 0 ))
+      if( TC_stricmp( srStatusMode.data( ), "open" ) == 0 )
       {
          *pstatusMode = TNO_STATUS_OPEN;
       }
@@ -920,10 +919,6 @@ netStatusMode[ TNO_StatusMode_t* pstatusMode ]
       else if( TC_stricmp( srStatusMode.data( ), "routed" ) == 0 )
       {
          *pstatusMode = TNO_STATUS_ROUTED;
-      }
-      else if( TC_stricmp( srStatusMode.data( ), "fixed" ) == 0 )
-      {
-         *pstatusMode = TNO_STATUS_FIXED;
       }
       else
       {

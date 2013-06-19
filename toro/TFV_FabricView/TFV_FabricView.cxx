@@ -66,34 +66,31 @@ TFV_FabricView_c::TFV_FabricView_c(
 
 //===========================================================================//
 TFV_FabricView_c::TFV_FabricView_c( 
-      const string&        srName,
-      const TGS_Region_c&  region,
-      const TGO_Polygon_c* ppolygon )
+      const string&       srName,
+      const TGS_Region_c& region )
       :
       pfabricLayerList_( 0 )
 {
-   this->Init( srName, region, ppolygon );
+   this->Init( srName, region );
 }
 
 //===========================================================================//
 TFV_FabricView_c::TFV_FabricView_c( 
-      const char*          pszName,
-      const TGS_Region_c&  region,
-      const TGO_Polygon_c* ppolygon )
+      const char*         pszName,
+      const TGS_Region_c& region )
       :
       pfabricLayerList_( 0 )
 {
-   this->Init( pszName, region, ppolygon );
+   this->Init( pszName, region );
 }
 
 //===========================================================================//
 TFV_FabricView_c::TFV_FabricView_c( 
-      const TGS_Region_c&  region,
-      const TGO_Polygon_c* ppolygon )
+      const TGS_Region_c& region )
       :
       pfabricLayerList_( 0 )
 {
-   this->Init( region, ppolygon );
+   this->Init( region );
 }
 
 //===========================================================================//
@@ -147,7 +144,6 @@ bool TFV_FabricView_c::operator==(
 {
    return(( this->srName_ == fabricView.srName_ ) &&
           ( this->region_ == fabricView.region_ ) &&
-	  ( this->polygon_ == fabricView.polygon_ ) &&
           ( this->layerRange_ == fabricView.layerRange_ ) ?
           true : false );
 }
@@ -201,27 +197,13 @@ void TFV_FabricView_c::Print(
 // 08/15/12 jeffr : Original
 //===========================================================================//
 bool TFV_FabricView_c::Init(
-      const string&        srName,
-      const TGS_Region_c&  region,
-      const TGO_Polygon_c* ppolygon )
-{
-   return( this->Init( TIO_SR_STR( srName ), region, ppolygon ));
-}
-
-//===========================================================================//
-bool TFV_FabricView_c::Init(
-      const char*          pszName,
-      const TGS_Region_c&  region,
-      const TGO_Polygon_c* ppolygon )
+      const string&       srName,
+      const TGS_Region_c& region )
 {
    this->Clear( );
 
-   this->srName_ = TIO_PSZ_STR( pszName );
+   this->srName_ = srName;
    this->region_ = region;
-   if( ppolygon && ppolygon->IsValid( ))
-   {
-      this->polygon_ = *ppolygon;
-   }
    this->layerRange_.Set( TFV_LAYER_MIN, TFV_LAYER_MAX );
    this->pfabricLayerList_ = this->Allocate_( this->region_, this->layerRange_ );
 
@@ -230,10 +212,30 @@ bool TFV_FabricView_c::Init(
 
 //===========================================================================//
 bool TFV_FabricView_c::Init(
-      const TGS_Region_c&  region,
-      const TGO_Polygon_c* ppolygon )
+      const char*         pszName,
+      const TGS_Region_c& region )
 {
-   return( this->Init( "", region, ppolygon ));
+   this->Clear( );
+
+   this->srName_ = TIO_PSZ_STR( pszName );
+   this->region_ = region;
+   this->layerRange_.Set( TFV_LAYER_MIN, TFV_LAYER_MAX );
+   this->pfabricLayerList_ = this->Allocate_( this->region_, this->layerRange_ );
+
+   return( this->pfabricLayerList_ ? true : false );
+}
+
+//===========================================================================//
+bool TFV_FabricView_c::Init(
+      const TGS_Region_c& region )
+{
+   this->Clear( );
+
+   this->region_ = region;
+   this->layerRange_.Set( TFV_LAYER_MIN, TFV_LAYER_MAX );
+   this->pfabricLayerList_ = this->Allocate_( this->region_, this->layerRange_ );
+
+   return( this->pfabricLayerList_ ? true : false );
 }
 
 //===========================================================================//
@@ -246,9 +248,7 @@ bool TFV_FabricView_c::Init(
 
    if( fabricView.IsValid( ))
    {
-      this->Init( fabricView.GetName( ), 
-                  fabricView.GetRegion( ),
-                  &fabricView.GetPolygon( ));
+      this->Init( fabricView.GetName( ), fabricView.GetRegion( ));
       ok = this->Add( fabricView );
    }
    return( ok );
@@ -267,7 +267,6 @@ void TFV_FabricView_c::Clear(
    this->srName_ = "";
 
    this->region_.Reset( );
-   this->polygon_.Reset( );
    this->layerRange_.Reset( );
 
    this->Deallocate_( this->pfabricLayerList_ );

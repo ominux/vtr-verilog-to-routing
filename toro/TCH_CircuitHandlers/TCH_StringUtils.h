@@ -38,7 +38,6 @@ using namespace std;
 //===========================================================================//
 
 void TCH_ExtractStringStatusMode( TCH_PlaceStatusMode_t mode, string* psrMode );
-void TCH_ExtractStringStatusMode( TCH_RouteStatusMode_t mode, string* psrMode );
 
 void TCH_ExtractStringVPR_Type( t_rr_type type, string* psrType );
 

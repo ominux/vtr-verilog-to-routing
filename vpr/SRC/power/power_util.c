@@ -20,9 +20,7 @@
  */
 
 /************************* INCLUDES *********************************/
-#include <cstring>
-using namespace std;
-
+#include <string.h>
 #include <assert.h>
 
 #include "power_util.h"
@@ -468,7 +466,8 @@ void output_logs(FILE * fp, t_log * logs, int num_logs) {
 }
 
 float power_buffer_size_from_logical_effort(float C_load) {
-	return max(1.0f, C_load / g_power_commonly_used->INV_1X_C_in
+	return std::max(1.0f,
+			C_load / g_power_commonly_used->INV_1X_C_in
 					/ (2 * g_power_arch->logical_effort_factor));
 }
 
