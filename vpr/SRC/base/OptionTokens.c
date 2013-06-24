@@ -60,6 +60,7 @@ struct s_TokenPair OptionBaseTokenList[] = {
 		{ "percent_wires_cut", OT_PERCENT_WIRES_CUT },
 		{ "num_cuts", OT_NUM_CUTS },
 		{ "delay_increase", OT_DELAY_INCREASE },
+		{ "placer_cost_constant", OT_PLACER_COST_CONSTANT },
 		{ NULL, OT_BASE_UNKNOWN } /* End of list marker */
 };
 

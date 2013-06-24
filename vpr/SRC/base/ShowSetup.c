@@ -35,6 +35,7 @@ void ShowSetup(INP t_options options, INP t_vpr_setup vpr_setup) {
 	vpr_printf(TIO_MESSAGE_INFO, "Percent wires cut: %d\n", percent_wires_cut);
 	vpr_printf(TIO_MESSAGE_INFO, "Number of cuts: %d\n", num_cuts);
 	vpr_printf(TIO_MESSAGE_INFO, "Delay increase: %d\n", delay_increase);
+	vpr_printf(TIO_MESSAGE_INFO, "Placer cost constant: %f\n", placer_cost_constant);
 
 	if (vpr_setup.PackerOpts.doPacking) {
 		ShowPackerOpts(vpr_setup.PackerOpts);

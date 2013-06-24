@@ -210,8 +210,8 @@ void process_rr_graph_edges(INP int nodes_per_chan, INP t_seg_details * seg_deta
 
 	assert(cur_wires_cut_down == num_wires_cut/2);
 	assert(cur_wires_cut_up == num_wires_cut/2);
-	printf("delay_up:%d delay_down:%d cut_down:%d cut_up:%d nodes_per_chan:%d\n",
-		increased_delay_up, increased_delay_down, cur_wires_cut_down, cur_wires_cut_up, nodes_per_chan);
+	/*printf("delay_up:%d delay_down:%d cut_down:%d cut_up:%d nodes_per_chan:%d\n",
+		increased_delay_up, increased_delay_down, cur_wires_cut_down, cur_wires_cut_up, nodes_per_chan);*/
 	assert(increased_delay_up + increased_delay_down + cur_wires_cut_down + cur_wires_cut_up
 			== nodes_per_chan);
 

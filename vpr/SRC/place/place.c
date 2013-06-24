@@ -1862,8 +1862,7 @@ static float comp_bb_cost(enum cost_methods method) {
 			net_cost[inet] = get_net_cost(inet, &bb_coords[inet]);
 			cost += net_cost[inet];
 			if (method == CHECK)
-				expected_wirelength += get_net_wirelength_estimate(inet,
-						&bb_coords[inet]);
+				expected_wirelength += get_net_wirelength_estimate(inet, &bb_coords[inet]);
 		}
 	}
 
@@ -2171,6 +2170,8 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 	 * box.                                                                 */
 
 	float ncost, crossing;
+	float C1, C2;
+	int times_crossed, cut_step, counter;
 
 	/* Get the expected "crossing count" of a net, based on its number *
 	 * of pins.  Extrapolate for very large nets.                      */
@@ -2194,6 +2195,25 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 
 	ncost += (bbptr->ymax - bbptr->ymin + 1) * crossing
 			* chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1];
+	
+	/* ANDRE: I may add an extra cost factor here if the net crosses
+	 * a cutline */
+	if(num_cuts > 0){
+		C1 = placer_cost_constant;
+		cut_step = ny / (num_cuts + 1);
+		times_crossed = 0;
+
+		counter = 0;
+		for(int j = cut_step; j < ny && counter < num_cuts; j+=cut_step){
+			if(bbptr->ymin <= j && bbptr->ymax > j)
+				times_crossed++;
+			counter++;
+		}
+
+		C2 = (float)(percent_wires_cut / 100.0);
+		ncost += C1 * chanx_place_cost_fac[ny][1] * times_crossed * C2;
+	}
+
 
 	return (ncost);
 }

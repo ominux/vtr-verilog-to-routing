@@ -133,6 +133,8 @@ extern t_clock_arch * g_clock_arch;
 extern int percent_wires_cut;
 extern int num_cuts;
 extern int delay_increase; 
+extern float placer_cost_constant;
+
 
 extern int *increased_delay_edge_map;
 

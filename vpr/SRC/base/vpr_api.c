@@ -157,6 +157,7 @@ void vpr_print_usage(void) {
 	vpr_printf(TIO_MESSAGE_INFO, "\t[--percent_wires_cut <int>]\n");
 	vpr_printf(TIO_MESSAGE_INFO, "\t[--num_cuts <int>]\n");
 	vpr_printf(TIO_MESSAGE_INFO, "\t[--delay_increase <int>]\n");
+	vpr_printf(TIO_MESSAGE_INFO, "\t[--placer_cost_constant <float>]\n");
 	vpr_printf(TIO_MESSAGE_INFO, "\n");
 	vpr_printf(TIO_MESSAGE_INFO,
 			"Routing options valid only for timing-driven routing:\n");

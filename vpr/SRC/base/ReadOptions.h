@@ -81,6 +81,7 @@ struct s_options {
 	int percent_wires_cut;
 	int num_cuts;
 	int delay_increase;
+	float placer_cost_constant;
 
 	/* Timing-driven router options only */
 	float astar_fac;
