@@ -33,13 +33,14 @@ circuit_list_add=tseng.pre-vpr.blif
 
 
 # Add architectures to list to sweep
-arch_list_add=k6_N10_40nm.xml
+arch_list_add=k6_frac_N10_mem32K_40nm_mine.xml
 
 # Parse info and how to parse
-parse_file=vpr_standard.txt
+parse_file=mine.txt
 
 # Pass requirements
 pass_requirements_file=pass_requirements.txt
 
-script_params=-no_mem -starting_stage vpr -check_equivalent
-
+script_params=-no_mem -starting_stage vpr -vpr_route_chan_width 80 -move_net_and_placement ../../../temp
+#-route_from_net_and_placement ../../../temp
+#-move_net_and_placement ../../../temp

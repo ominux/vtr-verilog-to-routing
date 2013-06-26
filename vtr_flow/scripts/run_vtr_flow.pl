@@ -28,7 +28,7 @@ use File::Spec;
 use POSIX;
 use File::Copy;
 use FindBin;
-
+ 
 use lib "$FindBin::Bin/perl_libs/XML-TreePP-0.41/lib";
 use XML::TreePP;
 
@@ -82,9 +82,23 @@ my $gen_postsynthesis_netlist 	= "off";
 my $seed					= 1;
 my $min_hard_adder_size		= 1;
 
+my $move_net_and_placement	= 0;
+my $move_net_and_placement_path;
+
+my $route_from_net_and_placement_path;
+my $route_only = NULL;
+
 while ( $token = shift(@ARGV) ) {
 	if ( $token eq "-sdc_file" ) {
 		$sdc_file_path = expand_user_path( shift(@ARGV) );
+	}
+	elsif ( $token eq "-move_net_and_placement" ){
+		$move_net_and_placement_path = expand_user_path( shift(@ARGV) );
+		$move_net_and_placement = 1;
+	}
+	elsif ( $token eq "-route_from_net_and_placement" ){
+		$route_from_net_and_placement_path = expand_user_path( shift(@ARGV) );
+		$route_only = "-route";
 	}
 	elsif ( $token eq "-starting_stage" ) {
 		$starting_stage = stage_index( shift(@ARGV) );
@@ -445,6 +459,12 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 		push( @vpr_power_args, "--tech_properties" );
 		push( @vpr_power_args, "$tech_file" );
 	}
+
+	if ($route_only eq "-route"){
+		system "cp $route_from_net_and_placement_path/$benchmark_name.net $route_from_net_and_placement_path/$benchmark_name.place ./";	
+		#system "cp `find /home/oleg/Documents/work/UofT/Grad/my_vtr/vtr_flow/benchmarks/blif/wiremap6/ -name \"*.place\"` ./";
+	}
+
 	if ( $min_chan_width < 0 ) {
 		$q = &system_with_timeout(
 			$vpr_path,                    "vpr.out",
@@ -500,10 +520,26 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 					"--max_router_iterations", "100",
 					"--nodisp",              @vpr_power_args,
 					"--gen_postsynthesis_netlist", "$gen_postsynthesis_netlist",
-					"--sdc_file",			 "$sdc_file_path"
+					"--sdc_file",			 "$sdc_file_path"	
 				);
 			}
 		}
+	}
+	elsif ($route_only eq "-route"){
+		$q = &system_with_timeout(
+			$vpr_path,                    "vpr.out",
+			$timeout,                     $temp_dir,
+			$architecture_file_name,      "$benchmark_name",
+			"--blif_file",                "$prevpr_output_file_name",
+			"--timing_analysis",          "$timing_driven",
+			"--timing_driven_clustering", "$timing_driven",
+			"--route_chan_width",         "$min_chan_width",
+			"--nodisp",                   "--cluster_seed_type",
+			"$vpr_cluster_seed_type",     @vpr_power_args,
+			"--gen_postsynthesis_netlist", "$gen_postsynthesis_netlist",
+			"--sdc_file",				  "$sdc_file_path",
+			"-route"
+		);
 	}
 	else {
 		$q = &system_with_timeout(
@@ -534,6 +570,11 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 							"-c", 
 							"cec $prevpr_output_file_name post_pack_netlist.blif;sec $prevpr_output_file_name post_pack_netlist.blif"
 			);
+		}
+		if( $move_net_and_placement ){
+			#print("\nmoving net and placement to $move_net_and_placement_path\n");
+			system "mkdir -p $move_net_and_placement_path";		#make directory if it doesnt exist
+			system "cp *.net *.place $move_net_and_placement_path";	#copy into directory
 		}
 		if (! $keep_intermediate_files)
 		{
