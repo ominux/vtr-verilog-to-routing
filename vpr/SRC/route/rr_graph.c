@@ -127,11 +127,20 @@ static void load_perturbed_switch_pattern(
 
 static t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type, 
 		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
-		INP int *Fc_array, INP int nodes_per_chan, INP int num_wire_classes);
+		INP int *Fc_array, INP int nodes_per_chan, INP int num_segments, 
+		INP t_segment_inf *segment_inf);
 
 static boolean get_perturb_opins(INP t_type_ptr type, INP int *Fc_out, INP int nodes_per_chan, 
 		INP int num_segments, INP t_segment_inf *segment_inf);
 
+static int get_num_wire_types(INP int num_segments, INP t_segment_inf *segment_inf);
+
+static t_conn_block_homogeneity get_conn_block_homogeneity_fpga(INP t_conn_block_homogeneity *block_homogeneity, 
+		INP int num_block_types, INP struct s_grid_tile **fpga_grid, INP int size_x, INP int size_y,
+		INP t_type_ptr block_types, INP e_pin_type pin_type);
+
+static void get_num_fpga_blocks(OUTP int *num_fpga_blocks, INP int num_block_types, 
+		INP struct s_grid_tile **fpga_grid, INP int size_x, INP int size_y);
 #ifdef ENABLE_CHECK_ALL_TRACKS
 static void check_all_tracks_reach_pins(
 		t_type_ptr type,
@@ -274,9 +283,6 @@ void build_rr_graph(
 	int **Fc_xofs = NULL; /* [0..ny-1][0..nx-1] */
 	int **Fc_yofs = NULL; /* [0..nx-1][0..ny-1] */
 	t_clb_to_clb_directs *clb_to_clb_directs;
-
-	t_conn_block_homogeneity conn_block_homogeneity;
-	boolean perturb_opins = FALSE;
 
 	rr_node_indices = NULL;
 	rr_node = NULL;
@@ -463,19 +469,32 @@ void build_rr_graph(
 	/* START OPINP MAP */
 	/* Create opin map lookups */
 	if (BI_DIRECTIONAL == directionality) {
+		t_conn_block_homogeneity *conn_block_homogeneity, fpga_homogeneity;
+		boolean perturb_opins = FALSE;
+
+		conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
 			perturb_opins = get_perturb_opins(&types[i], Fc_out[i], nodes_per_chan,
 				num_seg_types, segment_inf);
-			
+			//perturb_opins = FALSE;	
 			opin_to_track_map[i] = alloc_and_load_pin_to_track_map(DRIVER,
 				nodes_per_chan, Fc_out[i], &types[i], perturb_opins, directionality);
 		
-			conn_block_homogeneity = get_conn_block_homogeneity(&types[i],
-				opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, 4);
+			conn_block_homogeneity[i] = get_conn_block_homogeneity(&types[i], opin_to_track_map[i], 
+				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Homogeneity: %f   Wire Homogeneity: %f\n", 
-				types[i].name, conn_block_homogeneity.pin_homogeneity, conn_block_homogeneity.wire_homogeneity);
-		} 
+				types[i].name, conn_block_homogeneity[i].pin_homogeneity, conn_block_homogeneity[i].wire_homogeneity);
+		}
+
+		//Calculate FPGA homogeneity here
+		fpga_homogeneity = get_conn_block_homogeneity_fpga(conn_block_homogeneity, L_num_types,
+					L_grid, L_nx, L_ny, types, DRIVER);
+		vpr_printf(TIO_MESSAGE_INFO,"Block Type: FPGA  Pin Homogeneity: %f  Wire Homogeneity: %f\n",
+			fpga_homogeneity.pin_homogeneity, fpga_homogeneity.wire_homogeneity); 
+		
+		free(conn_block_homogeneity);
+		conn_block_homogeneity = NULL; 
 	}
 	/* END OPINP MAP */
 
@@ -1674,7 +1693,7 @@ static void load_uniform_switch_pattern(INP t_type_ptr type,
 		INP int *pin_num_ordering, INP int *side_ordering,
 		INP int *width_ordering, INP int *height_ordering, INP int nodes_per_chan, INP int Fc,
 		enum e_directionality directionality) {
-#if 1
+#if 0
 	//Need: Fc, W, L. Currently only have Fc and W (nodes_per_chan)
 	int classes;
 	int pin_index;
@@ -1714,7 +1733,7 @@ static void load_uniform_switch_pattern(INP t_type_ptr type,
 				height_ordering_r[pin_count] = height_ordering[j];
 				width_ordering_r[pin_count] = width_ordering[j];
 				pin_count++;
-				printf("pin %d  side %d  height %d  width %d\n", pin, i, height_ordering[j], width_ordering[j]);
+				//printf("pin %d  side %d  height %d  width %d\n", pin, i, height_ordering[j], width_ordering[j]);
 			}	
 		}
 		
@@ -1787,7 +1806,7 @@ static void load_uniform_switch_pattern(INP t_type_ptr type,
 	free(side_ordering_r);
 	free(width_ordering_r);
 	free(height_ordering_r);
-	printf("END\n");
+	//printf("END\n");
 #else
 	/* Loads the tracks_connected_to_pin array with an even distribution of     *
 	 * switches across the tracks for each pin.  For example, each pin connects *
@@ -2947,131 +2966,6 @@ static int get_opin_direct_connecions(int x, int y, int opin,
 }
 
 
-/* Gets the connection block homogeneity according to the pin<->wire connections
-*  specified in tracks_connected_to_pin. Only done for the pin_type specified. */
-static t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
-		INP int *Fc_array, INP int nodes_per_chan, INP int num_wire_classes){
-	
-	/* can not have diversity for open pins */
-	assert(OPEN != pin_type);	
-	
-	int i, width, height, side, j, pin, track, Fc, iclass, num_pin_type_pins;
-	float mean;
-	t_conn_block_homogeneity conn_block_homogeneity;
-	
-	int **pin_averages;				/*[0..num_pins][0..num_wire_classes-1]*/
-	float *std_dev_pin;				/* [0..num_pins] */
-	int **wire_conns;				/* [0..3][0..nodes_per_chan-1] */
-	float *std_dev_track;				/* [0..3] */
-
-	i = width = height = side = j = pin = track = Fc = iclass = num_pin_type_pins = 0;
-	mean = 0;
-	conn_block_homogeneity.pin_homogeneity = 0;
-	conn_block_homogeneity.wire_homogeneity = 0;
-	
-	pin_averages = (int **) alloc_matrix(0, block_type->num_pins - 1, 0, num_wire_classes - 1, sizeof(int));
-	std_dev_pin = (float *) my_malloc(sizeof(float) * block_type->num_pins);
-	wire_conns = (int **) alloc_matrix(0, 3, 0, nodes_per_chan - 1, sizeof(int));
-	std_dev_track = (float *) my_malloc(sizeof(float) * 4);
-
-	/* Find max Fc */
-	for (pin = 0; pin < block_type->num_pins; ++pin) {
-		iclass = block_type->pin_class[pin];
-		if (Fc_array[i] > Fc && block_type->class_inf[iclass].type == pin_type) {
-			Fc = Fc_array[pin];
-		}
-	}
-	if (Fc == 0){
-		return conn_block_homogeneity;
-	}
-
-	/* initialize variables */
-	for (pin = 0; pin < block_type->num_pins; pin++){
-		for (i = 0; i < num_wire_classes; i++){
-			pin_averages[pin][i] = 0;
-		}
-	}
-	for (side = 0; side < 4; side++){
-		for (i = 0; i < nodes_per_chan; i++){
-			wire_conns[side][i] = 0;
-		}
-	}	
-
-
-	/* Count the number of times each pin connects to each wire class 
-	*  Also count the number of times each wire is used on each side */ 
-	for (pin = 0; pin < block_type->num_pins; pin++){
-		/* only doing pin_type pins */
-		if (block_type->class_inf[block_type->pin_class[pin]].type != pin_type){
-			continue;
-		}
-		
-		/* over each height unit */
-		for (height = 0; height < block_type->height; height++){
-			/*  over each width unit */
-			for (width = 0; width < block_type->width; width++){
-				/* over each side */
-				for (side = 0; side < 4; side++){
-					i = 0;
-					track = tracks_connected_to_pin[pin][width][height][side][i];
-					while (OPEN != track){
-						assert(nodes_per_chan > track);
-						/* find the number of times the pin connects to each wire class */
-						pin_averages[pin][track % num_wire_classes]++;
-						/* find the number of times a connection is made with each wire/side */
-						wire_conns[side][track]++; 
-						i++;
-						if (i >= Fc){
-							num_pin_type_pins++;
-							break;
-						}
-						track = tracks_connected_to_pin[pin][width][height][side][i];
-					}
-				}
-			}
-		} 
-	}
-	/* determine the homogeneity of each pin. Get std deviation over 
-	*  each pin, then take arithmetic avg over all pins */
-	mean = (float)Fc / (float)num_wire_classes;
-	for (pin = 0; pin < block_type->num_pins; pin++){
-		/* only doing pin_type pins */
-		if (block_type->class_inf[block_type->pin_class[pin]].type != pin_type){
-			continue;
-		}
-		
-		std_dev_pin[pin] = 0;
-		for (i = 0; i < num_wire_classes; i++){
-			std_dev_pin[pin] += pow(((float)pin_averages[pin][i] - mean), 2);
-		}
-		std_dev_pin[pin] /= (float)(num_wire_classes - 1);
-		conn_block_homogeneity.pin_homogeneity += sqrt(std_dev_pin[pin]);
-	}
-	conn_block_homogeneity.pin_homogeneity /= (float)(num_pin_type_pins);
-	/* determine the homogeniety of each wire. Get std deviation over each side
-	*  then take arithmetic avg over all sides */
-	/* TODO: we assumed pins divide equally into 4 sides; may not be the case */
-	mean = (float)(num_pin_type_pins / 4) * (float)Fc / (float)nodes_per_chan;
-	for (side = 0; side < 4; side++){
-		std_dev_track[side] = 0;
-		for (track = 0; track < nodes_per_chan; track++){
-			std_dev_track[side] += pow((float)(wire_conns[side][track] - mean), 2); 	
-		}
-		std_dev_track[side] /= (float)(nodes_per_chan - 1);
-		conn_block_homogeneity.wire_homogeneity += sqrt(std_dev_track[side]);
-	}
-	conn_block_homogeneity.wire_homogeneity /= 4;
-
-	free_matrix(pin_averages, 0, block_type->num_pins - 1, 0, sizeof(int));
-	free(std_dev_pin);
-	free_matrix(wire_conns, 0, 3, 0, sizeof(int));
-	free(std_dev_track);
-	
-	return conn_block_homogeneity;
-}
-
-
 /* Determines whether the output pins of the specified block type should be perturbed.	*
 *  This is to prevent pathological cases where the output pin connections are		*
 *  spaced such that the connection pattern always skips some types of wire (w.r.t.	*
@@ -3088,18 +2982,10 @@ static boolean get_perturb_opins(INP t_type_ptr type, INP int *Fc_out, INP int n
 	boolean perturb_opins = FALSE;
 	
 	i = Fc_max = iclass = 0;
-	if (num_segments > 1){
-		/* Segments of one length are grouped together in the channel.	*
-		*  In the future we can determine if any of these segments will	*
-		*  encounter the pathological step size case, and determine if	*
-		*  we need to perturb based on the segment's frequency (if 	*
-		*  frequency is small we should not perturb - testing has found	*
-		*  that perturbing a channel when unnecessary increases needed	*
-		*  W to achieve the same delay); but for now we just return.	*/
+	
+	num_wire_types = get_num_wire_types(num_segments, segment_inf);
+	if (num_wire_types <= 0){
 		return perturb_opins;
-	} else {
-		/* There are as many wire start points as the value of L */
-		num_wire_types = segment_inf[0].length;
 	}
 
 	/* get Fc_max */
@@ -3170,3 +3056,282 @@ static boolean get_perturb_opins(INP t_type_ptr type, INP int *Fc_out, INP int n
 }
 
 
+static int get_num_wire_types(INP int num_segments, INP t_segment_inf *segment_inf){
+
+	int num_wire_types = 0;
+
+	if (num_segments > 1){
+		/* Segments of one length are grouped together in the channel.	*
+		*  In the future we can determine if any of these segments will	*
+		*  encounter the pathological step size case, and determine if	*
+		*  we need to perturb based on the segment's frequency (if 	*
+		*  frequency is small we should not perturb - testing has found	*
+		*  that perturbing a channel when unnecessary increases needed	*
+		*  W to achieve the same delay); but for now we just return.	*/
+	} else {
+		/* There are as many wire start points as the value of L */
+		num_wire_types = segment_inf[0].length;
+	}
+
+	return num_wire_types;
+}
+
+
+/* Gets the connection block homogeneity according to the pin<->wire connections
+*  specified in tracks_connected_to_pin. Only done for the pin_type specified. */
+static t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type, 
+		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP int *Fc_array, INP int nodes_per_chan, INP int num_segments, 
+		INP t_segment_inf *segment_inf){
+	
+	/* can not have diversity for open pins */
+	assert(OPEN != pin_type);	
+	
+	int i, width, height, side, j, pin, track, Fc, iclass;
+	int num_pin_type_pins, counted_pins, counted_pins_per_side[4];
+	float mean;
+	t_conn_block_homogeneity conn_block_homogeneity;
+	
+	int **pin_averages;			/*[0..num_pins][0..num_wire_types-1]*/
+	float *pin_homogeneity;			/* [0..num_pins] */
+	int **wire_conns;			/* [0..3][0..nodes_per_chan-1] */
+	float *wire_homogeneity;		/* [0..3] */
+
+	i = width = height = side = j = pin = track = Fc = iclass = counted_pins = 0;
+	mean = 0;
+	conn_block_homogeneity.pin_homogeneity = 0;
+	conn_block_homogeneity.wire_homogeneity = 0;
+
+	/* TODO: refactor to have one exit point */
+	/* can not have homogeneity for empty blocks */
+	if (0 == block_type->index){
+		return conn_block_homogeneity;
+	}
+
+	/* so far we can only compute homogeneity for single-segment (i.e. track length) fpga's	*/
+	int num_wire_types = get_num_wire_types(num_segments, segment_inf);
+	if (num_wire_types <= 0){
+		return conn_block_homogeneity;
+	}
+
+	/* allocate pointers */	
+	pin_averages = (int **) alloc_matrix(0, block_type->num_pins - 1, 0, num_wire_types - 1, sizeof(int));
+	pin_homogeneity = (float *) my_malloc(sizeof(float) * block_type->num_pins);
+	wire_conns = (int **) alloc_matrix(0, 3, 0, nodes_per_chan - 1, sizeof(int));
+	wire_homogeneity = (float *) my_malloc(sizeof(float) * 4);
+
+
+	/* get number of pin_type_pins */
+	if (DRIVER == pin_type){
+		num_pin_type_pins = block_type->num_drivers;
+	} else if (RECEIVER == pin_type){
+		num_pin_type_pins = block_type->num_receivers;
+	} else {
+		assert(FALSE);
+	}
+	
+	/* Find max Fc */
+	for (pin = 0; pin < block_type->num_pins; ++pin) {
+		iclass = block_type->pin_class[pin];
+		if (Fc_array[i] > Fc && block_type->class_inf[iclass].type == pin_type) {
+			Fc = Fc_array[pin];
+		}
+	}
+
+	/* can not have homogeneity for open pins */
+	if (Fc == 0){
+		return conn_block_homogeneity;
+	}
+
+	/* initialize arrays */
+	for (pin = 0; pin < block_type->num_pins; pin++){
+		for (i = 0; i < num_wire_types; i++){
+			pin_averages[pin][i] = 0;
+		}
+	}
+	for (side = 0; side < 4; side++){
+		counted_pins_per_side[side] = 0;
+		for (i = 0; i < nodes_per_chan; i++){
+			wire_conns[side][i] = 0;
+		}
+	}	
+
+
+	/* Count the number of times each pin connects to each wire class 
+	*  Also count the number of times each wire is used on each side */ 
+	for (side = 0; side < 4; side++){
+		/* over each height unit */
+		for (height = 0; height < block_type->height; height++){
+			/*  over each width unit */
+			for (width = 0; width < block_type->width; width++){
+				/* over each pin */
+				for (pin = 0; pin < block_type->num_pins; pin++){
+					/* only doing pin_type pins */
+					if (block_type->class_inf[block_type->pin_class[pin]].type != pin_type){
+						continue;
+					}
+
+					if (counted_pins == num_pin_type_pins){
+						/* Some blocks like io appear to have four sides, but only one	*
+						*  of those sides is actually used in practice. So here we try	*
+						*  not to count the unused pins.				*/
+						break;
+					}
+					
+					/* check that pin has connections at this height/width/side */
+					track = tracks_connected_to_pin[pin][width][height][side][0];
+					if (OPEN == track){
+						continue;
+					}
+					
+					for(i = 1; i < Fc; i++){
+						/* find the number of times the pin connects to each wire class */
+						pin_averages[pin][track % num_wire_types]++;
+						/* find the number of times a connection is made with each wire/side */
+						wire_conns[side][track]++; 
+						/* get next track */
+						track = tracks_connected_to_pin[pin][width][height][side][i];
+					}
+					counted_pins++;
+					counted_pins_per_side[side]++;
+				}
+			}
+		} 
+	}
+
+	//printf("counted: %d  drivers: %d  receivers: %d  num_pins: %d  num_class: %d\n", counted_pins, block_type->num_drivers, block_type->num_receivers, block_type->num_pins, block_type->num_class);
+	/* determine the homogeneity of each pin. */
+	mean = (float)Fc / (float)num_wire_types;
+	for (pin = 0; pin < block_type->num_pins; pin++){
+		/* only doing pin_type pins */
+		if (block_type->class_inf[block_type->pin_class[pin]].type != pin_type){
+			continue;
+		}
+		
+		pin_homogeneity[pin] = 0;
+		for (i = 0; i < num_wire_types; i++){
+			pin_homogeneity[pin] += abs((float)pin_averages[pin][i] - mean);
+		}
+		pin_homogeneity[pin] /= (float)(2 * Fc);
+		conn_block_homogeneity.pin_homogeneity += pin_homogeneity[pin];
+	}
+	/* normalize block PH to [0,1] range */
+	conn_block_homogeneity.pin_homogeneity /= num_pin_type_pins;
+	
+	/* determine the homogeneity of each wire.*/ 
+	int unconnected_wires = 0;
+	for (side = 0; side < 4; side++){
+		mean = (float)(counted_pins_per_side[side] * Fc) / (float)nodes_per_chan;
+		if (counted_pins_per_side[side] > 0){
+			unconnected_wires = nodes_per_chan - (counted_pins_per_side[side] * Fc);
+		} else {
+			/* this side is not connected to any wires; skip it */
+			unconnected_wires = 0;
+			continue;
+		}
+		
+		wire_homogeneity[side] = 0;
+		for (track = 0; track < nodes_per_chan; track++){
+			wire_homogeneity[side] += fabs((float)wire_conns[side][track] - mean);
+			//printf("track: %d   WH: %f   mean: %f   wire_conns: %d\n", track, wire_homogeneity[side], mean, wire_conns[side][track]); 	
+		}
+		/* correct for wires that are naturally unconnected if mean < 1 */
+	//	printf("unconnected: %d  sum: %f\n", unconnected_wires, wire_homogeneity[side]);
+		wire_homogeneity[side] -= std::max(0, unconnected_wires);
+		wire_homogeneity[side] /= (float)Fc;
+		conn_block_homogeneity.wire_homogeneity += wire_homogeneity[side];
+	}
+	/* normalize block WH to [0,1] range */
+	conn_block_homogeneity.wire_homogeneity /= num_pin_type_pins;
+
+	free_matrix(pin_averages, 0, block_type->num_pins - 1, 0, sizeof(int));
+	free(pin_homogeneity);
+	free_matrix(wire_conns, 0, 3, 0, sizeof(int));
+	free(wire_homogeneity);
+	pin_averages = NULL;
+	pin_homogeneity = NULL;
+	wire_conns = NULL;
+	wire_homogeneity = NULL;
+	
+	return conn_block_homogeneity;
+}
+
+
+/* Uses homogeneity computed for each individual block to compute the wire/pin homogeneity over	*
+*  the entire FPGA										*/
+static t_conn_block_homogeneity get_conn_block_homogeneity_fpga(INP t_conn_block_homogeneity *block_homogeneity, 
+		INP int num_block_types, INP struct s_grid_tile **fpga_grid, INP int size_x, INP int size_y,
+		INP t_type_ptr block_types, INP e_pin_type pin_type){
+	
+	int *num_fpga_blocks;
+	t_conn_block_homogeneity fpga_homogeneity;
+	fpga_homogeneity.pin_homogeneity = 0;
+	fpga_homogeneity.wire_homogeneity = 0;
+
+	/* iterate over FPGA grid and determine number of different blocks */
+	num_fpga_blocks = (int *) my_malloc(num_block_types * sizeof(int));
+	get_num_fpga_blocks(OUTP num_fpga_blocks, num_block_types, fpga_grid, size_x, size_y);
+
+	/* can not compute homogeneity for open pins */
+	assert( OPEN != pin_type );
+	
+	int iblock;
+	int num_pins, num_blocks_used, tot_block_pins, total_fpga_pins;
+	total_fpga_pins = 0;
+	for (iblock = 0; iblock < num_block_types; iblock++){
+		/* block index should be same as position in block_types array */
+		assert( iblock == block_types[iblock].index );
+		
+		if ( DRIVER == pin_type ){
+			num_pins = block_types[iblock].num_drivers;
+		} else if (RECEIVER == pin_type) {
+			num_pins = block_types[iblock].num_receivers;
+		} /* OPEN == pin_type taken care of by assert before */
+		
+		num_blocks_used = num_fpga_blocks[iblock];
+		tot_block_pins = num_blocks_used * num_pins;
+
+		/* weigh each block's homogeneity by total amount of pins it has in the FPGA */
+		fpga_homogeneity.pin_homogeneity += block_homogeneity[iblock].pin_homogeneity * tot_block_pins;//num_blocks_used;
+		fpga_homogeneity.wire_homogeneity += block_homogeneity[iblock].wire_homogeneity * tot_block_pins;//num_blocks_used;
+		total_fpga_pins += tot_block_pins;
+		//printf("block %s  ph %f  wh %f  num_blocks_used %d  num_pins %d\n", block_types[iblock].name,
+		//	block_homogeneity[iblock].pin_homogeneity, block_homogeneity[iblock].wire_homogeneity, 
+		//	num_blocks_used, num_pins);
+	}
+	/* normalize metrics to once again be <= 1 */
+	fpga_homogeneity.pin_homogeneity /= total_fpga_pins;
+	fpga_homogeneity.wire_homogeneity /= total_fpga_pins;
+
+	free(num_fpga_blocks);
+	num_fpga_blocks = NULL;
+
+	return fpga_homogeneity;
+}
+
+/* returns the number of times each each block occurs in the FPGA */
+static void get_num_fpga_blocks(OUTP int *num_fpga_blocks, INP int num_block_types, 
+		INP struct s_grid_tile **fpga_grid, INP int size_x, INP int size_y){
+
+	/* initialize array */
+	for (int i = 0; i < num_block_types; i++){
+		num_fpga_blocks[i] = 0;
+	} 	
+	
+	/* iterate over the entire FPGA grid and count up the number of each block */
+	int ix, iy, block_index, block_usage;
+	for (ix = 0; ix < size_x+1; ix++){
+		for (iy = 0; iy < size_y+1; iy++){
+			if (fpga_grid[ix][iy].width_offset > 0 &&
+			    fpga_grid[ix][iy].height_offset > 0){
+				continue;	/* not the parent block */
+			} else {
+				block_index = fpga_grid[ix][iy].type->index;
+				block_usage = std::max(fpga_grid[ix][iy].usage, 1);	/* TODO: check if large blocks always have usage=0 */
+				num_fpga_blocks[block_index] += block_usage;	
+			}
+		}	
+	} 
+
+	return;
+}
