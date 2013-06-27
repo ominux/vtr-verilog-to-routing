@@ -200,6 +200,7 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 	num_cuts = Options->num_cuts;
 	delay_increase = Options->delay_increase;
 	placer_cost_constant = Options->placer_cost_constant;
+	constant_type = Options->constant_type;
 
 	SetupSwitches(*Arch, RoutingArch, Arch->Switches, Arch->num_switches);
 	SetupRoutingArch(*Arch, RoutingArch);

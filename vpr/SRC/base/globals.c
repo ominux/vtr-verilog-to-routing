@@ -102,7 +102,8 @@ t_clock_arch * g_clock_arch;
 int percent_wires_cut = 0;
 int num_cuts = 0;
 int delay_increase = 0;
-float placer_cost_constant;
+float placer_cost_constant = 0.0;
+int constant_type = 0;
 
 /* Mapping from edges to edges with increased delay */
 int *increased_delay_edge_map = NULL;

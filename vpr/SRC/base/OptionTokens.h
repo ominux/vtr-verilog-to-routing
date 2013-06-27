@@ -78,6 +78,7 @@ enum e_OptionBaseToken {
 	OT_NUM_CUTS,
 	OT_DELAY_INCREASE,
 	OT_PLACER_COST_CONSTANT,
+	OT_CONSTANT_TYPE,
 	OT_BASE_UNKNOWN /* Must be last since used for counting enum items */
 };
 

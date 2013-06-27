@@ -82,6 +82,7 @@ struct s_options {
 	int num_cuts;
 	int delay_increase;
 	float placer_cost_constant;
+	int constant_type;
 
 	/* Timing-driven router options only */
 	float astar_fac;

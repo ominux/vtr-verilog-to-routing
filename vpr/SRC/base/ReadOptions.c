@@ -463,6 +463,8 @@ ProcessOption(INP char **Args, INOUTP t_options * Options) {
 		return ReadInt(Args, &Options->delay_increase);
 	case OT_PLACER_COST_CONSTANT:
 		return ReadFloat(Args, &Options->placer_cost_constant);
+	case OT_CONSTANT_TYPE:
+		return ReadInt(Args, &Options->constant_type);
 
 		/* Routing options valid only for timing-driven routing */
 	case OT_ASTAR_FAC:

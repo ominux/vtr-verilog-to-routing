@@ -134,6 +134,7 @@ extern int percent_wires_cut;
 extern int num_cuts;
 extern int delay_increase; 
 extern float placer_cost_constant;
+extern int constant_type;
 
 
 extern int *increased_delay_edge_map;
