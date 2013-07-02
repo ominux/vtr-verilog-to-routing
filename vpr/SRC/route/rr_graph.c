@@ -453,6 +453,8 @@ void build_rr_graph(
 		t_conn_block_homogeneity *conn_block_homogeneity, fpga_homogeneity;
 		boolean perturb_opins = FALSE;
 		//#define MY_ALGORITHM
+//#define MY_ALGORITHM
+
 		conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
@@ -463,11 +465,18 @@ void build_rr_graph(
 			#endif
 			opin_to_track_map[i] = alloc_and_load_pin_to_track_map(DRIVER,
 				nodes_per_chan, Fc_out[i], &types[i], perturb_opins, directionality);
-		
+
+			if (strcmp("clb", types[i].name) == 0){
+				//pass track_map to special function
+				//printf("adjusting PD\n");
+				decrease_PD(0.25, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+			}
+	
 			conn_block_homogeneity[i] = get_conn_block_homogeneity(&types[i], opin_to_track_map[i], 
 				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Homogeneity: %f   Wire Homogeneity: %f\n", 
-				types[i].name, conn_block_homogeneity[i].pin_homogeneity, conn_block_homogeneity[i].wire_homogeneity);
+			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f\n", 
+				types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
+				conn_block_homogeneity[i].hamming_distance);
 		}
 
 		//Calculate FPGA homogeneity here
@@ -1830,7 +1839,7 @@ static void load_uniform_switch_pattern(INP t_type_ptr type,
 		int side = side_ordering[i];
 		int width = width_ordering[i];
 		int height = height_ordering[i];
-
+		
 		/* Bi-directional treats each track separately, uni-directional works with pairs of tracks */
 		for (int j = 0; j < (Fc / group_size); ++j) {
 			float ftrack = (i * step_size) + (j * fc_step);
