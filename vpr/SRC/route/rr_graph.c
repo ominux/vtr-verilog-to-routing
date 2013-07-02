@@ -452,9 +452,9 @@ void build_rr_graph(
 	if (BI_DIRECTIONAL == directionality) {
 		t_conn_block_homogeneity *conn_block_homogeneity, fpga_homogeneity;
 		boolean perturb_opins = FALSE;
-		//#define MY_ALGORITHM
-//#define MY_ALGORITHM
 
+//#define MY_ALGORITHM
+#define TEST_METRICS
 		conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
@@ -467,9 +467,11 @@ void build_rr_graph(
 				nodes_per_chan, Fc_out[i], &types[i], perturb_opins, directionality);
 
 			if (strcmp("clb", types[i].name) == 0){
-				//pass track_map to special function
-				//printf("adjusting PD\n");
-				decrease_PD(0.25, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+				float target_metric;
+				target_metric = 0.95;
+			#ifdef TEST_METRICS
+				decrease_PD(target_metric, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+			#endif
 			}
 	
 			conn_block_homogeneity[i] = get_conn_block_homogeneity(&types[i], opin_to_track_map[i], 
