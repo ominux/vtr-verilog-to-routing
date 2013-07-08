@@ -1,24 +1,30 @@
 import os
 
 def main():
-    vals = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+    const_types = [0, 1, 2, 3, 4]
+    vals = [0, 20, 40, 60, 80]
     #vals = [0, 20, 40, 60, 80]
     #delays = [0, 500, 1000]
-    delays = [1000, 500, 0]
-    cuts = [3, 2, 1]
+    delays = [1000]
+    cuts = [1]
+    constants = [0.0, 0.1, 0.3, 0.5, 1.0, 1.5, 5.0, 10.0]
 
-    for cut in cuts:
-        print "\n\n Running with num_cuts = %d\n" % (cut)
+    for t in const_types:
+        print "\nRunning with CONSTANT TYPE = %d\n" % (t)
+        for c in constants:
+            print "\nRunning with CONSTANT = %f\n" % c
+            for cut in cuts:
+                print "\n\n Running with num_cuts = %d\n" % (cut)
 
-        for i in xrange(len(delays)):
-            print "\nRunning with delay_increase = %d" % (delays[i])
+                for i in xrange(len(delays)):
+                    print "\nRunning with delay_increase = %d" % (delays[i])
 
-            for p in xrange(len(vals)):
-                print "Running with percent_wires_cut = %d" % (vals[p])
-                os.system("../scripts/run_vtr_task.pl timing_small -p 3 -percent_wires_cut %d -num_cuts %d -delay_increase %d" % (vals[p], cut, delays[i]) )
-                os.system("../scripts/parse_vtr_task.pl timing_small")
-                print "Finished running with percent_wires_cut = %d" % (vals[p])
+                    for p in xrange(len(vals)):
+                        print "Running with percent_wires_cut = %d" % (vals[p])
+                        os.system("../scripts/run_vtr_task.pl timing_small -p 6 -percent_wires_cut %d -num_cuts %d -delay_increase %d -placer_cost_constant %f -constant_type %d" % (vals[p], cut, delays[i], c, t) )
+                        os.system("../scripts/parse_vtr_task.pl timing_small")
+                        print "Finished running with percent_wires_cut = %d" % (vals[p])
 
-            print "\nFinished running with delay_increase = %d" % (delays[i])
+                    print "\nFinished running with delay_increase = %d" % (delays[i])
 
 main()
