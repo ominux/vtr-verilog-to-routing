@@ -2198,30 +2198,25 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 	ncost = (bbptr->xmax - bbptr->xmin + 1) * crossing
 			* chanx_place_cost_fac[bbptr->ymax][bbptr->ymin - 1];
 
-	C1 = placer_cost_constant;
-	C2 = (float)(percent_wires_cut / 100.0);
-	if(num_cuts > 0 && const_type == 4){ // Good idea to convert constant to meaningful values for this type
-		ncost += (1.0 + C1) * (bbptr->ymax - bbptr->ymin + 1) * crossing
-				* chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1] * (1.0 + C2);
-	}
-	else{
-		ncost += (bbptr->ymax - bbptr->ymin + 1) * crossing
-				* chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1];
-	}
+	ncost += (bbptr->ymax - bbptr->ymin + 1) * crossing
+		* chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1];
 	
 	/* ANDRE: I may add an extra cost factor here if the net crosses
 	 * a cutline */
 	if(num_cuts > 0 && const_type != 4){
 		/* Ideas of different costs:
 		 * 0 penalty = C0 * times_crossed * width
-		 * 1 penalty = C1 * height
-		 * 2 penalty = C2 * height + C2*#crosses
+		 * 1 penalty = C1 * height * times_crossed
+		 * 2 penalty = C2 * height * times_crossed + C2*#crosses
 		 * 3 penalty = C3 * min(y1, y2) + C2*#crosses
 		 * 4 penalty = increase cost of ychannel
+		 * 5 penalty = C * height
 		 */
 		int closest = 11000;
 		cut_step = ny / (num_cuts + 1);
 		times_crossed = 0;
+		C1 = placer_cost_constant;
+		C2 = (float)(percent_wires_cut / 100.0);
 
 		counter = 0;
 		for(int j = cut_step; j < ny && counter < num_cuts; j+=cut_step){
@@ -2248,7 +2243,12 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 					closest * C2 +
 					C1 * chany_place_cost_fac[nx][1] * times_crossed * C2;
 		}
-
+		if(const_type == 4){
+			ncost += C1 * (bbptr->ymax - bbptr->ymin + 1) * crossing
+				* chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1] * C2;
+		}
+		if(const_type == 5)
+			ncost += C1 * chany_place_cost_fac[nx][1] * (bbptr->ymax - bbptr->ymin + 1) * C2;
 	}
 
 
