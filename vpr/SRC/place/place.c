@@ -1656,8 +1656,6 @@ static float comp_td_point_to_point_delay(int inet, int ipin) {
 			counter++;
 		}
 
-		if(times_crossed > 0)
-			//vpr_printf(TIO_MESSAGE_INFO, "increased the delay, crossed %d times\nIncreasing %.13f by %.13f\n", times_crossed, delay_source_to_sink, times_crossed*f_delay_increase);
 		delay_source_to_sink += (float)times_crossed * f_delay_increase;
 	}
 
@@ -2203,7 +2201,7 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 	
 	/* ANDRE: I may add an extra cost factor here if the net crosses
 	 * a cutline */
-	if(num_cuts > 0 && const_type != 4){
+	if(num_cuts > 0){
 		/* Ideas of different costs:
 		 * 0 penalty = C0 * times_crossed * width
 		 * 1 penalty = C1 * height * times_crossed
