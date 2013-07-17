@@ -2,22 +2,85 @@ classdef Tester %< handle (or some other parent class)
     
    properties
        vtrPath = '/home/oleg/Documents/work/UofT/Grad/my_vtr';                     %path to vtr folder
-       vprPath = [vtrPath '/vpr/'];
-       tasksPath = [vtrPath '/vtr_flow/tasks'];                                    %run all .blif circuits here
+       vprPath = '';
+       tasksPath = '';                                %run all .blif circuits here
        architecture = 'k6_frac_N10_mem32K_40nm_mine.xml';
-       archPath = [vtrPath '/vtr_flow/arch/timing/' architecture];  
-       outLogPath = [tasksPath '/regression_mcnc'];                                %read results from this output
+       archPath = '';  
+       outLogPath = '';                               %read results from this output
 
-       rrGraphPath = [vtrPath '/vpr/SRC/route/rr_graph.c'];
-       configPath = [tasksPath '/regression_mcnc/config/config.txt'];
+       rrGraphPath = '';
+       configPath = '';
    end %properties
    
    
    
    methods
+        %% Constructor
+        function obj = Tester()
+           obj.vtrPath = '/home/oleg/Documents/work/UofT/Grad/my_vtr';                     %path to vtr folder
+           obj.vprPath = [obj.vtrPath '/vpr/'];
+           obj.tasksPath = [obj.vtrPath '/vtr_flow/tasks'];                                    %run all .blif circuits here
+           obj.architecture = 'k6_frac_N10_mem32K_40nm_mine.xml';
+           obj.archPath = [obj.vtrPath '/vtr_flow/arch/timing/' obj.architecture];  
+           obj.outLogPath = [obj.tasksPath '/regression_mcnc'];                                %read results from this output
+
+           obj.rrGraphPath = [obj.vtrPath '/vpr/SRC/route/rr_graph.c'];
+           obj.configPath = [obj.tasksPath '/regression_mcnc/config/config.txt'];
+        end
+        
+       
+        %% Functions
+        %TODO: lots of functions here are too specific. Take them out?
+      
+        function resultString = regexLastToken(obj, string, pattern)
+            resultString = regexp(string, pattern, 'tokens');
+            
+            %return the last matching token
+            resultString = resultString{end};
+        end
+        
+        %for some reason this function produces horrible glitching in
+        %Matlab. Disabled for now.
+        function output = runCommandLine(obj, command)
+             %[status, output] = system(command);
+             %if status ~= 0
+             %   error('runCommandLine: returned error'); 
+             %end
+             error('runCommandLine: dont use this function');
+        end
+        
+        %runs VPR according to parameters and options in vprString
+        function output = runVprManual(obj, vprString)
+           vprString = ['./vpr ' vprString];
+           
+           restoreDir = cd;
+           cd(obj.vprPath); 
+           disp('Running VPR... please wait');
+           [status, output] = system(vprString); 
+           if status ~= 0
+              disp(output);
+              error('runVprManual: error in running VPR'); 
+           end
+           cd(restoreDir);
+        end
+        
+        function runVtrTask(obj, taskString)
+            status = system([obj.vtrPath '/vtr_flow/scripts/run_vtr_task.pl ' taskString]);
+            if status ~= 0
+               error('runCommandLine: returned error'); 
+            end
+        end
+        
+        function parseVtrTask(obj, taskString)
+            status = system([obj.vtrPath '/vtr_flow/scripts/parse_vtr_task.pl ' taskString]);
+            if status ~= 0
+               error('runCommandLine: returned error'); 
+            end
+        end
+        
         %prints tab-delimited data to file. append=false means existing file
         %contents will be erased before printing.
-        function printDataToFile(filepath, data, labels, append, obj)
+        function printDataToFile(obj, filepath, data, labels, append)
 
             %make labels a column vector
             [labels_row, labels_col] = size(labels);
@@ -48,9 +111,9 @@ classdef Tester %< handle (or some other parent class)
             %should hopefully be done now...
         end
 
-        function result = makeVPR(vprPath, obj)
+        function result = makeVPR(obj)
             restoreDir = cd;
-            cd(vprPath); 
+            cd(obj.vprPath); 
             system('pwd');
             result = system('make');
             if (result ~= 0)
@@ -61,53 +124,53 @@ classdef Tester %< handle (or some other parent class)
             cd(restoreDir);
         end
 
-        function result = switchToRouteChan(filePath, chanWidth, obj)
+        function result = switchToRouteChan(obj, configPath, chanWidth)
             lineRegex = 'script_params=-no_mem -starting_stage vpr.*';
             newLine = ['script_params=-no_mem -starting_stage vpr -vpr_route_chan_width ' num2str(chanWidth) ' -move_net_and_placement ../../../temp'];
 
-            result = replaceSingleLineInFile(lineRegex, newLine, filePath);
+            result = obj.replaceSingleLineInFile(lineRegex, newLine, configPath);
             return; 
         end
 
-        function result = switchToAlgorithm1(filePath, obj) 
+        function result = switchToAlgorithm1(obj, filePath) 
             lineRegex = '/*#define MY_ALGORITHM';
             newLine = '//#define MY_ALGORITHM';
 
-            result = replaceSingleLineInFile(lineRegex, newLine, filePath);
+            result = obj.replaceSingleLineInFile(lineRegex, newLine, filePath);
             return;
         end
 
-        function result = switchToAlgorithm2(filePath, obj)
+        function result = switchToAlgorithm2(obj, filePath)
             lineRegex = '/+#define MY_ALGORITHM';
             newLine = '#define MY_ALGORITHM';
 
-            result = replaceSingleLineInFile(lineRegex, newLine, filePath);
+            result = obj.replaceSingleLineInFile(lineRegex, newLine, filePath);
             return;
         end
 
-        function result = switchToRouteOnly(filePath, chanWidth, obj)
+        function result = switchToRouteOnly(obj, configPath, chanWidth)
             lineRegex = 'script_params=-no_mem -starting_stage vpr -vpr_route_chan_width \d+ -move_net_and_placement ../../../temp';
             newLine = ['script_params=-no_mem -starting_stage vpr -vpr_route_chan_width ' num2str(chanWidth) ' -route_from_net_and_placement ../../../temp'];
 
-            result = replaceSingleLineInFile(lineRegex, newLine, filePath);
+            result = obj.replaceSingleLineInFile(lineRegex, newLine, configPath);
             return;
         end
 
-        function result = switchToFullFlow(filePath, obj)
+        function result = switchToFullFlow(obj, configPath)
             lineRegex = 'script_params=-no_mem -starting_stage vpr.*';
             %lineRegex = 'script_params=-no_mem -starting_stage vpr -vpr_route_chan_width 80 -route_from_net_and_placement ../../../temp';
             newLine = 'script_params=-no_mem -starting_stage vpr -move_net_and_placement ../../../temp';
 
-            result = replaceSingleLineInFile(lineRegex, newLine, filePath);
+            result = obj.replaceSingleLineInFile(lineRegex, newLine, configPath);
             return;
         end
 
         %A function to replace the clb fc_in and fc_out with the specified values
         %in the specified (full) path
-        function result = replaceFcInArchFile(archPath, fcIn, fcOut, obj)
+        function result = replaceFcInArchFile(obj, archPath, fcIn, fcOut)
             result = false;
 
-            %we will be using regex
+            %will be using regex
             clbRegex = '.*pb_type name="clb".*';
             fcRegex = 'fc default_in_type="frac" default_in_val="\d\.*\d*" default_out_type="frac" default_out_val="\d\.*\d*"';
             newLine = ['fc default_in_type="frac" default_in_val="' num2str(fcIn) '" default_out_type="frac" default_out_val="' num2str(fcOut) '"'];
@@ -116,13 +179,13 @@ classdef Tester %< handle (or some other parent class)
                                                         %TODO: change to -ve
                                                         %lookahead
 
-            result = replaceSingleLineInFile(lineRegex, newLine, archPath);
+            result = obj.replaceSingleLineInFile(lineRegex, newLine, archPath);
 
             return;
         end
 
         %uses regexprep to replace first line matching lineRegex with newLine
-        function result = replaceSingleLineInFile( lineRegex, newLine, filePath, obj)
+        function result = replaceSingleLineInFile(obj, lineRegex, newLine, filePath)
             %read in file
             oldFile = fileread(filePath);
             if isempty(oldFile)
@@ -151,7 +214,7 @@ classdef Tester %< handle (or some other parent class)
         %This function parses the output log file of VPR using regex to get the
         %desired stats for current vpr run. Averages the high and low stress delays
         %over all test circuits
-        function resultArray = parseOutput(path, metrics, obj)
+        function resultArray = parseOutput(obj, path, metrics, supressDisp)
 
             numMetrics = length(metrics);
 
@@ -218,9 +281,11 @@ classdef Tester %< handle (or some other parent class)
             %get the geometric averages
             for k = 1:numMetrics
                resultArray(k) = nthroot(resultArray(k), j);
-               disp([metrics{k} ' = ' num2str(resultArray(k))]);
+               if ~supressDisp
+                disp([metrics{k} ' = ' num2str(resultArray(k))]);
+               end
             end
-
+            
             %close file
             fclose(fid);
             return;

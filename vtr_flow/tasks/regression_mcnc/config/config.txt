@@ -11,25 +11,25 @@ archs_dir=arch/timing
 
 # Add circuits to list to sweep
 circuit_list_add=alu4.pre-vpr.blif
-#circuit_list_add=apex2.pre-vpr.blif
-#circuit_list_add=apex4.pre-vpr.blif
-#circuit_list_add=bigkey.pre-vpr.blif
+circuit_list_add=apex2.pre-vpr.blif
+circuit_list_add=apex4.pre-vpr.blif
+circuit_list_add=bigkey.pre-vpr.blif
 #circuit_list_add=clma.pre-vpr.blif
-#circuit_list_add=des.pre-vpr.blif
-#circuit_list_add=diffeq.pre-vpr.blif
-#circuit_list_add=dsip.pre-vpr.blif
-#circuit_list_add=elliptic.pre-vpr.blif
-#circuit_list_add=ex1010.pre-vpr.blif
-#circuit_list_add=ex5p.pre-vpr.blif
-#circuit_list_add=frisc.pre-vpr.blif
-#circuit_list_add=misex3.pre-vpr.blif
-#circuit_list_add=pdc.pre-vpr.blif
-#circuit_list_add=s298.pre-vpr.blif
-#circuit_list_add=s38417.pre-vpr.blif
-#circuit_list_add=s38584.1.pre-vpr.blif
-#circuit_list_add=seq.pre-vpr.blif
-#circuit_list_add=spla.pre-vpr.blif
-#circuit_list_add=tseng.pre-vpr.blif
+circuit_list_add=des.pre-vpr.blif
+circuit_list_add=diffeq.pre-vpr.blif
+circuit_list_add=dsip.pre-vpr.blif
+circuit_list_add=elliptic.pre-vpr.blif
+circuit_list_add=ex1010.pre-vpr.blif
+circuit_list_add=ex5p.pre-vpr.blif
+circuit_list_add=frisc.pre-vpr.blif
+circuit_list_add=misex3.pre-vpr.blif
+circuit_list_add=pdc.pre-vpr.blif
+circuit_list_add=s298.pre-vpr.blif
+circuit_list_add=s38417.pre-vpr.blif
+circuit_list_add=s38584.1.pre-vpr.blif
+circuit_list_add=seq.pre-vpr.blif
+circuit_list_add=spla.pre-vpr.blif
+circuit_list_add=tseng.pre-vpr.blif
 
 
 # Add architectures to list to sweep
@@ -41,4 +41,4 @@ parse_file=mine.txt
 # Pass requirements
 pass_requirements_file=pass_requirements.txt
 
-script_params=-no_mem -starting_stage vpr -vpr_route_chan_width 40 -route_from_net_and_placement ../../../temp
+script_params=-no_mem -starting_stage vpr -vpr_route_chan_width 80 -route_from_net_and_placement ../../../temp

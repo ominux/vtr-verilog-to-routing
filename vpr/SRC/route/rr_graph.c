@@ -455,6 +455,7 @@ void build_rr_graph(
 
 //#define MY_ALGORITHM
 #define TEST_METRICS
+
 		conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
@@ -468,17 +469,17 @@ void build_rr_graph(
 
 			if (strcmp("clb", types[i].name) == 0){
 				float target_metric;
-				target_metric = 0.95;
-			#ifdef TEST_METRICS
-				decrease_PD(target_metric, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+				target_metric = 1;
+			#ifdef TEST_METRICS	
+				//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+				adjust_hamming(target_metric, 0.0005, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 			#endif
 			}
 	
 			conn_block_homogeneity[i] = get_conn_block_homogeneity(&types[i], opin_to_track_map[i], 
 				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f\n", 
-				types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
-				conn_block_homogeneity[i].hamming_distance);
+			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f   Pin Homogeneity: %f\n", types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
+				conn_block_homogeneity[i].hamming_distance, conn_block_homogeneity[i].hamming_proximity, conn_block_homogeneity[i].pin_homogeneity);
 		}
 
 		//Calculate FPGA homogeneity here
