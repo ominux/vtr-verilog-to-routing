@@ -28,13 +28,13 @@ PICsun8 = -G -KPIC
 PIC = $(PIC$(ISM))
 
 CFLAGSlinux_x86_64 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_X86_64
-CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_I686
+CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -Wno-strict-aliasing -static -fPIC -DLINUX_I686
 CFLAGSsun8 = +w -xarch=v9 -library=iostream,Cstd -DLP64 -DSUN8
 CFLAGS = $(CFLAGS$(ISM)) \
 	-I. \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
-	-I../../libpcre/SRC 
+	-I../../libcommon_c/pcre/SRC
 
 ######################################################################
 # Linker options
@@ -77,17 +77,23 @@ LIBSO = $(LIBSO$(ISM))
 
 OBJSlinux_x86_64 = linux_x86_64/TGO_Point.o \
                     linux_x86_64/TGO_Region.o \
+                    linux_x86_64/TGO_Line.o \
                     linux_x86_64/TGO_Box.o \
+                    linux_x86_64/TGO_Polygon.o \
                     linux_x86_64/TGO_Transform.o \
                     linux_x86_64/TGO_StringUtils.o
 OBJSlinux_i686 = linux_i686/TGO_Point.o \
                     linux_i686/TGO_Region.o \
+                    linux_i686/TGO_Line.o \
                     linux_i686/TGO_Box.o \
+                    linux_i686/TGO_Polygon.o \
                     linux_i686/TGO_Transform.o \
                     linux_i686/TGO_StringUtils.o
 OBJSsun8 = sun8/TGO_Point.o \
            sun8/TGO_Region.o \
+           sun8/TGO_Line.o \
            sun8/TGO_Box.o \
+           sun8/TGO_Polygon.o \
            sun8/TGO_Transform.o \
            sun8/TGO_StringUtils.o 
 OBJECTS = $(OBJS$(ISM))
@@ -107,7 +113,7 @@ Debug:
 Gprof:
 	make $(EXE) CFLAGS="-pg -g -DDEBUG $(CFLAGS)" BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
+	rm -f $(EXE) $(ISM)/*.o
 
 .cxx.o:;
 .cxx.a:;

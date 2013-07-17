@@ -47,8 +47,9 @@ CFLAGS = $(CFLAGS$(ISM)) \
 	-I../TGO_GeometricObjects \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
-	-I../../libpcre/SRC \
-	-I../../vpr/SRC/base -I../../vpr/SRC/util -I../../libarchfpga/include
+	-I../../libcommon_c/pcre/SRC \
+	-I../../vpr/SRC/base -I../../vpr/SRC/util -I../../vpr/SRC/place \
+	-I../../libarchfpga/include
 
 ######################################################################
 # Linker options
@@ -109,7 +110,7 @@ Debug:
 Gprof:
 	make $(EXE) CFLAGS="-pg -g -DDEBUG $(CFLAGS)" BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
+	rm -f $(EXE) $(ISM)/*.o
 
 .cxx.o:;
 .cxx.a:;

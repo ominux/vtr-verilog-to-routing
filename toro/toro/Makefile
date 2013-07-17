@@ -28,7 +28,7 @@ PICsun8 = -G -KPIC
 PIC = $(PIC$(ISM))
 
 CFLAGSlinux_x86_64 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_X86_64
-CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_I686
+CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -Wno-strict-aliasing -static -fPIC -DLINUX_I686
 CFLAGSsun8 = +w -xarch=v9 -library=iostream,Cstd -DLP64 -DSUN8
 CFLAGS = $(CFLAGS$(ISM)) \
 	-DTORO_FABRIC_GRID_VALID_ENABLE \
@@ -65,8 +65,9 @@ CFLAGS = $(CFLAGS$(ISM)) \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
 	-I../../libpccts/pcctsGeneric -I../../libpccts/h \
-	-I../../libpcre/SRC \
-	-I../../vpr/SRC/base -I../../vpr/SRC/util -I../../libarchfpga/include
+	-I../../libcommon_c/pcre/SRC \
+	-I../../vpr/SRC/base -I../../vpr/SRC/util -I../../vpr/SRC/place \
+	-I../../libarchfpga/include
 
 ######################################################################
 # Program files
@@ -118,9 +119,9 @@ LINKLIBS = -L../$(ISM) \
 	-lh \
 	-lvpr
 
-SYSLIBSlinux_x86_64 = -L../../libpcre/$(ISM) -lpcre
-SYSLIBSlinux_i686 = -L../../libpcre/$(ISM) -lpcre
-SYSLIBSsun8 = -L../../libpcre/$(ISM) -lpcre -Bdynamic -lresolv
+SYSLIBSlinux_x86_64 = -L../../libcommon_c/pcre/$(ISM) -lpcre
+SYSLIBSlinux_i686 = -L../../libcommon_c/pcre/$(ISM) -lpcre
+SYSLIBSsun8 = -L../../libcommon_c/pcre/$(ISM) -lpcre -Bdynamic -lresolv
 SYSLIBS = $(SYSLIBS$(ISM))
 LIBDEFS = ../$(ISM)/libTM_Master.a \
 	../$(ISM)/libTI_Input.a \
@@ -165,8 +166,8 @@ Optimized:
 Debug:
 	make $(EXE) BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
-	rm -f $(ANTLRGEN) $(DLGGEN)
+	make $(EXE) BUILD_TARGET=clean
+	rm -f $(EXE) $(ISM)/*.o
 
 .cxx.o:;
 .cxx.a:;

@@ -28,12 +28,12 @@ PICsun8 = -G -KPIC
 PIC = $(PIC$(ISM))
 
 CFLAGSlinux_x86_64 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_X86_64
-CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -static -fPIC -DLINUX_I686
+CFLAGSlinux_i686 = -Wall -Wpointer-arith -Wcast-qual -Wno-strict-aliasing -static -fPIC -DLINUX_I686
 CFLAGSsun8 = +w -xarch=v9 -library=iostream,Cstd -DLP64 -DSUN8
 CFLAGS = $(CFLAGS$(ISM)) \
 	-I. \
 	-I../TIO_InputOutputHandlers \
-	-I../../libpcre/SRC
+	-I../../libcommon_c/pcre/SRC
 
 ######################################################################
 # Linker options
@@ -82,6 +82,7 @@ OBJSlinux_x86_64 = linux_x86_64/TC_Name.o \
                     linux_x86_64/TC_SideName.o \
                     linux_x86_64/TC_SideIndex.o \
                     linux_x86_64/TC_IndexCount.o \
+                    linux_x86_64/TC_Index.o \
                     linux_x86_64/TC_MapTable.o \
                     linux_x86_64/TC_Bit.o \
                     linux_x86_64/TC_MinGrid.o \
@@ -96,6 +97,7 @@ OBJSlinux_i686 = linux_i686/TC_Name.o \
                     linux_i686/TC_SideName.o \
                     linux_i686/TC_SideIndex.o \
                     linux_i686/TC_IndexCount.o \
+                    linux_i686/TC_Index.o \
                     linux_i686/TC_MapTable.o \
                     linux_i686/TC_Bit.o \
                     linux_i686/TC_MinGrid.o \
@@ -110,6 +112,7 @@ OBJSsun8 = sun8/TC_Name.o \
            sun8/TC_SideName.o \
            sun8/TC_SideIndex.o \
            sun8/TC_IndexCount.o \
+           sun8/TC_Index.o \
            sun8/TC_MapTable.o \
            sun8/TC_Bit.o \
            sun8/TC_MinGrid.o \
@@ -133,7 +136,7 @@ Debug:
 Gprof:
 	make $(EXE) CFLAGS="-pg -g -DDEBUG $(CFLAGS)" BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
+	rm -f $(EXE) $(ISM)/*.o
 
 .cxx.o:;
 .cxx.a:;

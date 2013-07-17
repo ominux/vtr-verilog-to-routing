@@ -6,6 +6,10 @@
 //           - TC_FormatStringCentered
 //           - TC_FormatStringFilled
 //           - TC_FormatStringDateTimeStamp
+//           - TC_FormatStringFileNameLineNum
+//           - TC_FormatStringNameIndex
+//           - TC_ParseStringNameIndex
+//           - TC_ParseStringNameIndices
 //           - TC_ExtractStringSideMode
 //           - TC_ExtractStringTypeMode
 //           - TC_AddStringPrefix
@@ -274,6 +278,214 @@ bool TC_FormatStringDateTimeStamp(
       }
    }
    return( pszDateTimeStamp && *pszDateTimeStamp ? true : false );
+}
+
+//===========================================================================//
+// Function       : TC_FormatStringFileNameLineNum
+// Purpose        : Format and return a file name/line number string with
+//                  optional prefix/postfix strings.
+// Author         : Jeff Rudolph
+//---------------------------------------------------------------------------//
+// Version history
+// 06/18/13 jeffr : Original
+//===========================================================================//
+bool TC_FormatStringFileNameLineNum(
+            char*        pszFileNameLineNum,
+            size_t       lenFileNameLineNum,
+      const char*        pszFileName,
+            unsigned int lineNum,
+      const char*        pszPrefix,
+      const char*        pszPostfix )
+{
+   if( pszFileNameLineNum )
+   {
+      memset( pszFileNameLineNum, 0, lenFileNameLineNum );
+
+      size_t lenPrefix = strlen( pszPrefix );
+      size_t lenPostfix = strlen( pszPostfix );
+      size_t lenFileName = lenFileNameLineNum - lenPrefix - lenPostfix - 4;
+      size_t lenLineNum = 5;
+
+      if( lenFileNameLineNum >= lenPrefix + lenFileName + lenLineNum + lenPostfix )
+      {
+         sprintf( pszFileNameLineNum, "%s%.*s:%d%s", 
+                  TIO_PSZ_STR( pszPrefix ),
+                  static_cast<int>( lenFileName ), 
+                  TIO_PSZ_STR( pszFileName ),
+                  lineNum,
+                  TIO_PSZ_STR( pszPostfix ));
+      }
+   }
+   return( pszFileNameLineNum && *pszFileNameLineNum ? true : false );
+}
+
+
+//===========================================================================//
+// Function       : TC_FormatStringNameIndex
+// Author         : Jeff Rudolph
+//---------------------------------------------------------------------------//
+// Version history
+// 02/21/12 jeffr : Original
+//===========================================================================//
+void TC_FormatStringNameIndex(
+      const char*   pszName,
+            size_t  index,
+            string* psrNameIndex ) 
+{
+   if( psrNameIndex )
+   {  
+      *psrNameIndex = "";
+
+      if( pszName )
+      {
+         *psrNameIndex += pszName;
+      }
+      if( index != SIZE_MAX )
+      {
+         char szIndex[TIO_FORMAT_STRING_LEN_VALUE];
+         sprintf( szIndex, "%lu", static_cast< unsigned long >( index ));
+         *psrNameIndex += "[";
+         *psrNameIndex += szIndex;
+         *psrNameIndex += "]";
+      }
+   }
+}
+
+//===========================================================================//
+void TC_FormatStringNameIndex(
+      const string& srName,
+            size_t  index,
+            string* psrNameIndex )
+{
+   const char* pszName = ( srName.length( ) ? srName.data( ) : 0 );
+   TC_FormatStringNameIndex( pszName, index, psrNameIndex );
+}
+
+//===========================================================================//
+// Function       : TC_ParseStringNameIndex
+// Author         : Jeff Rudolph
+//---------------------------------------------------------------------------//
+// Version history
+// 02/21/12 jeffr : Original
+//===========================================================================//
+bool TC_ParseStringNameIndex(
+      const char*   pszNameIndex,
+            string* psrName,
+            size_t* pindex )
+{
+   string srName( "" );
+   size_t index = SIZE_MAX;
+
+   if( pszNameIndex )
+   {
+      srName = pszNameIndex;
+      size_t left = srName.find( '[' );
+      size_t right = srName.find( ']' );
+      if(( left != string::npos ) && ( right != string::npos ))
+      {
+         if( left < right )
+         {
+            string srIndex( srName.substr( left + 1, right - left - 1 ));
+            index = atoi( srIndex.data( ));
+
+            srName = srName.substr( 0, left );
+         }
+      }
+   }
+
+   if( psrName )
+   {
+      *psrName = srName;
+   }
+   if( pindex )
+   {
+      *pindex = index;
+   }
+   return( index != SIZE_MAX ? true : false );
+}
+
+//===========================================================================//
+bool TC_ParseStringNameIndex(
+      const string& srNameIndex,
+            string* psrName,
+            size_t* pindex )
+{
+   const char* pszNameIndex = ( srNameIndex.length( ) ? srNameIndex.data( ) : 0 );
+   return( TC_ParseStringNameIndex( pszNameIndex, psrName, pindex ));
+}
+
+//===========================================================================//
+// Function       : TC_ParseStringNameIndices
+// Author         : Jeff Rudolph
+//---------------------------------------------------------------------------//
+// Version history
+// 02/21/12 jeffr : Original
+//===========================================================================//
+bool TC_ParseStringNameIndices(
+      const char*   pszNameIndices,
+            string* psrName,
+            size_t* pindex_i,
+            size_t* pindex_j )
+{
+   string srName( "" );
+   size_t index_i = SIZE_MAX;
+   size_t index_j = SIZE_MAX;
+
+   if( pszNameIndices )
+   {
+      srName = pszNameIndices;
+      size_t left = srName.find( '[' );
+      size_t right = srName.find( ']' );
+      size_t colon = srName.find( ':' );
+      if(( left != string::npos ) && ( right != string::npos ) && ( colon != string::npos))
+      {
+         if(( left < colon ) && (colon < right ))
+         {
+            string srIndex_i( srName.substr( left + 1, colon - left - 1 ));
+            index_i = atoi( srIndex_i.data( ));
+
+            string srIndex_j( srName.substr( colon + 1, right - colon - 1 ));
+            index_j = atoi( srIndex_j.data( ));
+
+            srName = srName.substr( 0, left );
+         }
+      }
+      else if(( left != string::npos ) && ( right != string::npos ))
+      {
+         if( left < right )
+         {
+            string srIndex( srName.substr( left + 1, right - left - 1 ));
+            index_i = index_j = atoi( srIndex.data( ));
+
+            srName = srName.substr( 0, left );
+         }
+      }
+   }
+
+   if( psrName )
+   {
+      *psrName = srName;
+   }
+   if( pindex_i )
+   {
+      *pindex_i = index_i;
+   }
+   if( pindex_j )
+   {
+      *pindex_j = index_j;
+   }
+   return(( index_i != SIZE_MAX ) && ( index_j != SIZE_MAX ) ? true : false );
+}
+
+//===========================================================================//
+bool TC_ParseStringNameIndices(
+      const string& srNameIndices,
+            string* psrName,
+            size_t* pindex_i,
+            size_t* pindex_j )
+{
+   const char* pszNameIndices = ( srNameIndices.length( ) ? srNameIndices.data( ) : 0 );
+   return( TC_ParseStringNameIndices( pszNameIndices, psrName, pindex_i, pindex_j ));
 }
 
 //===========================================================================//

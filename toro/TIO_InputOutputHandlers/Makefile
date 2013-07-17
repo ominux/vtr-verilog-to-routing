@@ -33,7 +33,7 @@ CFLAGSsun8 = +w -xarch=v9 -library=iostream,Cstd -DLP64 -DSUN8
 CFLAGS = $(CFLAGS$(ISM)) \
 	-I. \
 	-I../TC_Common \
-	-I../../libpcre/SRC 
+	-I../../libcommon_c/pcre/SRC
 
 ######################################################################
 # Linker options
@@ -107,7 +107,7 @@ Optimized:
 Debug:
 	make $(EXE) CFLAGS="-g -DDEBUG $(CFLAGS)" BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
+	rm -f $(EXE) $(ISM)/*.o
 
 .cxx.o:;
 .cxx.a:;

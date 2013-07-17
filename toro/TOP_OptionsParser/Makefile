@@ -59,7 +59,7 @@ CFLAGS = $(CFLAGS$(ISM)) $(PCCTSINC)\
 	-I../TOS_OptionsStore \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
-	-I../../libpcre/SRC \
+	-I../../libcommon_c/pcre/SRC \
 	-I../../libpccts/pcctsGeneric -I../../libpccts/h
 
 ######################################################################
@@ -124,7 +124,7 @@ Debug:
 Gprof:
 	make $(EXE) CFLAGS="-pg -g -DDEBUG $(CFLAGS)" BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
+	rm -f $(EXE) $(ISM)/*.o
 	rm -f $(ANTLRGEN) $(DLGGEN)
 
 .cxx.o:;

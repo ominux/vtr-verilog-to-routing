@@ -50,7 +50,7 @@ CFLAGS = $(CFLAGS$(ISM)) \
 	-I../TGO_GeometricObjects \
 	-I../TIO_InputOutputHandlers \
 	-I../TC_Common \
-	-I../../libpcre/SRC 
+	-I../../libcommon_c/pcre/SRC
 
 ######################################################################
 # Linker options
@@ -111,7 +111,7 @@ Debug:
 Gprof:
 	make $(EXE) CFLAGS="-pg -g -DDEBUG $(CFLAGS)" BUILD_TARGET=Debug
 clean:
-	rm -rf $(ISM)/*
+	rm -f $(EXE) $(ISM)/*.o
 
 .cxx.o:;
 .cxx.a:;
