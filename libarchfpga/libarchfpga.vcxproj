@@ -41,6 +41,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;include;..\toro\TIO_InputOutputHandlers</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -49,14 +50,16 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <CompileAsManaged>
       </CompileAsManaged>
-      <AdditionalIncludeDirectories>include;../printhandler/SRC/TIO_InputOutputHandlers</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>
+      </AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <CompileAs>CompileAsCpp</CompileAs>
+      <ExceptionHandling>SyncCThrow</ExceptionHandling>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -64,18 +67,22 @@
       </AdditionalDependencies>
     </Link>
     <ProjectReference>
-      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
+    <Lib />
+    <Lib>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+    </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <AdditionalIncludeDirectories>include;../printhandler/SRC/TIO_InputOutputHandlers</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;../libcommon_c++/SRC/TIO_InputOutputHandlers</AdditionalIncludeDirectories>
       <CompileAsManaged>false</CompileAsManaged>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>include;../printhandler/SRC/TIO_InputOutputHandlers</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;../libcommon_c++/SRC/TIO_InputOutputHandlers</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <CallingConvention>Cdecl</CallingConvention>
       <CompileAs>CompileAsCpp</CompileAs>
@@ -102,11 +109,6 @@
     <ClCompile Include="read_xml_arch_file.c" />
     <ClCompile Include="read_xml_util.c" />
     <ClCompile Include="util.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\printhandler\printhandler.vcxproj">
-      <Project>{a5092a9c-6dfd-4dec-9951-51606f5eaf3b}</Project>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

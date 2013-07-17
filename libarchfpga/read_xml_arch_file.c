@@ -21,11 +21,13 @@
  *                                                                                  *
  * Because of how the XML tree traversal works, we free everything when we're       *
  * done reading an architecture file to make sure that there isn't some part        *
- * of the architecture file that got missed.                                        *
+ * of the architecture file that got missed. 
  */
 
 #include <string.h>
 #include <assert.h>
+#include <map>
+#include <string>
 #include "util.h"
 #include "arch_types.h"
 #include "ReadLine.h"
@@ -33,9 +35,15 @@
 #include "read_xml_arch_file.h"
 #include "read_xml_util.h"
 
+using namespace std;
+
 enum Fc_type {
 	FC_ABS, FC_FRAC, FC_FULL
 };
+
+/* This gives access to the architecture file name to 
+	all architecture-parser functions       */
+static const char* arch_file_name = NULL;
 
 /* This identifies the t_type_ptr of an IO block */
 static t_type_ptr IO_TYPE = NULL;
@@ -65,7 +73,7 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 static void ProcessPb_TypePort(INOUTP ezxml_t Parent, t_port * port,
 		e_power_estimation_method power_method);
 static void ProcessPinToPinAnnotations(ezxml_t parent,
-		t_pin_to_pin_annotation *annotation);
+		t_pin_to_pin_annotation *annotation, t_pb_type * parent_pb_type);
 static void ProcessInterconnect(INOUTP ezxml_t Parent, t_mode * mode);
 static void ProcessMode(INOUTP ezxml_t Parent, t_mode * mode,
 		boolean * default_leakage_mode);
@@ -111,11 +119,17 @@ static void SyncModelsPbTypes_rec(INOUTP struct s_arch *arch,
 
 static void PrintPb_types_rec(INP FILE * Echo, INP const t_pb_type * pb_type,
 		int level);
+static void PrintPb_types_recPower(INP FILE * Echo, INP const t_pb_type * pb_type,
+		const char* tabs);
+static void PrintArchInfo(INP FILE * Echo, struct s_arch *arch) ;
 static void ProcessPb_TypePowerEstMethod(ezxml_t Parent, t_pb_type * pb_type);
 static void ProcessPb_TypePort_Power(ezxml_t Parent, t_port * port,
 		e_power_estimation_method power_method);
 e_power_estimation_method power_method_inherited(
 		e_power_estimation_method parent_power_method);
+static void CheckXMLTagOrder(ezxml_t Parent);
+static void ff_primtives_annotation_clock_match(t_pin_to_pin_annotation *annotation, 
+	t_pb_type * parent_pb_type);
 
 /* Sets up the pinloc map and pin classes for the type. Unlinks the loc nodes
  * from the XML tree.
@@ -137,35 +151,38 @@ static void SetupPinLocationsAndPinClasses(ezxml_t Locations,
 		Type->pin_location_distribution = E_SPREAD_PIN_DISTR;
 	} else if (strcmp(Prop, "custom") == 0) {
 		Type->pin_location_distribution = E_CUSTOM_PIN_DISTR;
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"[LINE %d] %s is an invalid pin location pattern.\n",
-				Locations->line, Prop);
-		exit(1);
+	} else {		
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Locations->line, 
+					"%s is an invalid pin location pattern.\n", Prop);
 	}
 	ezxml_set_attr(Locations, "pattern", NULL);
 
 	/* Alloc and clear pin locations */
-	Type->pinloc = (int ***) my_malloc(Type->height * sizeof(int **));
+	Type->pin_width = (int *) my_calloc(Type->num_pins, sizeof(int));
 	Type->pin_height = (int *) my_calloc(Type->num_pins, sizeof(int));
-	for (i = 0; i < Type->height; ++i) {
-		Type->pinloc[i] = (int **) my_malloc(4 * sizeof(int *));
-		for (j = 0; j < 4; ++j) {
-			Type->pinloc[i][j] = (int *) my_malloc(
-					Type->num_pins * sizeof(int));
-			for (k = 0; k < Type->num_pins; ++k) {
-				Type->pinloc[i][j][k] = 0;
+	Type->pinloc = (int ****) my_malloc(Type->width * sizeof(int **));
+	for (int width = 0; width < Type->width; ++width) {
+		Type->pinloc[width] = (int ***) my_malloc(Type->height * sizeof(int *));
+		for (int height = 0; height < Type->height; ++height) {
+			Type->pinloc[width][height] = (int **) my_malloc(4 * sizeof(int *));
+			for (int side = 0; side < 4; ++side) {
+				Type->pinloc[width][height][side] = (int *) my_malloc(Type->num_pins * sizeof(int));
+				for (int pin = 0; pin < Type->num_pins; ++pin) {
+					Type->pinloc[width][height][side][pin] = 0;
+				}
 			}
 		}
 	}
 
-	Type->pin_loc_assignments = (char****) my_malloc(
-			Type->height * sizeof(char***));
-	Type->num_pin_loc_assignments = (int**) my_malloc(
-			Type->height * sizeof(int*));
-	for (i = 0; i < Type->height; i++) {
-		Type->pin_loc_assignments[i] = (char***) my_calloc(4, sizeof(char**));
-		Type->num_pin_loc_assignments[i] = (int*) my_calloc(4, sizeof(int));
+	Type->pin_loc_assignments = (char *****) my_malloc(Type->width * sizeof(char ****));
+	Type->num_pin_loc_assignments = (int ***) my_malloc(Type->width * sizeof(int **));
+	for (int width = 0; width < Type->width; ++width) {
+		Type->pin_loc_assignments[width] = (char ****) my_calloc(Type->height, sizeof(char ***));
+		Type->num_pin_loc_assignments[width] = (int **) my_calloc(Type->height, sizeof(int *));
+		for (int height = 0; height < Type->height; ++height) {
+			Type->pin_loc_assignments[width][height] = (char ***) my_calloc(4, sizeof(char **));
+			Type->num_pin_loc_assignments[width][height] = (int *) my_calloc(4, sizeof(int));
+		}
 	}
 
 	/* Load the pin locations */
@@ -174,68 +191,54 @@ static void SetupPinLocationsAndPinClasses(ezxml_t Locations,
 		while (Cur) {
 			CheckElement(Cur, "loc");
 
-			/* Get offset */
-			i = GetIntProperty(Cur, "offset", FALSE, 0);
-			if ((i < 0) || (i >= Type->height)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] %d is an invalid offset for type '%s'.\n",
-						Cur->line, i, Type->name);
-				exit(1);
+			/* Get offset (ie. height) */
+			int height = GetIntProperty(Cur, "offset", FALSE, 0);
+			if ((height < 0) || (height >= Type->height)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"'%d' is an invalid offset for type '%s'.\n", height, Type->name);
 			}
 
 			/* Get side */
+			int side;
 			Prop = FindProperty(Cur, "side", TRUE);
 			if (0 == strcmp(Prop, "left")) {
-				j = LEFT;
+				side = LEFT;
 			}
-
 			else if (0 == strcmp(Prop, "top")) {
-				j = TOP;
+				side = TOP;
 			}
-
 			else if (0 == strcmp(Prop, "right")) {
-				j = RIGHT;
+				side = RIGHT;
 			}
-
 			else if (0 == strcmp(Prop, "bottom")) {
-				j = BOTTOM;
+				side = BOTTOM;
 			}
-
-			else {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] '%s' is not a valid side.\n", Cur->line,
-						Prop);
-				exit(1);
+			else {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"'%s' is not a valid side.\n", Prop);
 			}
 			ezxml_set_attr(Cur, "side", NULL);
 
 			/* Check location is on perimeter */
-			if ((TOP == j) && (i != (Type->height - 1))) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Locations are only allowed on large block "
-								"perimeter. 'top' side should be at offset %d only.\n",
-						Cur->line, (Type->height - 1));
-				exit(1);
+			if ((TOP == side) && (height != (Type->height - 1))) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Locations are only allowed on large block perimeter. 'top' side should be at offset %d only.\n", (Type->height - 1));
 			}
-			if ((BOTTOM == j) && (i != 0)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Locations are only allowed on large block "
-								"perimeter. 'bottom' side should be at offset 0 only.\n",
-						Cur->line);
-				exit(1);
+			if ((BOTTOM == side) && (height != 0)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Locations are only allowed on large block perimeter. 'bottom' side should be at offset 0 only.\n");
 			}
 
 			/* Go through lists of pins */
 			CountTokensInString(Cur->txt, &Count, &Len);
-			Type->num_pin_loc_assignments[i][j] = Count;
+			Type->num_pin_loc_assignments[0][height][side] = Count;
 			if (Count > 0) {
 				Tokens = GetNodeTokens(Cur);
 				CurTokens = Tokens;
-				Type->pin_loc_assignments[i][j] = (char**) my_calloc(Count,
-						sizeof(char*));
-				for (k = 0; k < Count; k++) {
+				Type->pin_loc_assignments[0][height][side] = (char**) my_calloc(Count, sizeof(char*));
+				for (int pin = 0; pin < Count; ++pin) {
 					/* Store location assignment */
-					Type->pin_loc_assignments[i][j][k] = my_strdup(*CurTokens);
+					Type->pin_loc_assignments[0][height][side][pin] = my_strdup(*CurTokens);
 
 					/* Advance through list of pins in this location */
 					++CurTokens;
@@ -338,21 +341,17 @@ static void SetupGridLocations(ezxml_t Locations, t_type_descriptor * Type) {
 		Prop = FindProperty(Cur, "type", TRUE);
 		if (Prop) {
 			if (strcmp(Prop, "perimeter") == 0) {
-				if (Type->num_grid_loc_def != 1) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] Another loc specified for perimeter.\n",
-							Cur->line);
-					exit(1);
+				if (Type->num_grid_loc_def != 1) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+						"Another loc specified for perimeter.\n");
 				}
 				Type->grid_loc_def[i].grid_loc_type = BOUNDARY;
 				assert(IO_TYPE == Type);
 				/* IO goes to boundary */
 			} else if (strcmp(Prop, "fill") == 0) {
-				if (Type->num_grid_loc_def != 1 || FILL_TYPE != NULL) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] Another loc specified for fill.\n",
-							Cur->line);
-					exit(1);
+				if (Type->num_grid_loc_def != 1 || FILL_TYPE != NULL) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+						"Another loc specified for fill.\n");
 				}
 				Type->grid_loc_def[i].grid_loc_type = FILL;
 				FILL_TYPE = Type;
@@ -360,29 +359,23 @@ static void SetupGridLocations(ezxml_t Locations, t_type_descriptor * Type) {
 				Type->grid_loc_def[i].grid_loc_type = COL_REPEAT;
 			} else if (strcmp(Prop, "rel") == 0) {
 				Type->grid_loc_def[i].grid_loc_type = COL_REL;
-			} else {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Unknown grid location type '%s' for type '%s'.\n",
-						Cur->line, Prop, Type->name);
-				exit(1);
+			} else {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Unknown grid location type '%s' for type '%s'.\n", Prop, Type->name);
 			}
 			ezxml_set_attr(Cur, "type", NULL);
 		}
 		Prop = FindProperty(Cur, "start", FALSE);
 		if (Type->grid_loc_def[i].grid_loc_type == COL_REPEAT) {
-			if (Prop == NULL) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] grid location property 'start' must be specified for grid location type 'col'.\n",
-						Cur->line);
-				exit(1);
+			if (Prop == NULL) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"grid location property 'start' must be specified for grid location type 'col'.\n");
 			}
 			Type->grid_loc_def[i].start_col = my_atoi(Prop);
 			ezxml_set_attr(Cur, "start", NULL);
-		} else if (Prop != NULL) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] grid location property 'start' valid for grid location type 'col' only.\n",
-					Cur->line);
-			exit(1);
+		} else if (Prop != NULL) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"grid location property 'start' valid for grid location type 'col' only.\n");
 		}
 		Prop = FindProperty(Cur, "repeat", FALSE);
 		if (Type->grid_loc_def[i].grid_loc_type == COL_REPEAT) {
@@ -390,27 +383,21 @@ static void SetupGridLocations(ezxml_t Locations, t_type_descriptor * Type) {
 				Type->grid_loc_def[i].repeat = my_atoi(Prop);
 				ezxml_set_attr(Cur, "repeat", NULL);
 			}
-		} else if (Prop != NULL) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] grid location property 'repeat' valid for grid location type 'col' only.\n",
-					Cur->line);
-			exit(1);
+		} else if (Prop != NULL) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Grid location property 'repeat' valid for grid location type 'col' only.\n");
 		}
 		Prop = FindProperty(Cur, "pos", FALSE);
 		if (Type->grid_loc_def[i].grid_loc_type == COL_REL) {
-			if (Prop == NULL) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] grid location property 'pos' must be specified for grid location type 'rel'.\n",
-						Cur->line);
-				exit(1);
+			if (Prop == NULL) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Grid location property 'pos' must be specified for grid location type 'rel'.\n");
 			}
 			Type->grid_loc_def[i].col_rel = (float) atof(Prop);
 			ezxml_set_attr(Cur, "pos", NULL);
-		} else if (Prop != NULL) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] grid location property 'pos' valid for grid location type 'rel' only.\n",
-					Cur->line);
-			exit(1);
+		} else if (Prop != NULL) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Grid location property 'pos' valid for grid location type 'rel' only.\n");
 		}
 
 		Type->grid_loc_def[i].priority = GetIntProperty(Cur, "priority", FALSE,
@@ -424,7 +411,7 @@ static void SetupGridLocations(ezxml_t Locations, t_type_descriptor * Type) {
 }
 
 static void ProcessPinToPinAnnotations(ezxml_t Parent,
-		t_pin_to_pin_annotation *annotation) {
+		t_pin_to_pin_annotation *annotation, t_pb_type * parent_pb_type) {
 	int i = 0;
 	const char *Prop;
 
@@ -449,7 +436,7 @@ static void ProcessPinToPinAnnotations(ezxml_t Parent,
 	annotation->num_value_prop_pairs = i;
 	annotation->prop = (int*) my_calloc(i, sizeof(int));
 	annotation->value = (char**) my_calloc(i, sizeof(char *));
-
+	annotation->line_num = Parent->line;
 	/* Todo: This is slow, I should use a case lookup */
 	i = 0;
 	if (0 == strcmp(Parent->name, "delay_constant")) {
@@ -469,7 +456,6 @@ static void ProcessPinToPinAnnotations(ezxml_t Parent,
 			ezxml_set_attr(Parent, "min", NULL);
 			i++;
 		}
-		annotation->line_num = Parent->line;
 		Prop = FindProperty(Parent, "in_port", TRUE);
 		annotation->input_pins = my_strdup(Prop);
 		ezxml_set_attr(Parent, "in_port", NULL);
@@ -542,6 +528,9 @@ static void ProcessPinToPinAnnotations(ezxml_t Parent,
 		Prop = FindProperty(Parent, "clock", TRUE);
 		annotation->clock = my_strdup(Prop);
 		ezxml_set_attr(Parent, "clock", NULL);
+
+		ff_primtives_annotation_clock_match(annotation, parent_pb_type);
+
 	} else if (0 == strcmp(Parent->name, "T_clock_to_Q")) {
 		annotation->type = E_ANNOT_PIN_TO_PIN_DELAY;
 		annotation->format = E_ANNOT_PIN_TO_PIN_CONSTANT;
@@ -566,6 +555,9 @@ static void ProcessPinToPinAnnotations(ezxml_t Parent,
 		Prop = FindProperty(Parent, "clock", TRUE);
 		annotation->clock = my_strdup(Prop);
 		ezxml_set_attr(Parent, "clock", NULL);
+
+		ff_primtives_annotation_clock_match(annotation, parent_pb_type);
+
 	} else if (0 == strcmp(Parent->name, "T_hold")) {
 		annotation->type = E_ANNOT_PIN_TO_PIN_DELAY;
 		annotation->format = E_ANNOT_PIN_TO_PIN_CONSTANT;
@@ -581,6 +573,9 @@ static void ProcessPinToPinAnnotations(ezxml_t Parent,
 		Prop = FindProperty(Parent, "clock", TRUE);
 		annotation->clock = my_strdup(Prop);
 		ezxml_set_attr(Parent, "clock", NULL);
+
+		ff_primtives_annotation_clock_match(annotation, parent_pb_type);
+
 	} else if (0 == strcmp(Parent->name, "pack_pattern")) {
 		annotation->type = E_ANNOT_PIN_TO_PIN_PACK_PATTERN;
 		annotation->format = E_ANNOT_PIN_TO_PIN_CONSTANT;
@@ -596,12 +591,9 @@ static void ProcessPinToPinAnnotations(ezxml_t Parent,
 		Prop = FindProperty(Parent, "out_port", TRUE);
 		annotation->output_pins = my_strdup(Prop);
 		ezxml_set_attr(Parent, "out_port", NULL);
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"[LINE %d] Unknown port type %s in %s in %s", Parent->line,
-				Parent->name, Parent->parent->name,
-				Parent->parent->parent->name);
-		exit(1);
+	} else {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line, 
+			"Unknown port type %s in %s in %s", Parent->name, Parent->parent->name, Parent->parent->parent->name);
 	}
 	assert(i == annotation->num_value_prop_pairs);
 }
@@ -667,21 +659,20 @@ static void ProcessPb_TypePowerPinToggle(ezxml_t parent, t_pb_type * pb_type) {
 		prop = FindProperty(cur, "name", TRUE);
 
 		port = findPortByName(prop, pb_type, &high, &low);
-		if (!port) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Could not find port '%s' needed for energy per toggle.",
-					prop);
-			return;
+		if (!port) {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+				"Could not find port '%s' needed for energy per toggle.", prop);
 		}
-		if (high != port->num_pins - 1 || low != 0) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Pin-toggle does not support pin indices (%s)", prop);
+		if (high != port->num_pins - 1 || low != 0) {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+				"Pin-toggle does not support pin indices (%s)", prop);
 		}
 
-		if (port->port_power->pin_toggle_initialized) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Duplicate pin-toggle energy for port '%s'", port->name);
+		if (port->port_power->pin_toggle_initialized) {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+				"Duplicate pin-toggle energy for port '%s'", port->name);
 		}
+		port->port_power->pin_toggle_initialized = TRUE;
 		ezxml_set_attr(cur, "name", NULL);
 
 		/* Get energy per toggle */
@@ -701,11 +692,9 @@ static void ProcessPb_TypePowerPinToggle(ezxml_t parent, t_pb_type * pb_type) {
 		if (prop) {
 			port->port_power->scaled_by_port = findPortByName(prop, pb_type,
 					&high, &low);
-			if (high != low) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Pin-toggle 'scaled_by_static_prob' must be a single pin (%s)",
-						prop);
-				return;
+			if (high != low) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Pin-toggle 'scaled_by_static_prob' must be a single pin (%s)", prop);
 			}
 			port->port_power->scaled_by_port_pin_idx = high;
 			port->port_power->reverse_scaled = reverse_scaled;
@@ -796,8 +785,7 @@ static void ProcessPb_TypePowerEstMethod(ezxml_t Parent, t_pb_type * pb_type) {
 
 	if (!prop) {
 		/* default method is auto-size */
-		pb_type->pb_type_power->estimation_method = power_method_inherited(
-				parent_power_method);
+		pb_type->pb_type_power->estimation_method = power_method_inherited(parent_power_method);
 	} else if (strcmp(prop, "auto-size") == 0) {
 		pb_type->pb_type_power->estimation_method = POWER_METHOD_AUTO_SIZES;
 	} else if (strcmp(prop, "specify-size") == 0) {
@@ -812,10 +800,9 @@ static void ProcessPb_TypePowerEstMethod(ezxml_t Parent, t_pb_type * pb_type) {
 		pb_type->pb_type_power->estimation_method = POWER_METHOD_IGNORE;
 	} else if (strcmp(prop, "sum-of-children") == 0) {
 		pb_type->pb_type_power->estimation_method = POWER_METHOD_SUM_OF_CHILDREN;
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"Invalid power estimation method for pb_type '%s'",
-				pb_type->name);
+	} else {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+			"Invalid power estimation method for pb_type '%s'", pb_type->name);
 	}
 
 	if (prop) {
@@ -829,8 +816,17 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 		t_mode * mode) {
 	int num_ports, i, j, k, num_annotations;
 	const char *Prop;
-	ezxml_t Cur, Prev;
+	ezxml_t Cur = NULL;
+	ezxml_t Prev = NULL;
 	char* class_name;
+	/* STL maps for checking various duplicate names */
+	map<string , int> pb_port_names;
+	map<string , int> mode_names;
+	pair<map<string,int>::iterator,bool> ret_pb_ports;
+	pair<map<string,int>::iterator,bool> ret_mode_names;
+	int num_in_ports, num_out_ports, num_clock_ports;
+	int num_delay_constant, num_delay_matrix, num_C_constant,
+		num_C_matrix, num_T_setup, num_T_cq, num_T_hold;
 
 	pb_type->parent_mode = mode;
 	if (mode != NULL && mode->parent_pb_type != NULL) {
@@ -859,11 +855,9 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 			pb_type->class_type = LATCH_CLASS;
 		} else if (0 == strcmp(class_name, "memory")) {
 			pb_type->class_type = MEMORY_CLASS;
-		} else {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Unknown class %s in pb_type %s\n", Parent->line,
-					class_name, pb_type->name);
-			exit(1);
+		} else {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+				"Unknown class '%s' in pb_type '%s'\n", class_name, pb_type->name);
 		}
 		free(class_name);
 	}
@@ -875,16 +869,30 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 	}
 
 	assert(pb_type->num_pb > 0);
-	num_ports = 0;
-	num_ports += CountChildren(Parent, "input", 0);
-	num_ports += CountChildren(Parent, "output", 0);
-	num_ports += CountChildren(Parent, "clock", 0);
+	num_ports = num_in_ports = num_out_ports = num_clock_ports = 0;
+	num_in_ports = CountChildren(Parent, "input", 0);
+	num_out_ports = CountChildren(Parent, "output", 0);
+	num_clock_ports = CountChildren(Parent, "clock", 0);
+	num_ports = num_in_ports + num_out_ports + num_clock_ports;
 	pb_type->ports = (t_port*) my_calloc(num_ports, sizeof(t_port));
 	pb_type->num_ports = num_ports;
 
+	/* Enforce VPR's definition of LUT/FF by checking number of ports */
+	if(pb_type->class_type == LUT_CLASS || pb_type->class_type == LATCH_CLASS){
+		if(num_in_ports != 1 || num_out_ports != 1){
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+				"%s primitives must contain exactly one input port and one output port."
+				"Found '%d' input port(s) and '%d' output port(s) for '%s'", 
+				(pb_type->class_type == LUT_CLASS) ? "LUT" : "Latch",
+				num_in_ports, num_out_ports, pb_type->name);
+		}
+	}
+
+	/* Check the XML tag ordering of pb_type */
+	CheckXMLTagOrder(Parent);
+
 	/* Initialize Power Structure */
-	pb_type->pb_type_power = (t_pb_type_power*) my_calloc(1,
-			sizeof(t_pb_type_power));
+	pb_type->pb_type_power = (t_pb_type_power*) my_calloc(1, sizeof(t_pb_type_power));
 	ProcessPb_TypePowerEstMethod(Parent, pb_type);
 
 	/* process ports */
@@ -901,11 +909,19 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 			Cur = FindFirstElement(Parent, "clock", FALSE);
 		}
 		while (Cur != NULL) {
-			ProcessPb_TypePort(Cur, &pb_type->ports[j],
-					pb_type->pb_type_power->estimation_method);
 			pb_type->ports[j].parent_pb_type = pb_type;
 			pb_type->ports[j].index = j;
 			pb_type->ports[j].port_index_by_type = k;
+			ProcessPb_TypePort(Cur, &pb_type->ports[j],
+					pb_type->pb_type_power->estimation_method);
+			
+
+			//Check port name duplicates
+			ret_pb_ports = pb_port_names.insert(pair<string,int>(pb_type->ports[j].name,0));
+			if(!ret_pb_ports.second){				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Duplicate port names in pb_type '%s': port '%s'\n", pb_type->name, pb_type->ports[j].name);
+			}
 
 			/* get next iteration */
 			Prev = Cur;
@@ -915,6 +931,7 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 			FreeNode(Prev);
 		}
 	}
+
 	assert(j == num_ports);
 
 	/* Count stats on the number of each type of pin */
@@ -928,8 +945,7 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 			assert(pb_type->ports[i].is_clock == FALSE);
 			pb_type->num_output_pins += pb_type->ports[i].num_pins;
 		} else {
-			assert(
-					pb_type->ports[i].is_clock && pb_type->ports[i].type == IN_PORT);
+			assert(pb_type->ports[i].is_clock && pb_type->ports[i].type == IN_PORT);
 			pb_type->num_clock_pins += pb_type->ports[i].num_pins;
 		}
 	}
@@ -950,13 +966,18 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 	if (pb_type->blif_model != NULL) {
 		/* Process delay and capacitance annotations */
 		num_annotations = 0;
-		num_annotations += CountChildren(Parent, "delay_constant", 0);
-		num_annotations += CountChildren(Parent, "delay_matrix", 0);
-		num_annotations += CountChildren(Parent, "C_constant", 0);
-		num_annotations += CountChildren(Parent, "C_matrix", 0);
-		num_annotations += CountChildren(Parent, "T_setup", 0);
-		num_annotations += CountChildren(Parent, "T_clock_to_Q", 0);
-		num_annotations += CountChildren(Parent, "T_hold", 0);
+		num_delay_constant = CountChildren(Parent, "delay_constant", 0);
+		num_delay_matrix = CountChildren(Parent, "delay_matrix", 0);
+		num_C_constant = CountChildren(Parent, "C_constant", 0);
+		num_C_matrix = CountChildren(Parent, "C_matrix", 0);
+		num_T_setup = CountChildren(Parent, "T_setup", 0);
+		num_T_cq = CountChildren(Parent, "T_clock_to_Q", 0);
+		num_T_hold = CountChildren(Parent, "T_hold", 0);
+		num_annotations = num_delay_constant + num_delay_matrix + 
+					num_C_constant + num_C_matrix + num_T_setup +
+					num_T_cq + num_T_hold;
+
+		CheckXMLTagOrder(Parent);
 
 		pb_type->annotations = (t_pin_to_pin_annotation*) my_calloc(
 				num_annotations, sizeof(t_pin_to_pin_annotation));
@@ -981,7 +1002,7 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 				Cur = FindFirstElement(Parent, "T_hold", FALSE);
 			}
 			while (Cur != NULL) {
-				ProcessPinToPinAnnotations(Cur, &pb_type->annotations[j]);
+				ProcessPinToPinAnnotations(Cur, &pb_type->annotations[j], pb_type);
 
 				/* get next iteration */
 				Prev = Cur;
@@ -1033,6 +1054,13 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 						pb_type->pb_type_power->leakage_default_mode = i;
 					}
 
+					ret_mode_names = mode_names.insert(pair<string,int>(pb_type->modes[i].name,0));
+					if(!ret_mode_names.second){						
+						vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+							"Duplicate mode name: '%s' in pb_type '%s'.\n", pb_type->modes[i].name, pb_type->name);
+					}
+		
+
 					/* get next iteration */
 					Prev = Cur;
 					Cur = Cur->next;
@@ -1044,6 +1072,8 @@ static void ProcessPb_Type(INOUTP ezxml_t Parent, t_pb_type * pb_type,
 		assert(i == pb_type->num_modes);
 	}
 
+	pb_port_names.clear();
+	mode_names.clear();
 	ProcessPb_TypePower(Parent, pb_type);
 
 }
@@ -1074,29 +1104,30 @@ static void ProcessPb_TypePort_Power(ezxml_t Parent, t_port * port,
 		prop = FindProperty(cur, "wire_capacitance", FALSE);
 		if (prop) {
 			if (!(power_method == POWER_METHOD_AUTO_SIZES
-					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Wire capacitance defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.",
-						port->name, port->parent_pb_type->name);
+					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Wire capacitance defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.", 
+					port->name, port->parent_pb_type->name);
 			} else {
 				wire_defined = TRUE;
 				port->port_power->wire_type = POWER_WIRE_TYPE_C;
 				port->port_power->wire.C = (float) atof(prop);
 			}
+			ezxml_set_attr(cur, "wire_capacitance", NULL);
 		}
 
 		/* Wire absolute length provided */
 		prop = FindProperty(cur, "wire_length", FALSE);
 		if (prop) {
 			if (!(power_method == POWER_METHOD_AUTO_SIZES
-					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Wire length defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.",
-						port->name, port->parent_pb_type->name);
-			} else if (wire_defined) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Multiple wire properties defined for port '%s', pb_type '%s'.",
-						port->name, port->parent_pb_type->name);
+					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Wire length defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.", 
+					port->name, port->parent_pb_type->name);
+			} else if (wire_defined) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Multiple wire properties defined for port '%s', pb_type '%s'.", 
+					port->name, port->parent_pb_type->name);
 			} else if (strcmp(prop, "auto") == 0) {
 				wire_defined = TRUE;
 				port->port_power->wire_type = POWER_WIRE_TYPE_AUTO;
@@ -1105,42 +1136,46 @@ static void ProcessPb_TypePort_Power(ezxml_t Parent, t_port * port,
 				port->port_power->wire_type = POWER_WIRE_TYPE_ABSOLUTE_LENGTH;
 				port->port_power->wire.absolute_length = (float) atof(prop);
 			}
+			ezxml_set_attr(cur, "wire_length", NULL);
 		}
 
 		/* Wire relative length provided */
 		prop = FindProperty(cur, "wire_relative_length", FALSE);
 		if (prop) {
 			if (!(power_method == POWER_METHOD_AUTO_SIZES
-					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Wire relative length defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.",
-						port->name, port->parent_pb_type->name);
-			} else if (wire_defined) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Multiple wire properties defined for port '%s', pb_type '%s'.",
-						port->name, port->parent_pb_type->name);
+					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Wire relative length defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.", 
+					port->name, port->parent_pb_type->name);
+			} else if (wire_defined) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Multiple wire properties defined for port '%s', pb_type '%s'.", port->name, port->parent_pb_type->name);
 			} else {
 				wire_defined = TRUE;
 				port->port_power->wire_type = POWER_WIRE_TYPE_RELATIVE_LENGTH;
 				port->port_power->wire.relative_length = (float) atof(prop);
 			}
+			ezxml_set_attr(cur, "wire_relative_length", NULL);
 		}
 
 		/* Buffer Size */
 		prop = FindProperty(cur, "buffer_size", FALSE);
 		if (prop) {
 			if (!(power_method == POWER_METHOD_AUTO_SIZES
-					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"Buffer size defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.",
-						port->name, port->parent_pb_type->name);
+					|| power_method == POWER_METHOD_SPECIFY_SIZES)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, cur->line, 
+					"Buffer size defined for port '%s'.  This is an invalid option for the parent pb_type '%s' power estimation method.", 
+					port->name, port->parent_pb_type->name);
 			} else if (strcmp(prop, "auto") == 0) {
 				port->port_power->buffer_type = POWER_BUFFER_TYPE_AUTO;
 			} else {
 				port->port_power->buffer_type = POWER_BUFFER_TYPE_ABSOLUTE_SIZE;
 				port->port_power->buffer_size = (float) atof(prop);
 			}
+			ezxml_set_attr(cur, "buffer_size", NULL);
 		}
+
+		FreeNode(cur);
 	}
 }
 
@@ -1167,21 +1202,84 @@ static void ProcessPb_TypePort(INOUTP ezxml_t Parent, t_port * port,
 	if (0 == strcmp(Parent->name, "input")) {
 		port->type = IN_PORT;
 		port->is_clock = FALSE;
+
+		/* Check if LUT/FF port class is lut_in/D */
+		if(port->parent_pb_type->class_type == LUT_CLASS){
+			if((!port->port_class) || strcmp("lut_in", port->port_class)){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Inputs to LUT primitives must have a port class named "
+					"as \"lut_in\".");
+			}
+		}
+		else if(port->parent_pb_type->class_type == LATCH_CLASS){
+			if((!port->port_class) || strcmp("D", port->port_class)){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Input to flipflop primitives must have a port class named "
+					"as \"D\".");
+			}
+			/* Only allow one input pin for FF's */
+			if(port->num_pins != 1){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Input port of flipflop primitives must have exactly one pin. "
+					"Found %d.", port->num_pins);
+			}
+		}
+
 	} else if (0 == strcmp(Parent->name, "output")) {
 		port->type = OUT_PORT;
 		port->is_clock = FALSE;
+
+		/* Check if LUT/FF port class is lut_out/Q */
+		if(port->parent_pb_type->class_type == LUT_CLASS){
+			if((!port->port_class) || strcmp("lut_out", port->port_class)){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Output to LUT primitives must have a port class named "
+					"as \"lut_in\".");
+			}
+			/* Only allow one output pin for LUT's */
+			if(port->num_pins != 1){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Output port of LUT primitives must have exactly one pin. "
+					"Found %d.", port->num_pins);
+			}
+		}
+		else if(port->parent_pb_type->class_type == LATCH_CLASS){
+			if((!port->port_class) || strcmp("Q", port->port_class)){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Output to flipflop primitives must have a port class named "
+					"as \"D\".");
+			}
+			/* Only allow one output pin for FF's */
+			if(port->num_pins != 1){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Output port of flipflop primitives must have exactly one pin. "
+					"Found %d.", port->num_pins);
+			}
+		}
 	} else if (0 == strcmp(Parent->name, "clock")) {
 		port->type = IN_PORT;
 		port->is_clock = TRUE;
-		if (port->is_non_clock_global == TRUE) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Port %s cannot be both a clock and a non-clock simultaneously\n",
-					Parent->line, Parent->name);
+		if (port->is_non_clock_global == TRUE) {		
+			vpr_throw(VPR_ERROR_ARCH, 		arch_file_name, Parent->line, 
+				"Port %s cannot be both a clock and a non-clock simultaneously\n", Parent->name);	
 		}
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Unknown port type %s",
-				Parent->line, Parent->name);
-		exit(1);
+
+		if(port->parent_pb_type->class_type == LATCH_CLASS){
+			if((!port->port_class) || strcmp("clock", port->port_class)){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Clock to flipflop primitives must have a port class named "
+					"as \"clock\".");
+			}
+			/* Only allow one output pin for FF's */
+			if(port->num_pins != 1){
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line,
+					"Clock port of flipflop primitives must have exactly one pin. "
+					"Found %d.", port->num_pins);
+			}
+		}
+	} else {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, Parent->line, 
+			"Unknown port type %s", Parent->name);
 	}
 
 	ProcessPb_TypePort_Power(Parent, port, power_method);
@@ -1189,14 +1287,25 @@ static void ProcessPb_TypePort(INOUTP ezxml_t Parent, t_port * port,
 
 static void ProcessInterconnect(INOUTP ezxml_t Parent, t_mode * mode) {
 	int num_interconnect = 0;
+	int num_complete, num_direct, num_mux;
 	int i, j, k, L_index, num_annotations;
+	int num_delay_constant, num_delay_matrix, num_C_constant, 
+		num_C_matrix, num_pack_pattern;
 	const char *Prop;
 	ezxml_t Cur, Prev;
 	ezxml_t Cur2, Prev2;
+	Cur = Cur2 = Prev = Prev2 = NULL;
 
-	num_interconnect += CountChildren(Parent, "complete", 0);
-	num_interconnect += CountChildren(Parent, "direct", 0);
-	num_interconnect += CountChildren(Parent, "mux", 0);
+	map<string , int> interc_names;
+	pair<map<string,int>::iterator,bool> ret_interc_names;
+
+	num_complete = num_direct = num_mux = 0;
+	num_complete = CountChildren(Parent, "complete", 0);
+	num_direct = CountChildren(Parent, "direct", 0);
+	num_mux = CountChildren(Parent, "mux", 0);
+	num_interconnect = num_complete + num_direct + num_mux;
+
+	CheckXMLTagOrder(Parent);
 
 	mode->num_interconnect = num_interconnect;
 	mode->interconnect = (t_interconnect*) my_calloc(num_interconnect,
@@ -1238,13 +1347,23 @@ static void ProcessInterconnect(INOUTP ezxml_t Parent, t_mode * mode) {
 			mode->interconnect[i].name = my_strdup(Prop);
 			ezxml_set_attr(Cur, "name", NULL);
 
+			ret_interc_names = interc_names.insert(pair<string,int>(mode->interconnect[i].name,0));
+			if(!ret_interc_names.second){				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+					"Duplicate interconnect name: '%s' in mode: '%s'.\n", mode->interconnect[i].name, mode->name);
+			}
+
 			/* Process delay and capacitance annotations */
 			num_annotations = 0;
-			num_annotations += CountChildren(Cur, "delay_constant", 0);
-			num_annotations += CountChildren(Cur, "delay_matrix", 0);
-			num_annotations += CountChildren(Cur, "C_constant", 0);
-			num_annotations += CountChildren(Cur, "C_matrix", 0);
-			num_annotations += CountChildren(Cur, "pack_pattern", 0);
+			num_delay_constant = CountChildren(Cur, "delay_constant", 0);
+			num_delay_matrix = CountChildren(Cur, "delay_matrix", 0);
+			num_C_constant = CountChildren(Cur, "C_constant", 0);
+			num_C_matrix = CountChildren(Cur, "C_matrix", 0);
+			num_pack_pattern = CountChildren(Cur, "pack_pattern", 0);
+			num_annotations = num_delay_constant + num_delay_matrix + num_C_constant +
+								num_C_matrix + num_pack_pattern;
+
+			CheckXMLTagOrder(Cur);
 
 			mode->interconnect[i].annotations =
 					(t_pin_to_pin_annotation*) my_calloc(num_annotations,
@@ -1267,7 +1386,7 @@ static void ProcessInterconnect(INOUTP ezxml_t Parent, t_mode * mode) {
 				}
 				while (Cur2 != NULL) {
 					ProcessPinToPinAnnotations(Cur2,
-							&(mode->interconnect[i].annotations[k]));
+							&(mode->interconnect[i].annotations[k]), NULL);
 
 					/* get next iteration */
 					Prev2 = Cur2;
@@ -1295,6 +1414,7 @@ static void ProcessInterconnect(INOUTP ezxml_t Parent, t_mode * mode) {
 		}
 	}
 
+	interc_names.clear();
 	assert(i == num_interconnect);
 }
 
@@ -1303,6 +1423,8 @@ static void ProcessMode(INOUTP ezxml_t Parent, t_mode * mode,
 	int i;
 	const char *Prop;
 	ezxml_t Cur, Prev;
+	map<string , int> pb_type_names;
+	pair<map<string,int>::iterator,bool> ret_pb_types;
 
 	if (0 == strcmp(Parent->name, "pb_type")) {
 		/* implied mode */
@@ -1324,6 +1446,12 @@ static void ProcessMode(INOUTP ezxml_t Parent, t_mode * mode,
 			if (0 == strcmp(Cur->name, "pb_type")) {
 				ProcessPb_Type(Cur, &mode->pb_type_children[i], mode);
 
+				ret_pb_types = pb_type_names.insert(pair<string,int>(mode->pb_type_children[i].name,0));
+				if(!ret_pb_types.second){					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+						"Duplicate pb_type name: '%s' in mode: '%s'.\n", mode->pb_type_children[i].name , mode->name);
+				}
+
 				/* get next iteration */
 				Prev = Cur;
 				Cur = Cur->next;
@@ -1338,9 +1466,13 @@ static void ProcessMode(INOUTP ezxml_t Parent, t_mode * mode,
 	/* Allocate power structure */
 	mode->mode_power = (t_mode_power*) my_calloc(1, sizeof(t_mode_power));
 
+	/* Clear STL map used for duplicate checks */
+	pb_type_names.clear();
+
 	Cur = FindElement(Parent, "interconnect", TRUE);
 	ProcessInterconnect(Cur, mode);
 	FreeNode(Cur);
+
 }
 
 /* Takes in the node ptr for the 'fc_in' and 'fc_out' elements and initializes
@@ -1373,11 +1505,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 			def_type_in = FC_FRAC;
 		} else if (0 == strcmp(Prop, "full")) {
 			def_type_in = FC_FULL;
-		} else {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Invalid type '%s' for Fc. Only abs, frac "
-							"and full are allowed.\n", Node->line, Prop);
-			exit(1);
+		} else {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"Invalid type '%s' for Fc. Only abs, frac and full are allowed.\n", Prop);
 		}
 		switch (def_type_in) {
 		case FC_FULL:
@@ -1405,11 +1535,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 			def_type_out = FC_FRAC;
 		} else if (0 == strcmp(Prop, "full")) {
 			def_type_out = FC_FULL;
-		} else {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Invalid type '%s' for Fc. Only abs, frac "
-							"and full are allowed.\n", Node->line, Prop);
-			exit(1);
+	} else 		{	
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"Invalid type '%s' for Fc. Only abs, frac and full are allowed.\n", Prop);
 		}
 		switch (def_type_out) {
 		case FC_FULL:
@@ -1455,10 +1583,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 	while (Child != NULL) {
 		/* Get all the properties of the child first */
 		Prop = FindProperty(Child, "name", TRUE);
-		if (Prop == NULL) {
-			vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] Pin child with no name "
-					"is not allowed.\n", Child->line);
-			exit(1);
+		if (Prop == NULL) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+					"Pin child with no name is not allowed.\n");
 		}
 		ezxml_set_attr(Child, "name", NULL);
 
@@ -1470,11 +1597,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 				ovr_type = FC_FRAC;
 			} else if (0 == strcmp(Prop2, "full")) {
 				ovr_type = FC_FULL;
-			} else {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Invalid type '%s' for Fc. Only abs, frac "
-								"and full are allowed.\n", Child->line, Prop2);
-				exit(1);
+			} else {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+					"Invalid type '%s' for Fc. Only abs, frac and full are allowed.\n", Prop2);
 			}
 			switch (ovr_type) {
 			case FC_FULL:
@@ -1483,11 +1608,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 			case FC_ABS:
 			case FC_FRAC:
 				Prop2 = FindProperty(Child, "fc_val", TRUE);
-				if (Prop2 == NULL) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] Pin child with no fc_val specified "
-									"is not allowed.\n", Child->line);
-					exit(1);
+				if (Prop2 == NULL) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+						"Pin child with no fc_val specified is not allowed.\n");
 				}
 				ovr_val = (float) atof(Prop2);
 				ezxml_set_attr(Child, "fc_val", NULL);
@@ -1513,27 +1636,18 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 						&end_pin_index, &start_pin_index);
 				Prop = port_name;
 				if (match_count != 3
-						|| (match_count != 1 && port_name == NULL)) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] Invalid name for pin child, "
-									"name should be in the format \"port_name\" or "
-									"\"port_name [end_pin_index:start_pin_index]\", "
-									" The end_pin_index and start_pin_index can be the same.\n",
-							Child->line);
-					exit(1);
+						|| (match_count != 1 && port_name == NULL)) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+						"Invalid name for pin child, name should be in the format \"port_name\" or \"port_name [end_pin_index:start_pin_index]\","
+						"The end_pin_index and start_pin_index can be the same.\n");
 				}
-				if (end_pin_index < 0 || start_pin_index < 0) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] The pin_index should not "
-									"be a negative value.\n", Child->line);
-					exit(1);
+				if (end_pin_index < 0 || start_pin_index < 0) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+						"The pin_index should not be a negative value.\n");
 				}
-				if (end_pin_index < start_pin_index) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] The end_pin_index should "
-									"be not be less than start_pin_index.\n",
-							Child->line);
-					exit(1);
+				if (end_pin_index < start_pin_index) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+						"The end_pin_index should be not be less than start_pin_index.\n");
 				}
 			}
 
@@ -1548,13 +1662,10 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 					/* This is the port, the start_pin_index and end_pin_index offset starts
 					 * here. The indices are inclusive. */
 					port_found = TRUE;
-					if (end_pin_index > Type->pb_type->ports[iport].num_pins) {
-						vpr_printf(TIO_MESSAGE_ERROR,
-								"[LINE %d] The end_pin_index for this port: %d "
-										"cannot be greater than the number of pins in this port: %d.\n",
-								Child->line, end_pin_index,
-								Type->pb_type->ports[iport].num_pins);
-						exit(1);
+					if (end_pin_index > Type->pb_type->ports[iport].num_pins) {						
+						vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+							"The end_pin_index for this port: %d cannot be greater than the number of pins in this port: %d.\n", 
+							end_pin_index, Type->pb_type->ports[iport].num_pins);
 					}
 
 					// The pin indices is not specified - override whole port.
@@ -1576,11 +1687,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 						if (ovr_val != Type->Fc[iport_pin + curr_pin]
 									|| Type->is_Fc_full_flex[iport_pin
 											+ curr_pin]
-											!= (ovr_type == FC_FULL) ? TRUE :
-							FALSE
+											!= (ovr_type == FC_FULL) ? TRUE : FALSE
 									|| Type->is_Fc_frac[iport_pin + curr_pin]
-											!= (ovr_type == FC_FRAC) ?
-									TRUE : FALSE) {
+											!= (ovr_type == FC_FRAC) ? TRUE : FALSE) {
 							Type->Fc[iport_pin + curr_pin] = ovr_val;
 							Type->is_Fc_full_flex[iport_pin + curr_pin] =
 									(ovr_type == FC_FULL) ? TRUE : FALSE;
@@ -1588,12 +1697,9 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 									(ovr_type == FC_FRAC) ? TRUE : FALSE;
 
 						} else {
-
-							vpr_printf(TIO_MESSAGE_ERROR,
-									"[LINE %d] Multiple Fc override detected!\n",
-									Child->line);
-							exit(1);
-
+							
+							vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+								"Multiple Fc override detected!\n");
 						}
 					}
 
@@ -1604,19 +1710,16 @@ static void Process_Fc(ezxml_t Node, t_type_descriptor * Type) {
 			} /* Finish going through all the ports in pb_type looking for the pin child's port. */
 
 			/* The override pin child is not in any of the ports in pb_type. */
-			if (port_found == FALSE) {
-				vpr_printf(TIO_MESSAGE_ERROR, "[LINE %d] The port \"%s\" "
-						"cannot be found.\n", Child->line);
-				exit(1);
+			if (port_found == FALSE) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+					"The port \"%s\" cannot be found.\n",Prop);
 			}
 
 			/* End of case where fc_type of pin_child is specified. */
 		} else {
-			/* fc_type of pin_child is not specified. Error out. */
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Pin child with no fc_type specified "
-							"is not allowed.\n", Child->line);
-			exit(1);
+			/* fc_type of pin_child is not specified. Error out. */			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Child->line, 
+				"Pin child with no fc_type specified is not allowed.\n");
 		}
 
 		/* Find next child and frees up the current child. */
@@ -1639,14 +1742,13 @@ static void ProcessComplexBlockProps(ezxml_t Node, t_type_descriptor * Type) {
 
 	/* Load properties */
 	Type->capacity = GetIntProperty(Node, "capacity", FALSE, 1); /* TODO: Any block with capacity > 1 that is not I/O has not been tested, must test */
+	Type->width = GetIntProperty(Node, "width", FALSE, 1);
 	Type->height = GetIntProperty(Node, "height", FALSE, 1);
 	Type->area = GetFloatProperty(Node, "area", FALSE, UNDEFINED);
 
-	if (atof(Prop) < 0) {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"[LINE %d] Area for type %s must be non-negative\n", Node->line,
-				Type->name);
-		exit(1);
+	if (atof(Prop) < 0) {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+			"Area for type %s must be non-negative\n", Type->name);
 	}
 }
 
@@ -1662,6 +1764,11 @@ static void ProcessModels(INOUTP ezxml_t Node, OUTP struct s_arch *arch) {
 	t_model *temp;
 	t_model_ports *tp;
 	int L_index;
+	/* std::maps for checking duplicates */
+	map<string , int> model_name_map;
+	map<string , int> model_port_map;
+	pair<map<string,int>::iterator,bool> ret_map_name;
+	pair<map<string,int>::iterator,bool> ret_map_port;
 
 	L_index = NUM_MODELS_IN_LIBRARY;
 
@@ -1679,14 +1786,20 @@ static void ProcessModels(INOUTP ezxml_t Node, OUTP struct s_arch *arch) {
 		temp->index = L_index;
 		L_index++;
 
+		/* Try insert new model, check if already exist at the same time */
+		ret_map_name = model_name_map.insert(pair<string,int>(temp->name,0));
+		if(!ret_map_name.second){			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, child->line, 
+				"Duplicate model name: '%s'.\n", temp->name);
+		}
+
 		/* Process the inputs */
 		p = ezxml_child(child, "input_ports");
 		junkp = p;
-		if (p == NULL)
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Required input ports not found for element '%s'.\n",
-					temp->name);
-
+		if (p == NULL){			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, child->line, 
+				"Required input ports not found for element '%s'.\n", temp->name);
+		}
 		p = ezxml_child(p, "port");
 		if (p != NULL) {
 			while (p != NULL) {
@@ -1706,32 +1819,37 @@ static void ProcessModels(INOUTP ezxml_t Node, OUTP struct s_arch *arch) {
 					tp->is_clock = TRUE;
 				}
 				ezxml_set_attr(p, "is_clock", NULL);
-				if (tp->is_clock == TRUE && tp->is_non_clock_global == TRUE) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] Signal cannot be both a clock and a non-clock signal simultaneously\n",
-							p->line);
+				if (tp->is_clock == TRUE && tp->is_non_clock_global == TRUE) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, p->line, 
+						"Signal cannot be both a clock and a non-clock signal simultaneously\n");
 				}
+
+				/* Try insert new port, check if already exist at the same time */
+				ret_map_port = model_port_map.insert(pair<string,int>(tp->name,0));
+				if(!ret_map_port.second){					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, p->line, 
+						"Duplicate model input port name: '%s'.\n", tp->name);
+				}
+
 				temp->inputs = tp;
 				junk = p;
 				p = ezxml_next(p);
 				FreeNode(junk);
 			}
 		} else /* No input ports? */
-		{
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Required input ports not found for element '%s'.\n",
-					temp->name);
+		{			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, child->line, 
+				"Required input ports not found for element '%s'.\n", temp->name);
 		}
 		FreeNode(junkp);
 
 		/* Process the outputs */
 		p = ezxml_child(child, "output_ports");
 		junkp = p;
-		if (p == NULL)
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Required output ports not found for element '%s'.\n",
-					temp->name);
-
+		if (p == NULL)	{		
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, child->line, 
+				"Required output ports not found for element '%s'.\n", temp->name);
+		}
 		p = ezxml_child(p, "port");
 		if (p != NULL) {
 			while (p != NULL) {
@@ -1743,27 +1861,39 @@ static void ProcessModels(INOUTP ezxml_t Node, OUTP struct s_arch *arch) {
 				tp->min_size = -1; /* determined later by pb_types */
 				tp->next = temp->outputs;
 				tp->dir = OUT_PORT;
+
+				/* Try insert new output port, check if already exist at the same time */
+				ret_map_port = model_port_map.insert(pair<string,int>(tp->name,0));
+				if(!ret_map_port.second){					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, p->line, 
+						"Duplicate model output port name: '%s'.\n", tp->name);
+				}
+
 				temp->outputs = tp;
 				junk = p;
 				p = ezxml_next(p);
 				FreeNode(junk);
 			}
 		} else /* No output ports? */
-		{
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Required output ports not found for element '%s'.\n",
-					temp->name);
+		{			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, child->line, 
+				"Required output ports not found for element '%s'.\n", temp->name);
 		}
+
 		FreeNode(junkp);
 
-		/* Find the next model */
+		/* Clear port map for next model */
+		model_port_map.clear();
+		/* Push new model onto model stack */
 		temp->next = arch->models;
 		arch->models = temp;
+		/* Find next model */
 		junk = child;
 		child = ezxml_next(child);
 		FreeNode(junk);
 	}
-
+	model_port_map.clear();
+	model_name_map.clear();
 	return;
 }
 
@@ -1788,16 +1918,15 @@ static void ProcessLayout(INOUTP ezxml_t Node, OUTP struct s_arch *arch) {
 	/* Load aspect ratio if applicable */
 	Prop = FindProperty(Node, "auto", arch->clb_grid.IsAuto);
 	if (Prop != NULL) {
-		if (arch->clb_grid.IsAuto == FALSE) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Auto-sizing, width and height cannot be specified\n");
+		if (arch->clb_grid.IsAuto == FALSE) {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+				"Auto-sizing, width and height cannot be specified\n");
 		}
 		arch->clb_grid.Aspect = (float) atof(Prop);
 		ezxml_set_attr(Node, "auto", NULL);
-		if (arch->clb_grid.Aspect <= 0) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Grid aspect ratio is less than or equal to zero %g\n",
-					arch->clb_grid.Aspect);
+		if (arch->clb_grid.Aspect <= 0) {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+				"Grid aspect ratio is less than or equal to zero %g\n", arch->clb_grid.Aspect);
 		}
 	}
 }
@@ -1843,11 +1972,9 @@ static void ProcessDevice(INOUTP ezxml_t Node, OUTP struct s_arch *arch,
 		arch->SBType = UNIVERSAL;
 	} else if (strcmp(Prop, "subset") == 0) {
 		arch->SBType = SUBSET;
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"[LINE %d] Unknown property %s for switch block type x\n",
-				Cur->line, Prop);
-		exit(1);
+	} else {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, Cur->line, 
+			"Unknown property %s for switch block type x\n", Prop);
 	}
 	ezxml_set_attr(Cur, "type", NULL);
 
@@ -1893,11 +2020,9 @@ static void ProcessChanWidthDistrDir(INOUTP ezxml_t Node, OUTP t_chan * chan) {
 	} else if (strcmp(Prop, "delta") == 0) {
 		hasXpeak = hasDc = TRUE;
 		chan->type = DELTA;
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"[LINE %d] Unknown property %s for chan_width_distr x\n",
-				Node->line, Prop);
-		exit(1);
+	} else {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+			"Unknown property %s for chan_width_distr x\n", Prop);
 	}
 	ezxml_set_attr(Node, "distr", NULL);
 	chan->peak = GetFloatProperty(Node, "peak", TRUE, UNDEFINED);
@@ -1911,6 +2036,7 @@ static void SetupEmptyType(void) {
 	type = &cb_type_descriptors[EMPTY_TYPE->index];
 	type->name = "<EMPTY>";
 	type->num_pins = 0;
+	type->width = 1;
 	type->height = 1;
 	type->capacity = 0;
 	type->num_drivers = 0;
@@ -2236,12 +2362,9 @@ static void ProcessMemoryClass(INOUTP t_pb_type *mem_pb_type) {
 						== mem_pb_type->ports[i].port_class) {
 			if (num_pb == OPEN) {
 				num_pb = mem_pb_type->ports[i].num_pins;
-			} else if (num_pb != mem_pb_type->ports[i].num_pins) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"memory %s has inconsistent number of data bits %d and %d\n",
-						mem_pb_type->name, num_pb,
-						mem_pb_type->ports[i].num_pins);
-				exit(1);
+			} else if (num_pb != mem_pb_type->ports[i].num_pins) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, 0, 
+					"memory %s has inconsistent number of data bits %d and %d\n", mem_pb_type->name, num_pb, mem_pb_type->ports[i].num_pins);
 			}
 		}
 	}
@@ -2419,7 +2542,8 @@ static void ProcessComplexBlocks(INOUTP ezxml_t Node,
 	ezxml_t Cur;
 	t_type_descriptor * Type;
 	int i;
-
+	map<string , int> pb_type_descriptors;
+	pair<map<string,int>::iterator,bool> ret_pb_type_descriptors;
 	/* Alloc the type list. Need one additional t_type_desctiptors:
 	 * 1: empty psuedo-type
 	 */
@@ -2450,14 +2574,20 @@ static void ProcessComplexBlocks(INOUTP ezxml_t Node,
 		/* Parses the properties fields of the type */
 		ProcessComplexBlockProps(CurType, Type);
 
+		
+		ret_pb_type_descriptors = pb_type_descriptors.insert(pair<string,int>(Type->name,0));
+		if(!ret_pb_type_descriptors.second){			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, CurType->line, 
+				"Duplicate pb_type descriptor name: '%s'.\n", Type->name);
+		}
+
 		/* Load pb_type info */
 		Type->pb_type = (t_pb_type*) my_malloc(sizeof(t_pb_type));
 		Type->pb_type->name = my_strdup(Type->name);
 		if (i == IO_TYPE_INDEX) {
-			if (strcmp(Type->name, "io") != 0) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"First complex block must be named \"io\" and define the inputs and outputs for the FPGA");
-				exit(1);
+			if (strcmp(Type->name, "io") != 0) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, CurType->line, 
+					"First complex block must be named \"io\" and define the inputs and outputs for the FPGA");
 			}
 		}
 		ProcessPb_Type(CurType, Type->pb_type, NULL);
@@ -2500,28 +2630,28 @@ static void ProcessComplexBlocks(INOUTP ezxml_t Node,
 		FreeNode(Prev);
 
 	}
-	if (FILL_TYPE == NULL) {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"grid location type 'fill' must be specified.\n");
-		exit(1);
+	if (FILL_TYPE == NULL) {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, 0, 
+			"grid location type 'fill' must be specified.\n");
 	}
+	pb_type_descriptors.clear();
 }
 
 /* Loads the given architecture file. Currently only
  * handles type information */
 void XmlReadArch(INP const char *ArchFile, INP boolean timing_enabled,
 		OUTP struct s_arch *arch, OUTP t_type_descriptor ** Types,
-		OUTP int *NumTypes) {
+		OUTP int *NumTypes){
 	ezxml_t Cur, Next;
 	const char *Prop;
 	boolean power_reqd;
 
+	arch_file_name = ArchFile;
 	/* Parse the file */
 	Cur = ezxml_parse_file(ArchFile);
-	if (NULL == Cur) {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"Unable to load architecture file '%s'.\n", ArchFile);
-		exit(1);
+	if (NULL == Cur) {		
+		vpr_throw(VPR_ERROR_ARCH, ArchFile, 0, 
+		"Unable to find/load architecture file '%s'.\n", ArchFile);
 	}
 
 	/* Root node should be architecture */
@@ -2530,7 +2660,7 @@ void XmlReadArch(INP const char *ArchFile, INP boolean timing_enabled,
 	Prop = FindProperty(Cur, "version", FALSE);
 	if (Prop != NULL) {
 		if (atof(Prop) > atof(VPR_VERSION)) {
-			vpr_printf(TIO_MESSAGE_WARNING,
+			vpr_printf_warning(__FILE__, __LINE__,
 					"This architecture version is for VPR %f while your current VPR version is " VPR_VERSION ", compatability issues may arise\n",
 					atof(Prop));
 		}
@@ -2695,10 +2825,9 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 			(*Segs)[i].directionality = UNI_DIRECTIONAL;
 		}
 
-		else {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Invalid switch type '%s'.\n", Node->line, tmp);
-			exit(1);
+		else {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+				"Invalid switch type '%s'.\n", tmp);
 		}
 		ezxml_set_attr(Node, "type", NULL);
 
@@ -2713,11 +2842,9 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 					break; /* End loop so j is where we want it */
 				}
 			}
-			if (j >= NumSwitches) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] '%s' is not a valid mux name.\n",
-						SubElem->line, tmp);
-				exit(1);
+			if (j >= NumSwitches) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, SubElem->line, 
+					"'%s' is not a valid mux name.\n", tmp);
 			}
 			ezxml_set_attr(SubElem, "name", NULL);
 			FreeNode(SubElem);
@@ -2740,11 +2867,9 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 					break; /* End loop so j is where we want it */
 				}
 			}
-			if (j >= NumSwitches) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] '%s' is not a valid wire_switch name.\n",
-						SubElem->line, tmp);
-				exit(1);
+			if (j >= NumSwitches) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, SubElem->line, 
+					"'%s' is not a valid wire_switch name.\n", tmp);
 			}
 			(*Segs)[i].wire_switch = j;
 			ezxml_set_attr(SubElem, "name", NULL);
@@ -2758,11 +2883,9 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 					break; /* End loop so j is where we want it */
 				}
 			}
-			if (j >= NumSwitches) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] '%s' is not a valid opin_switch name.\n",
-						SubElem->line, tmp);
-				exit(1);
+			if (j >= NumSwitches) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, SubElem->line, 
+					"'%s' is not a valid opin_switch name.\n", tmp);
 			}
 			(*Segs)[i].opin_switch = j;
 			ezxml_set_attr(SubElem, "name", NULL);
@@ -2817,55 +2940,40 @@ static void ProcessCB_SB(INOUTP ezxml_t Node, INOUTP boolean * list,
 				break;
 			case 'T':
 			case '1':
-				if (i >= len) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] CB or SB depopulation is too long. It "
-
-									"should be (length) symbols for CBs and (length+1) "
-									"symbols for SBs.\n", Node->line);
-					exit(1);
+				if (i >= len) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+						"CB or SB depopulation is too long. It should be (length) symbols for CBs and (length+1) symbols for SBs.\n");
 				}
 				list[i] = TRUE;
 				++i;
 				break;
 			case 'F':
 			case '0':
-				if (i >= len) {
-					vpr_printf(TIO_MESSAGE_ERROR,
-							"[LINE %d] CB or SB depopulation is too long. It "
-
-									"should be (length) symbols for CBs and (length+1) "
-									"symbols for SBs.\n", Node->line);
-					exit(1);
+				if (i >= len) {					
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+						"CB or SB depopulation is too long. It should be (length) symbols for CBs and (length+1) symbols for SBs.\n");
 				}
 				list[i] = FALSE;
 				++i;
 				break;
-			default:
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Invalid character %c in CB or "
-								"SB depopulation list.\n", Node->line, *tmp);
-				exit(1);
+			default:				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"Invalid character %c in CB or SB depopulation list.\n", *tmp);
 			}
 			++tmp;
 		}
-		if (i < len) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] CB or SB depopulation is too short. It "
-							"should be (length) symbols for CBs and (length+1) "
-							"symbols for SBs.\n", Node->line);
-			exit(1);
+		if (i < len) {			
+			vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+				"CB or SB depopulation is too short. It should be (length) symbols for CBs and (length+1) symbols for SBs.\n");
 		}
 
 		/* Free content string */
 		ezxml_set_txt(Node, "");
 	}
 
-	else {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"[LINE %d] '%s' is not a valid type for specifying "
-						"cb and sb depopulation.\n", Node->line, tmp);
-		exit(1);
+	else {		
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+			"'%s' is not a valid type for specifying cb and sb depopulation.\n", tmp);
 	}
 	ezxml_set_attr(Node, "type", NULL);
 }
@@ -2901,11 +3009,9 @@ static void ProcessSwitches(INOUTP ezxml_t Parent,
 
 		/* Check for switch name collisions */
 		for (j = 0; j < i; ++j) {
-			if (0 == strcmp((*Switches)[j].name, switch_name)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Two switches with the same name '%s' were "
-								"found.\n", Node->line, switch_name);
-				exit(1);
+			if (0 == strcmp((*Switches)[j].name, switch_name)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"Two switches with the same name '%s' were found.\n", switch_name);
 			}
 		}
 		(*Switches)[i].name = my_strdup(switch_name);
@@ -2925,11 +3031,9 @@ static void ProcessSwitches(INOUTP ezxml_t Parent,
 			(*Switches)[i].buffered = TRUE;
 		}
 
-		else {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] Invalid switch type '%s'.\n", Node->line,
-					type_name);
-			exit(1);
+		else {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"Invalid switch type '%s'.\n", type_name);
 		}
 		ezxml_set_attr(Node, "type", NULL);
 		(*Switches)[i].R = GetFloatProperty(Node, "R", timing_enabled, 0);
@@ -2984,11 +3088,9 @@ static void ProcessDirects(INOUTP ezxml_t Parent, OUTP t_direct_inf **Directs,
 		direct_name = FindProperty(Node, "name", TRUE);
 		/* Check for direct name collisions */
 		for (j = 0; j < i; ++j) {
-			if (0 == strcmp((*Directs)[j].name, direct_name)) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"[LINE %d] Two directs with the same name '%s' were "
-								"found.\n", Node->line, direct_name);
-				exit(1);
+			if (0 == strcmp((*Directs)[j].name, direct_name)) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"Two directs with the same name '%s' were found.\n", direct_name);
 			}
 		}
 		(*Directs)[i].name = my_strdup(direct_name);
@@ -2999,11 +3101,9 @@ static void ProcessDirects(INOUTP ezxml_t Parent, OUTP t_direct_inf **Directs,
 		to_pin_name = FindProperty(Node, "to_pin", TRUE);
 
 		/* Check that to_pin and the from_pin are not the same */
-		if (0 == strcmp(to_pin_name, from_pin_name)) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] The source pin and sink pin are the same: %s.\n",
-					Node->line, to_pin_name);
-			exit(1);
+		if (0 == strcmp(to_pin_name, from_pin_name)) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"The source pin and sink pin are the same: %s.\n", to_pin_name);
 		}
 		(*Directs)[i].from_pin = my_strdup(from_pin_name);
 		(*Directs)[i].to_pin = my_strdup(to_pin_name);
@@ -3018,12 +3118,9 @@ static void ProcessDirects(INOUTP ezxml_t Parent, OUTP t_direct_inf **Directs,
 		ezxml_set_attr(Node, "z_offset", NULL);
 
 		/* Check that the direct chain connection is not zero in both direction */
-		if ((*Directs)[i].x_offset == 0 && (*Directs)[i].y_offset == 0) {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"[LINE %d] The x_offset and y_offset are both zero, "
-							"this is a length 0 direct chain connection.\n",
-					Node->line);
-			exit(1);
+		if ((*Directs)[i].x_offset == 0 && (*Directs)[i].y_offset == 0) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, Node->line, 
+					"The x_offset and y_offset are both zero, this is a length 0 direct chain connection.\n");
 		}
 
 		(*Directs)[i].line = Node->line;
@@ -3154,10 +3251,9 @@ static void SyncModelsPbTypes_rec(INOUTP struct s_arch *arch,
 		}
 		if (blif_model_name) {
 			blif_model_name++; /* get character after the '.' or ' ' */
-		} else {
-			vpr_printf(TIO_MESSAGE_ERROR,
-					"Unknown blif model %s in pb_type %s\n",
-					pb_type->blif_model, pb_type->name);
+		} else {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, 0, 
+					"Unknown blif model %s in pb_type %s\n", pb_type->blif_model, pb_type->name);
 		}
 
 		/* There are two sets of models to consider, the standard library of models and the user defined models */
@@ -3181,10 +3277,9 @@ static void SyncModelsPbTypes_rec(INOUTP struct s_arch *arch,
 			}
 			cur_model = cur_model->next;
 		}
-		if (found != TRUE) {
-			vpr_printf(TIO_MESSAGE_ERROR, "No matching model for pb_type %s\n",
-					pb_type->blif_model);
-			exit(1);
+		if (found != TRUE) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, 0, 
+					"No matching model for pb_type %s\n", pb_type->blif_model);
 		}
 
 		pb_type->model = model_match_prim;
@@ -3230,11 +3325,9 @@ static void SyncModelsPbTypes_rec(INOUTP struct s_arch *arch,
 				}
 				model_port = model_port->next;
 			}
-			if (found != TRUE) {
-				vpr_printf(TIO_MESSAGE_ERROR,
-						"No matching model port for port %s in pb_type %s\n",
-						pb_type->ports[p].name, pb_type->name);
-				exit(1);
+			if (found != TRUE) {				
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, 0, 
+					"No matching model port for port %s in pb_type %s\n", pb_type->ports[p].name, pb_type->name);
 			}
 		}
 	} else {
@@ -3253,10 +3346,9 @@ static void UpdateAndCheckModels(INOUTP struct s_arch *arch) {
 	int i, j;
 	cur_model = arch->models;
 	while (cur_model) {
-		if (cur_model->pb_types == NULL) {
-			vpr_printf(TIO_MESSAGE_ERROR, "No pb_type found for model %s\n",
-					cur_model->name);
-			exit(1);
+		if (cur_model->pb_types == NULL) {			
+				vpr_throw(VPR_ERROR_ARCH, arch_file_name, 0, 
+					"No pb_type found for model %s\n", cur_model->name);
 		}
 		port = cur_model->inputs;
 		i = 0;
@@ -3295,6 +3387,11 @@ void EchoArch(INP const char *EchoFile, INP const t_type_descriptor * Types,
 	Echo = my_fopen(EchoFile, "w", 0);
 	cur_model = NULL;
 
+	//Print all layout device switch/segment list info first
+	PrintArchInfo(Echo, arch);
+
+	//Models
+	fprintf(Echo, "*************************************************\n");
 	for (j = 0; j < 2; j++) {
 		if (j == 0) {
 			fprintf(Echo, "Printing user models \n");
@@ -3331,12 +3428,13 @@ void EchoArch(INP const char *EchoFile, INP const t_type_descriptor * Types,
 			cur_model = cur_model->next;
 		}
 	}
-
+	fprintf(Echo, "*************************************************\n\n");
+	fprintf(Echo, "*************************************************\n");
 	for (i = 0; i < NumTypes; ++i) {
 		fprintf(Echo, "Type: \"%s\"\n", Types[i].name);
 		fprintf(Echo, "\tcapacity: %d\n", Types[i].capacity);
+		fprintf(Echo, "\twidth: %d\n", Types[i].width);
 		fprintf(Echo, "\theight: %d\n", Types[i].height);
-
 		for (j = 0; j < Types[i].num_pins; j++) {
 			fprintf(Echo, "\tis_Fc_frac: \n");
 			fprintf(Echo, "\t\tPin number %d: %s\n", j,
@@ -3379,6 +3477,8 @@ static void PrintPb_types_rec(INP FILE * Echo, INP const t_pb_type * pb_type,
 				pb_type->ports[i].name, pb_type->ports[i].type,
 				pb_type->ports[i].num_pins);
 	}
+	
+	if(pb_type->num_modes>0){/*one or more modes*/
 	for (i = 0; i < pb_type->num_modes; i++) {
 		fprintf(Echo, "%s\tmode %s:\n", tabs, pb_type->modes[i].name);
 		for (j = 0; j < pb_type->modes[i].num_pb_type_children; j++) {
@@ -3398,11 +3498,449 @@ static void PrintPb_types_rec(INP FILE * Echo, INP const t_pb_type * pb_type,
 						pb_type->modes[i].interconnect[j].annotations[k].format,
 						pb_type->modes[i].interconnect[j].annotations[k].value[0]);
 			}
+			//Print power info for interconnects
+			if(pb_type->modes[i].interconnect[j].interconnect_power) {
+				if(pb_type->modes[i].interconnect[j].interconnect_power->power_usage.dynamic||
+					pb_type->modes[i].interconnect[j].interconnect_power->power_usage.leakage) {
+						fprintf(Echo, "%s\t\t\tpower %e %e\n", tabs,
+						pb_type->modes[i].interconnect[j].interconnect_power->power_usage.dynamic,
+						pb_type->modes[i].interconnect[j].interconnect_power->power_usage.leakage);
+				}
+			}
 		}
+	}
+	}
+	else{/*leaf pb with unknown model*/
+		/*LUT(names) already handled, it naturally has 2 modes.
+		  I/O has no annotations to be displayed
+		  All other library or user models may have delays specificied, e.g. Tsetup and Tcq
+		  Display the additional information*/
+		if(strcmp(pb_type->model->name,"names")&&strcmp(pb_type->model->name,"input")
+			&&strcmp(pb_type->model->name,"output")){
+			for (k = 0; k < pb_type->num_annotations;
+				k++) {
+						fprintf(Echo, "%s\t\t\tannotation %s %s %s %d: %s\n", tabs,
+						pb_type->annotations[k].clock,
+						pb_type->annotations[k].input_pins,
+						pb_type->annotations[k].output_pins,
+						pb_type->annotations[k].format,
+						pb_type->annotations[k].value[0]);	
+			}
+		}
+	}
+
+	if (pb_type->pb_type_power) {
+		PrintPb_types_recPower(Echo , pb_type , tabs);
 	}
 	free(tabs);
 }
 
+//Added May 2013 Daniel Chen, help dump arch info after loading from XML
+static void PrintPb_types_recPower(INP FILE * Echo, INP const t_pb_type * pb_type,
+		const char* tabs){
+
+	int i = 0;
+	/*Print power information for each pb if available*/
+	switch (pb_type->pb_type_power->estimation_method) {
+	case POWER_METHOD_UNDEFINED:
+		fprintf(Echo, "%s\tpower method: undefined\n", tabs);
+		break;
+	case POWER_METHOD_IGNORE:
+		if(pb_type->parent_mode){
+			/*if NOT top-level pb (all top-level pb has NULL parent_mode, check parent's power method
+				This is because of the inheritance property of auto-size*/
+			if(pb_type->parent_mode->parent_pb_type->pb_type_power->estimation_method
+			==POWER_METHOD_IGNORE) break;
+		}
+		fprintf(Echo, "%s\tpower method: ignore\n", tabs);
+		break;
+	case POWER_METHOD_SUM_OF_CHILDREN:
+		fprintf(Echo, "%s\tpower method: sum-of-children\n", tabs);
+		break;	
+	case POWER_METHOD_AUTO_SIZES:
+		if(pb_type->parent_mode){
+			/*if NOT top-level pb (all top-level pb has NULL parent_mode, check parent's power method
+				This is because of the inheritance property of auto-size*/
+			if(pb_type->parent_mode->parent_pb_type->pb_type_power->estimation_method
+			==POWER_METHOD_AUTO_SIZES) break;
+		}
+		fprintf(Echo, "%s\tpower method: auto-size\n", tabs);
+		break;
+	case POWER_METHOD_SPECIFY_SIZES:
+		if(pb_type->parent_mode){
+			/*if NOT top-level pb (all top-level pb has NULL parent_mode, check parent's power method
+				This is because of the inheritance property of specify-size*/
+			if(pb_type->parent_mode->parent_pb_type->pb_type_power->estimation_method
+			==POWER_METHOD_SPECIFY_SIZES) break;
+		}
+		
+		fprintf(Echo, "%s\tpower method: specify-size\n", tabs);
+		for (i = 0; i < pb_type->num_ports; i++) {
+			//Print all the power information on each port, only if available,
+				//will not print if value is 0 or NULL
+			if(pb_type->ports[i].port_power->buffer_type||
+				pb_type->ports[i].port_power->wire_type||
+				pb_type->pb_type_power->absolute_power_per_instance.leakage||
+				pb_type->pb_type_power->absolute_power_per_instance.dynamic){
+				
+				fprintf(Echo, "%s\t\tport %s type %d num_pins %d\n", tabs,
+				pb_type->ports[i].name, pb_type->ports[i].type,
+				pb_type->ports[i].num_pins);
+				//Buffer size
+				switch(pb_type->ports[i].port_power->buffer_type){
+				case(POWER_BUFFER_TYPE_UNDEFINED):
+				case(POWER_BUFFER_TYPE_NONE):
+					break;
+				case(POWER_BUFFER_TYPE_AUTO):
+					fprintf(Echo, "%s\t\t\tbuffer_size %s\n", tabs,
+					"auto");
+					break;
+				case(POWER_BUFFER_TYPE_ABSOLUTE_SIZE):
+					fprintf(Echo, "%s\t\t\tbuffer_size %f\n", tabs,
+					pb_type->ports[i].port_power->buffer_size);
+					break;
+				default:
+						break;
+				}
+				switch(pb_type->ports[i].port_power->wire_type){
+				case(POWER_WIRE_TYPE_UNDEFINED):
+				case(POWER_WIRE_TYPE_IGNORED):
+					break;
+				case(POWER_WIRE_TYPE_C):
+					fprintf(Echo, "%s\t\t\twire_cap: %e\n", tabs,
+					pb_type->ports[i].port_power->wire.C);
+					break;
+				case(POWER_WIRE_TYPE_ABSOLUTE_LENGTH):
+					fprintf(Echo, "%s\t\t\twire_len(abs): %e\n", tabs,
+					pb_type->ports[i].port_power->wire.absolute_length);
+					break;
+				case(POWER_WIRE_TYPE_RELATIVE_LENGTH):
+					fprintf(Echo, "%s\t\t\twire_len(rel): %f\n", tabs,
+					pb_type->ports[i].port_power->wire.relative_length);
+					break;
+				case(POWER_WIRE_TYPE_AUTO):
+					fprintf(Echo, "%s\t\t\twire_len: %s\n", tabs,
+					"auto");
+					break;
+				default:
+						break;
+				}
+
+				
+			}
+		}
+		//Output static power even if non zero
+			if(pb_type->pb_type_power->absolute_power_per_instance.leakage)
+				fprintf(Echo, "%s\t\tstatic power_per_instance: %e \n", tabs,
+				pb_type->pb_type_power->absolute_power_per_instance.leakage);
+
+			if(pb_type->pb_type_power->absolute_power_per_instance.dynamic)
+				fprintf(Echo, "%s\t\tdynamic power_per_instance: %e \n", tabs,
+				pb_type->pb_type_power->absolute_power_per_instance.dynamic);
+		break;
+	case POWER_METHOD_TOGGLE_PINS:
+		if(pb_type->parent_mode){
+			/*if NOT top-level pb (all top-level pb has NULL parent_mode, check parent's power method
+				This is because once energy_per_toggle is specified at one level, 
+				all children pb's are energy_per_toggle and only want to display once*/
+			if(pb_type->parent_mode->parent_pb_type->pb_type_power->estimation_method
+			==POWER_METHOD_TOGGLE_PINS) break;
+		}
+		
+		fprintf(Echo, "%s\tpower method: pin-toggle\n", tabs);
+		for (i = 0; i < pb_type->num_ports; i++) {
+			/*Print all the power information on each port, only if available,
+				will not print if value is 0 or NULL*/
+			if(pb_type->ports[i].port_power->energy_per_toggle||
+				pb_type->ports[i].port_power->scaled_by_port||
+				pb_type->pb_type_power->absolute_power_per_instance.leakage||
+				pb_type->pb_type_power->absolute_power_per_instance.dynamic){
+				
+				fprintf(Echo, "%s\t\tport %s type %d num_pins %d\n", tabs,
+				pb_type->ports[i].name, pb_type->ports[i].type,
+				pb_type->ports[i].num_pins);
+				//Toggle Energy
+				if(pb_type->ports[i].port_power->energy_per_toggle){
+					fprintf(Echo, "%s\t\t\tenergy_per_toggle %e\n", tabs,
+					pb_type->ports[i].port_power->energy_per_toggle);
+				}
+				//Scaled by port (could be reversed)
+				if(pb_type->ports[i].port_power->scaled_by_port){
+					if(pb_type->ports[i].port_power->scaled_by_port->num_pins>1){
+						fprintf(Echo, (pb_type->ports[i].port_power->reverse_scaled ? 
+							"%s\t\t\tscaled_by_static_prob_n: %s[%d]\n" :
+							 "%s\t\t\tscaled_by_static_prob: %s[%d]\n") , tabs,
+						pb_type->ports[i].port_power->scaled_by_port->name,
+						pb_type->ports[i].port_power->scaled_by_port_pin_idx);
+				}
+				else{
+					fprintf(Echo, (pb_type->ports[i].port_power->reverse_scaled ? 
+							"%s\t\t\tscaled_by_static_prob_n: %s\n" :
+							 "%s\t\t\tscaled_by_static_prob: %s\n"), tabs,
+							pb_type->ports[i].port_power->scaled_by_port->name);
+				}
+			}
+		}
+		}
+		//Output static power even if non zero
+			if(pb_type->pb_type_power->absolute_power_per_instance.leakage)
+				fprintf(Echo, "%s\t\tstatic power_per_instance: %e \n", tabs,
+				pb_type->pb_type_power->absolute_power_per_instance.leakage);
+
+			if(pb_type->pb_type_power->absolute_power_per_instance.dynamic)
+				fprintf(Echo, "%s\t\tdynamic power_per_instance: %e \n", tabs,
+				pb_type->pb_type_power->absolute_power_per_instance.dynamic);
+		
+		break;
+	case POWER_METHOD_C_INTERNAL:
+		if(pb_type->parent_mode){
+			/*if NOT top-level pb (all top-level pb has NULL parent_mode, check parent's power method
+				This is because of values at this level includes all children pb's*/
+			if(pb_type->parent_mode->parent_pb_type->pb_type_power->estimation_method
+			==POWER_METHOD_C_INTERNAL) break;
+		}
+		fprintf(Echo, "%s\tpower method: C-internal\n", tabs);
+
+		if(pb_type->pb_type_power->absolute_power_per_instance.leakage)
+			fprintf(Echo, "%s\t\tstatic power_per_instance: %e \n", tabs,
+			pb_type->pb_type_power->absolute_power_per_instance.leakage);
+
+		if(pb_type->pb_type_power->C_internal)
+			fprintf(Echo, "%s\t\tdynamic c-internal: %e \n", tabs,
+			pb_type->pb_type_power->C_internal);
+		break;
+	case POWER_METHOD_ABSOLUTE:
+		if(pb_type->parent_mode){
+			/*if NOT top-level pb (all top-level pb has NULL parent_mode, check parent's power method
+				This is because of values at this level includes all children pb's*/
+			if(pb_type->parent_mode->parent_pb_type->pb_type_power->estimation_method
+			==POWER_METHOD_ABSOLUTE) break;
+		}
+		fprintf(Echo, "%s\tpower method: absolute\n", tabs);
+		if(pb_type->pb_type_power->absolute_power_per_instance.leakage)
+			fprintf(Echo, "%s\t\tstatic power_per_instance: %e \n", tabs,
+			pb_type->pb_type_power->absolute_power_per_instance.leakage);
+
+		if(pb_type->pb_type_power->absolute_power_per_instance.dynamic)
+			fprintf(Echo, "%s\t\tdynamic power_per_instance: %e \n", tabs,
+			pb_type->pb_type_power->absolute_power_per_instance.dynamic);
+		break;
+	default:
+		fprintf(Echo, "%s\tpower method: error has occcured\n", tabs);
+		break;
+	}
+}
+//Added May 2013 Daniel Chen, help dump arch info after loading from XML
+static void PrintArchInfo(INP FILE * Echo, struct s_arch *arch) {
+	int i , j;
+
+	fprintf(Echo, "Printing architecture... \n\n");
+	//Layout
+	fprintf(Echo, "*************************************************\n");
+	if(arch->clb_grid.IsAuto){
+		fprintf(Echo, "Layout: auto %f\n" , arch->clb_grid.Aspect);
+	}
+	else{
+		fprintf(Echo, "Layout: width %d height %d\n" , arch->clb_grid.W , arch->clb_grid.H);
+	}
+	fprintf(Echo, "*************************************************\n\n");
+	//Device
+	fprintf(Echo, "*************************************************\n");
+	fprintf(Echo, "Device Info:\n");
+
+	fprintf(Echo, "\tSizing: R_minW_nmos %e R_minW_pmos %e ipin_mux_trans_size %e\n", arch->R_minW_nmos , 
+					arch->R_minW_pmos , arch->ipin_mux_trans_size);
+					
+	fprintf(Echo, "\tTiming: C_ipin_cblock %e T_ipin_cblock %e\n", arch->C_ipin_cblock , arch->T_ipin_cblock);
+
+	fprintf(Echo, "\tArea: grid_logic_tile_area %e\n", arch->grid_logic_tile_area);
+
+	fprintf(Echo, "\tChannel Width Distribution:\n");
+	fprintf(Echo, "\t\tio: width %e\n",arch->Chans.chan_width_io);
+
+	switch(arch->Chans.chan_x_dist.type){
+	case(UNIFORM):
+		fprintf(Echo, "\t\tx: type uniform peak %e\n", arch->Chans.chan_x_dist.peak);
+		break;
+	case(GAUSSIAN):
+		fprintf(Echo, "\t\tx: type gaussian peak %e \
+						  width %e Xpeak %e dc %e\n", arch->Chans.chan_x_dist.peak,
+						  arch->Chans.chan_x_dist.width , arch->Chans.chan_x_dist.xpeak,
+						  arch->Chans.chan_x_dist.dc);
+		break;
+	case(PULSE):
+		fprintf(Echo, "\t\tx: type pulse peak %e \
+						  width %e Xpeak %e dc %e\n", arch->Chans.chan_x_dist.peak,
+						  arch->Chans.chan_x_dist.width , arch->Chans.chan_x_dist.xpeak,
+						  arch->Chans.chan_x_dist.dc);
+		break;
+	case(DELTA):
+		fprintf(Echo, "\t\tx: distr dleta peak %e \
+						  Xpeak %e dc %e\n", arch->Chans.chan_x_dist.peak,
+						   arch->Chans.chan_x_dist.xpeak, arch->Chans.chan_x_dist.dc);
+		break;
+	default:
+		fprintf(Echo, "\t\tInvalid Distribution!\n");
+		break;
+	}
+	
+	switch(arch->Chans.chan_y_dist.type){
+	case(UNIFORM):
+		fprintf(Echo, "\t\ty: type uniform peak %e\n", arch->Chans.chan_y_dist.peak);
+		break;
+	case(GAUSSIAN):
+		fprintf(Echo, "\t\ty: type gaussian peak %e \
+						  width %e Xpeak %e dc %e\n", arch->Chans.chan_y_dist.peak,
+						  arch->Chans.chan_y_dist.width , arch->Chans.chan_y_dist.xpeak,
+						  arch->Chans.chan_y_dist.dc);
+		break;
+	case(PULSE):
+		fprintf(Echo, "\t\ty: type pulse peak %e \
+						  width %e Xpeak %e dc %e\n", arch->Chans.chan_y_dist.peak,
+						  arch->Chans.chan_y_dist.width , arch->Chans.chan_y_dist.xpeak,
+						  arch->Chans.chan_y_dist.dc);
+		break;
+	case(DELTA):
+		fprintf(Echo, "\t\ty: distr dleta peak %e \
+						  Xpeak %e dc %e\n", arch->Chans.chan_y_dist.peak,
+						   arch->Chans.chan_y_dist.xpeak, arch->Chans.chan_y_dist.dc);
+		break;
+	default:
+		fprintf(Echo, "\t\tInvalid Distribution!\n");
+		break;
+	}
+
+	switch(arch->SBType){
+	case(WILTON):
+			fprintf(Echo, "\tSwitch Block: type wilton fs %d\n", arch->Fs);
+		break;
+	case(UNIVERSAL):
+			fprintf(Echo, "\tSwitch Block: type universal fs %d\n", arch->Fs);
+		break;
+	case(SUBSET):
+			fprintf(Echo, "\tSwitch Block: type subset fs %d\n", arch->Fs);
+		break;
+	default:
+		break;
+	}
+	fprintf(Echo, "*************************************************\n\n");
+	//Switch list
+	fprintf(Echo, "*************************************************\n");
+	fprintf(Echo, "Switch List:\n");
+
+	//13 is hard coded because format of %e is always 1.123456e+12
+	//It always consists of 10 alphanumeric digits, a decimal
+	//and a sign
+	for(i = 0; i < arch->num_switches; i++){
+
+		if(arch->Switches[i].buffered){
+			fprintf(Echo, "\tSwitch[%d]: name %s type mux/buffer\n", i + 1,arch->Switches[i].name);
+		}
+		else{
+			fprintf(Echo, "\tSwitch[%d]: name %s type pass_trans\n", i + 1,arch->Switches[i].name);
+		}
+		fprintf(Echo, "\t\t\t\tR %e Cin %e Cout %e\n",arch->Switches[i].R,arch->Switches[i].Cin,
+						arch->Switches[i].Cout);
+		fprintf(Echo, "\t\t\t\tTdel %e buf_size %e mux_trans_size %e\n",arch->Switches[i].Tdel,
+						arch->Switches[i].buf_size,arch->Switches[i].mux_trans_size);
+		if(arch->Switches[i].power_buffer_type==POWER_BUFFER_TYPE_AUTO){
+			fprintf(Echo, "\t\t\t\tpower_buffer_size auto\n");
+		}
+		else{
+			fprintf(Echo, "\t\t\t\tpower_buffer_size %e\n",arch->Switches[i].power_buffer_size);
+		}
+	}
+	
+	fprintf(Echo, "*************************************************\n\n");
+	//Segment List
+	fprintf(Echo, "*************************************************\n");
+	fprintf(Echo, "Segment List:\n");
+	for(i = 0 ; i < arch->num_segments ; i++){
+		fprintf(Echo, "\tSegment[%d]: frequency %d length %d R_metal %e C_metal %e\n", i + 1,
+				arch->Segments[i].frequency,arch->Segments[i].length,arch->Segments[i].Rmetal,
+				arch->Segments[i].Cmetal);
+
+		if(arch->Segments[i].directionality==UNI_DIRECTIONAL){
+			//wire_switch == opin_switch
+			fprintf(Echo, "\t\t\t\ttype unidir mux_name %s\n",
+				arch->Switches[arch->Segments[i].wire_switch].name);
+		}
+		else{//Should be bidir
+			fprintf(Echo, "\t\t\t\ttype bidir wire_switch %s opin_switch %s\n",
+				arch->Switches[arch->Segments[i].wire_switch].name,
+				arch->Switches[arch->Segments[i].opin_switch].name);
+		}
+
+		fprintf(Echo, "\t\t\t\tcb ");
+		for(j = 0; j < arch->Segments->cb_len; j++){
+			if(arch->Segments->cb[j]){
+				fprintf(Echo, "1 ");
+			}
+			else{
+				fprintf(Echo, "0 ");
+			}
+		}
+		fprintf(Echo, "\n");
+
+		fprintf(Echo, "\t\t\t\tsb ");
+		for(j = 0; j < arch->Segments->sb_len; j++){
+			if(arch->Segments->sb[j]){
+				fprintf(Echo, "1 ");
+			}
+			else{
+				fprintf(Echo, "0 ");
+			}
+		}
+		fprintf(Echo, "\n");
+	}
+	fprintf(Echo, "*************************************************\n\n");
+	//Direct List
+	fprintf(Echo, "*************************************************\n");
+	fprintf(Echo, "Direct List:\n");
+	for(i = 0 ; i < arch->num_directs;i++){
+		fprintf(Echo, "\tDirect[%d]: name %s from_pin %s to_pin %s\n", i + 1,
+			arch->Directs[i].name,arch->Directs[i].from_pin,arch->Directs[i].to_pin);
+		fprintf(Echo, "\t\t\t\t x_offset %d y_offset %d z_offset %d\n", 
+			arch->Directs[i].x_offset,arch->Directs[i].y_offset,arch->Directs[i].z_offset);
+	}
+	fprintf(Echo, "*************************************************\n\n");
+
+
+
+	//Architecture Power
+	fprintf(Echo, "*************************************************\n");
+	fprintf(Echo, "Power:\n");
+	if(arch->power){
+		fprintf(Echo, "\tlocal_interconnect C_wire %e factor %f\n",arch->power->C_wire_local,
+				arch->power->local_interc_factor);
+		fprintf(Echo, "\tlogical_effort_factor %f trans_per_sram_bit %f\n",
+		arch->power->logical_effort_factor,arch->power->transistors_per_SRAM_bit);
+	
+	}
+
+
+	fprintf(Echo, "*************************************************\n\n");
+	//Architecture Clock
+	fprintf(Echo, "*************************************************\n");
+	fprintf(Echo, "Clock:\n");
+	if(arch->clocks){
+		for(i = 0; i < arch->clocks->num_global_clocks; i++){
+		if(arch->clocks->clock_inf[i].autosize_buffer){
+			fprintf(Echo, "\tClock[%d]: buffer_size auto C_wire %e", i + 1,
+					arch->clocks->clock_inf->C_wire);
+		}
+		else{
+			fprintf(Echo, "\tClock[%d]: buffer_size %e C_wire %e", i + 1,
+				arch->clocks->clock_inf[i].buffer_size,arch->clocks->clock_inf[i].C_wire);
+		}
+		fprintf(Echo, "\t\t\t\tstat_prob %f switch_density %f period %e",
+				arch->clocks->clock_inf[i].prob,arch->clocks->clock_inf[i].dens,
+				arch->clocks->clock_inf[i].period);
+	}
+	}
+	
+	fprintf(Echo, "*************************************************\n\n");
+}
 static void ProcessPower( INOUTP ezxml_t parent,
 		INOUTP t_power_arch * power_arch, INP t_type_descriptor * Types,
 		INP int NumTypes) {
@@ -3503,5 +4041,83 @@ e_power_estimation_method power_method_inherited(
 		assert(0);
       return POWER_METHOD_UNDEFINED;  // Should never get here, but avoids a compiler warning.
 	}
+}
+
+/* Date:June 28th, 2013								
+ * Author: Daniel Chen								
+ * Purpose: Checks for correctly grouped XML tag	
+ *	       ordering, vpr_throws if incorrect		
+ * Note: Used this because there is a				
+ *			bug in ezxml_cut in the ezxml library	
+ *			which seg faults with incorrectly	
+ *			grouped tags		
+ */
+static void CheckXMLTagOrder(ezxml_t Parent){
+	
+	int i, num_tags;
+	ezxml_t Cur, Temp;
+	char* tag_name;
+	i = num_tags = 0;
+
+	/* Start with first subtag */
+	Cur = Parent->child;
+
+	while(Cur){
+		tag_name = my_strdup(Cur->name);
+		num_tags = CountChildren(Parent, tag_name, 0);
+		Temp = Cur->ordered;
+		for(i = 1 ; i < num_tags; i++){ //Check the next num_tags-1 tags see if grouped
+			if(Temp){
+				if(strcmp(Temp->name, tag_name)){							
+					vpr_throw(VPR_ERROR_ARCH, arch_file_name, Temp->line, 
+						"XML tags of type '%s' must be specified right after/before each other\n", tag_name);
+				}
+				Temp = Temp->ordered;	
+			}
+		}
+		Cur = Cur->sibling; // Go to next tag with a different name on the same level 
+		free(tag_name); // Free the copied tag name
+	}
+}
+
+/* Date:July 10th, 2013								
+ * Author: Daniel Chen								
+ * Purpose: Attempts to match a clock_name specified in an 
+ *			annotation (Tsetup, Thold, Tc_to_q) with the
+ *			clock_name specified in a flipflop.	Only applies
+ *			to flipflop primitives.
+ */
+static void ff_primtives_annotation_clock_match(t_pin_to_pin_annotation *annotation, 
+	t_pb_type * parent_pb_type){
+
+	int i_port;
+	bool clock_valid = FALSE;  //Determine if annotation's clock is same as primtive's clock
+
+	if(!parent_pb_type || !annotation) {
+		vpr_throw(VPR_ERROR_OTHER, __FILE__, __LINE__,
+			"Annotation_clock check encouters invalid annotation or primitive.\n");
+	}
+
+	for(i_port = 0; i_port < parent_pb_type->num_ports; i_port++){
+		if(parent_pb_type->ports[i_port].is_clock){
+			if(strcmp(parent_pb_type->ports[i_port].name, 
+				annotation->clock) == 0){
+				clock_valid = TRUE;
+				break;
+			}
+		}
+	}
+
+	if(!clock_valid){
+		vpr_throw(VPR_ERROR_ARCH, arch_file_name, annotation->line_num,
+			"Clock '%s' does not match any clock defined in pb_type '%s'.\n", 
+			annotation->clock, parent_pb_type->name);
+	}
+
+}
+
+/* Used by functions outside read_xml_util.c to gain access to arch filename */
+const char* get_arch_file_name(){
+	return arch_file_name;
 }
 
