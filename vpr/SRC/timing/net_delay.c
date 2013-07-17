@@ -1,4 +1,6 @@
-#include <stdio.h>
+#include <cstdio>
+using namespace std;
+
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
@@ -209,8 +211,8 @@ alloc_and_load_rc_tree(int inet, t_rc_node ** rc_node_free_list_ptr,
 	tptr = trace_head[inet];
 
 	if (tptr == NULL) {
-		vpr_printf(TIO_MESSAGE_ERROR, "in alloc_and_load_rc_tree: Traceback for net %d does not exist.\n", inet);
-		exit(1);
+		vpr_throw(VPR_ERROR_TIMING,__FILE__, __LINE__, 
+				"in alloc_and_load_rc_tree: Traceback for net %d does not exist.\n", inet);
 	}
 
 	inode = tptr->index;
@@ -241,8 +243,8 @@ alloc_and_load_rc_tree(int inet, t_rc_node ** rc_node_free_list_ptr,
 #ifdef DEBUG
 			prev_node = prev_rc->inode;
 			if (rr_node[prev_node].type != SINK) {
-				vpr_printf(TIO_MESSAGE_ERROR, "in alloc_and_load_rc_tree: Routing of net %d is not a tree.\n", inet);
-				exit(1);
+				vpr_throw(VPR_ERROR_TIMING,__FILE__, __LINE__, 
+						"in alloc_and_load_rc_tree: Routing of net %d is not a tree.\n", inet);
 			}
 #endif
 

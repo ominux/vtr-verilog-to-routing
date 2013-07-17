@@ -1,4 +1,3 @@
-//<<<<<<< .mine
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 #include <iostream>
@@ -21,6 +20,7 @@ using namespace std;
 * Enhanced version by William Chow (chow@eecg.utoronto.ca)
 * Minor updates by Guy Lemieux (lemieux@ece.ubc.ca)
 * More updates by Vaughn Betz to make win32 cleaner and more robust.
+* More updates and code cleanup by Long Yu Wang (longyu.wang@mail.utoronto.ca)
 */
 
 
@@ -57,7 +57,7 @@ typedef struct {
 * on or off using the set_mouse_move_input () and set_keypress_input ()
 * functions (default for both: off).
 */
-void event_loop (void (*act_on_mousebutton) (float x, float y),
+void event_loop (void (*act_on_mousebutton) (float x, float y, t_event_buttonPressed button_info),
 			void (*act_on_mousemove) (float x, float y),
 			void (*act_on_keypress) (char key_pressed),
 			void (*drawscreen) (void));  
@@ -129,7 +129,7 @@ void clearscreen (void);
 void setcolor (int cindex);
 
 /* Set the color with a string instead of an enumerated constant */
-void setcolor (string cname);
+void setcolor_by_name (string cname);
 
 /* Get the current color */
 int getcolor(void);
@@ -223,16 +223,11 @@ void report_structure(t_report*);
  * X11 as well, and probably delete anything else.
  */
 
-/* Added by William to provide double buffering in Windows */
-void drawtobuffer(void);
-void drawtoscreen(void);
-void displaybuffer(void);
-void drawcurve(t_point *points, int npoints);
-void fillcurve(t_point *points, int npoints);
-void object_start(int all);
-void object_end();
-int pt_on_object(int all, float x, float y);
-int findfontsize(float ymax);
+/* MW: Draw beizer curve. Currently not used, but saving for possible use
+ * in the future.                            
+ */
+void win32_drawcurve(t_point *points, int npoints);
+void win32_fillcurve(t_point *points, int npoints);
 
 #endif // WIN32
 

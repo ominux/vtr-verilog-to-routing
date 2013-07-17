@@ -131,11 +131,13 @@
 
 ****************************************************************************************/
 
+#include <cstdio>
+#include <ctime>
+#include <cmath>
+using namespace std;
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
 #include <assert.h>
+
 #include "util.h"
 #include "vpr_types.h"
 #include "physical_types.h"
@@ -192,7 +194,7 @@ static void find_all_the_macro (int * num_of_macro, int * pl_macro_member_blk_nu
 
 	int iblk, from_iblk_pin, to_iblk_pin, from_inet, to_inet, from_idirect, to_idirect, 
 			from_src_or_sink, to_src_or_sink;
-	int next_iblk, curr_iblk, next_inet, curr_inet;
+	int next_iblk, next_inet, curr_inet;
 	int num_blk_pins, num_macro; 
 	int imember;
 
@@ -236,7 +238,6 @@ static void find_all_the_macro (int * num_of_macro, int * pl_macro_member_blk_nu
 						// Start finding the other members
 						while (next_inet != OPEN) {
 
-							curr_iblk = next_iblk;
 							curr_inet = next_inet;
 							
 							// Assume that carry chains only has 1 sink - direct connection

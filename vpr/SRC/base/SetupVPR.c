@@ -1,5 +1,8 @@
+#include <cstring>
+using namespace std;
+
 #include <assert.h>
-#include <string.h>
+
 #include "util.h"
 #include "vpr_types.h"
 #include "OptionTokens.h"
@@ -195,7 +198,7 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 	*Segments = Arch->Segments;
 	RoutingArch->num_segment = Arch->num_segments;
 
-	/* TODO Global variables are ugly, these are global just for the sake of simplicity */
+	/* Andre: getting the data from the options struct */
 	percent_wires_cut = Options->percent_wires_cut;
 	num_cuts = Options->num_cuts;
 	delay_increase = Options->delay_increase;
@@ -221,7 +224,7 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 	}
 	my_srandom(PlacerOpts->seed);
 
-	vpr_printf(TIO_MESSAGE_INFO, "Building complex block graph.\n");
+	vpr_printf_info("Building complex block graph.\n");
 	alloc_and_load_all_pb_graphs(PowerOpts->do_power);
 
 	if (getEchoEnabled() && isEchoFileEnabled(E_ECHO_PB_GRAPH)) {
@@ -246,7 +249,7 @@ void SetupVPR(INP t_options *Options, INP boolean TimingEnabled,
 				Arch);
 	}
 
-	vpr_printf(TIO_MESSAGE_INFO, ">>>>>>Number of switch types: %d.<<<<<<<\n", RoutingArch->num_switch);
+	vpr_printf_info(">>>>>>Number of switch types: %d.<<<<<<<\n", RoutingArch->num_switch);
 
 }
 
@@ -280,7 +283,7 @@ static void SetupTiming(INP t_options Options, INP t_arch Arch,
  * the arch file with the special switches that VPR needs. */
 static void SetupSwitches(INP t_arch Arch,
 		INOUTP struct s_det_routing_arch *RoutingArch,
-		INP t_switch_inf *ArchSwitches, INP int NumArchSwitches) {
+		INP struct s_switch_inf *ArchSwitches, INP int NumArchSwitches) {
 
 	int i;
 	double d_delay_increase;
@@ -291,13 +294,13 @@ static void SetupSwitches(INP t_arch Arch,
 
 	RoutingArch->num_switch = NumArchSwitches;
 
-	/* AP: Adds the extra switch types with increased delay */
+	/* ANDRE: Adds the extra switch types with increased delay */
 	RoutingArch->num_switch *= 2;
 
 	/* Depends on RoutingArch->num_switch */
 	RoutingArch->wire_to_ipin_switch = RoutingArch->num_switch;
 	++RoutingArch->num_switch;
-	
+
 	/* Adds the extra switch type with increased delay for the wire_to_ipin case */
 	++RoutingArch->num_switch;
 
@@ -455,6 +458,15 @@ static void SetupRouterOpts(INP t_options Options, INP boolean TimingEnabled,
 		RouterOpts->fixed_channel_width = Options.RouteChanWidth;
 	}
 
+	RouterOpts->trim_empty_channels = FALSE; /* DEFAULT */
+	if (Options.Count[OT_TRIM_EMPTY_CHAN]) {
+		RouterOpts->trim_empty_channels = Options.TrimEmptyChan;
+	}
+	RouterOpts->trim_obs_channels = FALSE; /* DEFAULT */
+	if (Options.Count[OT_TRIM_OBS_CHAN]) {
+		RouterOpts->trim_obs_channels = Options.TrimObsChan;
+	}
+
 	/* Depends on RouterOpts->router_algorithm */
 	RouterOpts->initial_pres_fac = 0.5; /* DEFAULT */
 	if (NO_TIMING == RouterOpts->router_algorithm || Options.Count[OT_FAST]) {
@@ -515,6 +527,12 @@ static void SetupRouterOpts(INP t_options Options, INP boolean TimingEnabled,
 			RouterOpts->doRouting = TRUE;
 	}
 
+	/* Andre: Default value for the predictor is SAFE */
+	RouterOpts->routing_failure_predictor = SAFE;
+	if (Options.Count[OT_ROUTING_FAILURE_PREDICTOR]) {
+		RouterOpts->routing_failure_predictor = Options.routing_failure_predictor;
+	}
+
 }
 
 static void SetupAnnealSched(INP t_options Options,
@@ -524,38 +542,31 @@ static void SetupAnnealSched(INP t_options Options,
 		AnnealSched->alpha_t = Options.PlaceAlphaT;
 	}
 	if (AnnealSched->alpha_t >= 1 || AnnealSched->alpha_t <= 0) {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"alpha_t must be between 0 and 1 exclusive.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_OTHER,__FILE__, __LINE__, "alpha_t must be between 0 and 1 exclusive.\n");
 	}
 	AnnealSched->exit_t = 0.01; /* DEFAULT */
 	if (Options.Count[OT_EXIT_T]) {
 		AnnealSched->exit_t = Options.PlaceExitT;
 	}
 	if (AnnealSched->exit_t <= 0) {
-		vpr_printf(TIO_MESSAGE_ERROR, "exit_t must be greater than 0.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_OTHER,__FILE__, __LINE__, "exit_t must be greater than 0.\n");
 	}
 	AnnealSched->init_t = 100.0; /* DEFAULT */
 	if (Options.Count[OT_INIT_T]) {
 		AnnealSched->init_t = Options.PlaceInitT;
 	}
 	if (AnnealSched->init_t <= 0) {
-		vpr_printf(TIO_MESSAGE_ERROR, "init_t must be greater than 0.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_OTHER,__FILE__, __LINE__, "init_t must be greater than 0.\n");
 	}
 	if (AnnealSched->init_t < AnnealSched->exit_t) {
-		vpr_printf(TIO_MESSAGE_ERROR,
-				"init_t must be greater or equal to than exit_t.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_OTHER,__FILE__, __LINE__, "init_t must be greater or equal to than exit_t.\n");
 	}
 	AnnealSched->inner_num = 1.0; /* DEFAULT */
 	if (Options.Count[OT_INNER_NUM]) {
 		AnnealSched->inner_num = Options.PlaceInnerNum;
 	}
 	if (AnnealSched->inner_num <= 0) {
-		vpr_printf(TIO_MESSAGE_ERROR, "init_t must be greater than 0.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_OTHER,__FILE__, __LINE__, "init_t must be greater than 0.\n");
 	}
 	AnnealSched->type = AUTO_SCHED; /* DEFAULT */
 	if ((Options.Count[OT_ALPHA_T]) || (Options.Count[OT_EXIT_T])

@@ -1,7 +1,9 @@
 /************************* INCLUDES *********************************/
-#include <string.h>
-#include <assert.h>
+#include <cstring>
 #include <cfloat>
+using namespace std;
+
+#include <assert.h>
 
 #include "util.h"
 #include "PowerSpicedComponent.h"

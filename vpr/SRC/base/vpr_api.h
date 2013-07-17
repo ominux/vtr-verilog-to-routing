@@ -34,13 +34,14 @@
 #include "util.h"
 #include "read_xml_arch_file.h"
 #include "vpr_utils.h"
+#include "place_macro.h"
 
 /* Main VPR Operations */
 void vpr_init(INP int argc, INP char **argv, OUTP t_options *options,
 		OUTP t_vpr_setup *vpr_setup, OUTP t_arch *arch);
 void vpr_pack(INP t_vpr_setup vpr_setup, INP t_arch arch);
 void vpr_init_pre_place_and_route(INP t_vpr_setup vpr_setup, INP t_arch Arch);
-void vpr_place_and_route(INP t_vpr_setup vpr_setup, INP t_arch arch);
+boolean vpr_place_and_route(INP t_vpr_setup vpr_setup, INP t_arch arch);
 void vpr_power_estimation(t_vpr_setup vpr_setup, t_arch Arch);
 void vpr_free_vpr_data_structures(INOUTP t_arch Arch, INOUTP t_options options,
 		INOUTP t_vpr_setup vpr_setup);
@@ -97,5 +98,8 @@ char *vpr_get_output_file_name(enum e_output_files ename);
 /* resync netlists */
 t_trace* vpr_resync_post_route_netlist_to_TI_CLAY_v1_architecture(
 		INP const t_arch *arch);
+
+/* Prints user/internal errors for VPR */
+void vpr_print_error(t_vpr_error* vpr_error);
 
 #endif

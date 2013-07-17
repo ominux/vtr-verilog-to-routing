@@ -1,6 +1,7 @@
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
+#include <cstdio>
+#include <cstring>
+using namespace std;
+
 #include "util.h"
 #include "hash.h"
 #include "vpr_types.h"
@@ -35,6 +36,8 @@ static char **ReadRouterAlgorithm(INP char **Args,
 		OUTP enum e_router_algorithm *Algo);
 static char **ReadPackerAlgorithm(INP char **Args,
 		OUTP enum e_packer_algorithm *Algo);
+static char **ReadRoutingPredictor(INP char **Args,
+		OUTP enum e_routing_failure_predictor *RoutingPred);
 static char **ReadBaseCostType(INP char **Args,
 		OUTP enum e_base_cost_type *BaseCostType);
 static char **ReadRouteType(INP char **Args, OUTP enum e_route_type *Type);
@@ -166,6 +169,8 @@ void alloc_and_load_echo_file_info() {
 	setEchoFileName(E_ECHO_CRITICALITY, "criticality.echo");
 	setEchoFileName(E_ECHO_COMPLETE_NET_TRACE, "complete_net_trace.echo");
 	setEchoFileName(E_ECHO_SEG_DETAILS, "seg_details.txt");
+	setEchoFileName(E_ECHO_CHAN_DETAILS, "chan_details.txt");
+	setEchoFileName(E_ECHO_SBLOCK_PATTERN, "sblock_pattern.txt");
 }
 
 void free_echo_file_info() {
@@ -264,7 +269,7 @@ void ReadOptions(INP int argc, INP char **argv, OUTP t_options * Options) {
 			Args = ProcessOption(Args, Options);
 		} else if (NULL == Options->ArchFile) {
 			Options->ArchFile = my_strdup(*Args);
-			vpr_printf(TIO_MESSAGE_INFO, "Architecture file: %s\n", Options->ArchFile);
+			vpr_printf_info("Architecture file: %s\n", Options->ArchFile);
 			++Args;
 		} else if (NULL == Options->CircuitName) {
 			Options->CircuitName = my_strdup(*Args);
@@ -273,8 +278,8 @@ void ReadOptions(INP int argc, INP char **argv, OUTP t_options * Options) {
 			if (offset > 0 && !strcmp(Options->CircuitName + offset, ".blif")) {
 				Options->CircuitName[offset] = '\0';
 			}
-			vpr_printf(TIO_MESSAGE_INFO, "Circuit name: %s.blif\n", Options->CircuitName);
-			vpr_printf(TIO_MESSAGE_INFO, "\n");
+			vpr_printf_info("Circuit name: %s.blif\n", Options->CircuitName);
+			vpr_printf_info("\n");
 			++Args;
 		} else {
 			/* Not an option and arch and net already specified so fail */
@@ -451,6 +456,10 @@ ProcessOption(INP char **Args, INOUTP t_options * Options) {
 		return Args;
 	case OT_ROUTE_CHAN_WIDTH:
 		return ReadInt(Args, &Options->RouteChanWidth);
+	case OT_TRIM_EMPTY_CHAN:
+		return ReadOnOff(Args, &Options->TrimEmptyChan);
+	case OT_TRIM_OBS_CHAN:
+		return ReadOnOff(Args, &Options->TrimObsChan);
 	case OT_ROUTER_ALGORITHM:
 		return ReadRouterAlgorithm(Args, &Options->RouterAlgorithm);
 	case OT_BASE_COST_TYPE:
@@ -473,6 +482,8 @@ ProcessOption(INP char **Args, INOUTP t_options * Options) {
 		return ReadFloat(Args, &Options->max_criticality);
 	case OT_CRITICALITY_EXP:
 		return ReadFloat(Args, &Options->criticality_exp);
+	case OT_ROUTING_FAILURE_PREDICTOR:
+		return ReadRoutingPredictor(Args, &Options->routing_failure_predictor);
 
 		/* Power options */
 	case OT_POWER:
@@ -485,8 +496,9 @@ ProcessOption(INP char **Args, INOUTP t_options * Options) {
 		return ReadString(Args, &Options->CmosTechFile);
 
 	default:
-		vpr_printf(TIO_MESSAGE_ERROR, "Unexpected option '%s' on command line.\n", *PrevArgs);
-		exit(1);
+		vpr_throw(VPR_ERROR_OTHER, __FILE__, __LINE__, 
+			"Unexpected option '%s' on command line.\n", *PrevArgs);
+		return NULL;
 	}
 }
 
@@ -688,6 +700,12 @@ static void MergeOptions(INOUTP t_options * dest, INP t_options * src, int id)
 		case OT_ROUTE_CHAN_WIDTH:
 			dest->RouteChanWidth = src->RouteChanWidth;
 			break;
+		case OT_TRIM_EMPTY_CHAN:
+			dest->TrimEmptyChan = src->TrimEmptyChan;
+			break;
+		case OT_TRIM_OBS_CHAN:
+			dest->TrimObsChan = src->TrimObsChan;
+			break;
 		case OT_ROUTER_ALGORITHM:
 			dest->RouterAlgorithm = src->RouterAlgorithm;
 			break;
@@ -758,11 +776,12 @@ ReadToken(INP char **Args, OUTP enum e_OptionArgToken *Token) {
 /* Called for parse errors. Spits out a message and then exits program. */
 static void Error(INP const char *Token) {
 	if (Token) {
-		vpr_printf(TIO_MESSAGE_ERROR, "Unexpected token '%s' on command line.\n", Token);
+		vpr_throw(VPR_ERROR_OTHER, __FILE__, __LINE__, 
+		"Unexpected token '%s' on command line.\n", Token);
 	} else {
-		vpr_printf(TIO_MESSAGE_ERROR, "Missing token at end of command line.\n");
+		vpr_throw(VPR_ERROR_OTHER,__FILE__, __LINE__, 
+		"Missing token at end of command line.\n");
 	}
-	exit(1);
 }
 
 static char **
@@ -807,6 +826,7 @@ ReadPackerAlgorithm(INP char **Args, OUTP enum e_packer_algorithm *Algo) {
 	return Args;
 }
 
+
 static char **
 ReadRouterAlgorithm(INP char **Args, OUTP enum e_router_algorithm *Algo) {
 	enum e_OptionArgToken Token;
@@ -823,6 +843,30 @@ ReadRouterAlgorithm(INP char **Args, OUTP enum e_router_algorithm *Algo) {
 		break;
 	case OT_TIMING_DRIVEN:
 		*Algo = TIMING_DRIVEN;
+		break;
+	default:
+		Error(*PrevArgs);
+	}
+
+	return Args;
+}
+
+static char **
+ReadRoutingPredictor(INP char **Args, OUTP enum e_routing_failure_predictor *RoutingPred) {
+	enum e_OptionArgToken Token;
+	char **PrevArgs;
+
+	PrevArgs = Args;
+	Args = ReadToken(Args, &Token);
+	switch (Token) {
+	case OT_OFF:
+		*RoutingPred = OFF;
+		break;
+	case OT_ROUTING_FAILURE_SAFE:
+		*RoutingPred = SAFE;
+		break;
+	case OT_ROUTING_FAILURE_AGGRESSIVE:
+		*RoutingPred = AGGRESSIVE;
 		break;
 	default:
 		Error(*PrevArgs);

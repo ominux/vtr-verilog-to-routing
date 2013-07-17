@@ -1,4 +1,6 @@
-#include <math.h>		/* Needed only for sqrt call (remove if sqrt removed) */
+#include <cmath>		/* Needed only for sqrt call (remove if sqrt removed) */
+using namespace std;
+
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
@@ -76,7 +78,7 @@ void alloc_and_load_rr_indexed_data(INP t_segment_inf * segment_inf,
 		if (segment_inf[iseg].longline)
 			length = nx;
 		else
-			length = std::min(segment_inf[iseg].length, nx);
+			length = min(segment_inf[iseg].length, nx);
 
 		rr_indexed_data[index].inv_length = 1. / length;
 		rr_indexed_data[index].seg_index = iseg;
@@ -95,7 +97,7 @@ void alloc_and_load_rr_indexed_data(INP t_segment_inf * segment_inf,
 		if (segment_inf[iseg].longline)
 			length = ny;
 		else
-			length = std::min(segment_inf[iseg].length, ny);
+			length = min(segment_inf[iseg].length, ny);
 
 		rr_indexed_data[index].inv_length = 1. / length;
 		rr_indexed_data[index].seg_index = iseg;
@@ -189,7 +191,7 @@ static float get_delay_normalization_fac(int nodes_per_chan,
 	Tdel_sum = 0.;
 
 	for (itrack = 0; itrack < nodes_per_chan; itrack++) {
-		inode = get_rr_node_index((nx + 1) / 2, (ny + 1) / 2, CHANX, itrack,
+		inode = find_average_rr_node_index(nx, ny, CHANX, itrack, 
 				L_rr_node_indices);
 		cost_index = rr_node[inode].cost_index;
 		frac_num_seg = clb_dist * rr_indexed_data[cost_index].inv_length;
@@ -200,7 +202,7 @@ static float get_delay_normalization_fac(int nodes_per_chan,
 	}
 
 	for (itrack = 0; itrack < nodes_per_chan; itrack++) {
-		inode = get_rr_node_index((nx + 1) / 2, (ny + 1) / 2, CHANY, itrack,
+		inode = find_average_rr_node_index(nx, ny, CHANY, itrack, 
 				L_rr_node_indices);
 		cost_index = rr_node[inode].cost_index;
 		frac_num_seg = clb_dist * rr_indexed_data[cost_index].inv_length;
@@ -230,7 +232,7 @@ static float get_average_opin_delay(t_ivec *** L_rr_node_indices,
 		for (ipin = 0; ipin < type_descriptors[itype].num_pins; ipin++) {
 			iclass = type_descriptors[itype].pin_class[ipin];
 			if (type_descriptors[itype].class_inf[iclass].type == DRIVER) { /* OPIN */
-				inode = get_rr_node_index((nx + 1) / 2, (ny + 1) / 2, OPIN,
+				inode = find_average_rr_node_index(nx, ny, OPIN,
 						ipin, L_rr_node_indices);
 				num_edges = rr_node[inode].num_edges;
 
@@ -273,7 +275,7 @@ static void load_rr_indexed_data_T_values(int index_start,
 	 * channel segment, near the middle of the array.                           */
 
 	for (itrack = 0; itrack < nodes_per_chan; itrack++) {
-		inode = get_rr_node_index((nx + 1) / 2, (ny + 1) / 2, rr_type, itrack,
+		inode = find_average_rr_node_index(nx, ny, rr_type, itrack,
 				L_rr_node_indices);
 		cost_index = rr_node[inode].cost_index;
 		num_nodes_of_index[cost_index]++;

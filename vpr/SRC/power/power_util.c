@@ -20,7 +20,9 @@
  */
 
 /************************* INCLUDES *********************************/
-#include <string.h>
+#include <cstring>
+using namespace std;
+
 #include <assert.h>
 
 #include "power_util.h"
@@ -83,7 +85,7 @@ float pin_dens(t_pb * pb, t_pb_graph_pin * pin) {
 		net_num = pb->rr_graph[pin->pin_count_in_cluster].net_num;
 
 		if (net_num != OPEN) {
-			density = vpack_net[net_num].density;
+			density = vpack_net[net_num].net_power->density;
 		}
 	}
 
@@ -99,7 +101,7 @@ float pin_prob(t_pb * pb, t_pb_graph_pin * pin) {
 		net_num = pb->rr_graph[pin->pin_count_in_cluster].net_num;
 
 		if (net_num != OPEN) {
-			prob = vpack_net[net_num].probability;
+			prob = vpack_net[net_num].net_power->probability;
 		}
 	}
 
@@ -420,7 +422,7 @@ float clb_net_density(int net_idx) {
 	if (net_idx == OPEN) {
 		return 0.;
 	} else {
-		return clb_net[net_idx].density;
+		return clb_net[net_idx].net_power->density;
 	}
 }
 
@@ -428,7 +430,7 @@ float clb_net_prob(int net_idx) {
 	if (net_idx == OPEN) {
 		return 0.;
 	} else {
-		return clb_net[net_idx].probability;
+		return clb_net[net_idx].net_power->probability;
 	}
 }
 
@@ -466,8 +468,7 @@ void output_logs(FILE * fp, t_log * logs, int num_logs) {
 }
 
 float power_buffer_size_from_logical_effort(float C_load) {
-	return std::max(1.0f,
-			C_load / g_power_commonly_used->INV_1X_C_in
+	return max(1.0f, C_load / g_power_commonly_used->INV_1X_C_in
 					/ (2 * g_power_arch->logical_effort_factor));
 }
 

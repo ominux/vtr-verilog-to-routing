@@ -11,9 +11,12 @@
  Author: Jason Luu
  March 12, 2012
  */
-#include <stdio.h>
+
+#include <cstdio>
+#include <cstring>
+using namespace std;
+
 #include <assert.h>
-#include <string.h>
 
 #include "read_xml_arch_file.h"
 #include "util.h"

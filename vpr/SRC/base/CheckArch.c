@@ -1,4 +1,3 @@
-#include <assert.h>
 #include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
@@ -34,15 +33,17 @@ static void CheckSwitches(INP t_arch Arch, INP boolean TimingEnabled) {
 			 * pass transistoron the output.  
 			 * Hence largest R = 2 * largest_transistor_R. */
 			if (CurSwitch->R > 2 * Arch.R_minW_nmos) {
-				vpr_printf(TIO_MESSAGE_ERROR, "Switch %s R value (%g) is greater than 2 * R_minW_nmos (%g).\n", 
+				vpr_throw(VPR_ERROR_ARCH, get_arch_file_name(), 0, 
+						"Switch %s R value (%g) is greater than 2 * R_minW_nmos (%g).\n"
+						"Refer to switchlist section of '%s'\n", 
 						CurSwitch->name, CurSwitch->R, (2 * Arch.R_minW_nmos));
-				exit(1);
 			}
 		} else { /* Pass transistor switch */
 			if (CurSwitch->R > Arch.R_minW_nmos) {
-				vpr_printf(TIO_MESSAGE_ERROR, "Switch %s R value (%g) is greater than R_minW_nmos (%g).\n", 
-						CurSwitch->name, CurSwitch->R, Arch.R_minW_nmos);
-				exit(1);
+				vpr_throw(VPR_ERROR_ARCH, get_arch_file_name(), 0, 
+						"Switch %s R value (%g) is greater than R_minW_nmos (%g).\n"
+						"Refer to switchlist section of '%s'\n", 
+						CurSwitch->name, CurSwitch->R, Arch.R_minW_nmos, get_arch_file_name());
 			}
 		}
 	}
@@ -56,8 +57,9 @@ static void CheckSegments(INP t_arch Arch) {
 	for (i = 0; i < Arch.num_segments; i++) {
 		if (CurSeg[i].directionality == UNI_DIRECTIONAL
 				&& CurSeg[i].longline == TRUE) {
-			vpr_printf(TIO_MESSAGE_ERROR, "Long lines not supported for unidirectional architectures.\n");
-			exit(1);
+			vpr_throw(VPR_ERROR_ARCH, get_arch_file_name(), 0, 
+					"Long lines not supported for unidirectional architectures.\n"
+					"Refer to segmentlist of '%s'\n",get_arch_file_name());
 		}
 	}
 }

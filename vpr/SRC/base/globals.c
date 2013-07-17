@@ -55,6 +55,7 @@ int ny = 0;
 
 int *chan_width_x = NULL; /* [0..ny] */
 int *chan_width_y = NULL; /* [0..nx] */
+int chan_width_max = 0;
 
 struct s_grid_tile **grid = NULL; /* [0..(nx+1)][0..(ny+1)] Physical block list */
 
@@ -95,6 +96,7 @@ const t_pb_type *pbtype_max_internal_delay = NULL; /* physical block type with h
 
 /********** Structures representing the global clock network */
 t_clock_arch * g_clock_arch;
+
 
 /********** Stuff added by me (Andre) **************************/
 /* Related to the interposer */

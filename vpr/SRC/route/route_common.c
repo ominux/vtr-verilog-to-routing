@@ -1,11 +1,14 @@
-#include <math.h>
-#include <stdio.h>
+#include <cstdio>
+#include <ctime>
+#include <cmath>
+using namespace std;
+
 #include <assert.h>
-#include <time.h>
+
 #include "util.h"
 #include "vpr_types.h"
-#include "vpr_utils.h"
 #include "globals.h"
+#include "vpr_utils.h"
 #include "route_export.h"
 #include "route_common.h"
 #include "route_tree_timing.h"
@@ -214,7 +217,7 @@ void get_serial_num(void) {
 			tptr = tptr->next;
 		}
 	}
-	vpr_printf(TIO_MESSAGE_INFO, "Serial number (magic cookie) for the routing is: %d\n", serial_num);
+	vpr_printf_info("Serial number (magic cookie) for the routing is: %d\n", serial_num);
 }
 
 boolean try_route(int width_fac, struct s_router_opts router_opts,
@@ -230,61 +233,62 @@ boolean try_route(int width_fac, struct s_router_opts router_opts,
 	 * architecture (connection and switch boxes) of the FPGA; it is used   *
 	 * only if a DETAILED routing has been selected.                        */
 
-	int tmp;
-	clock_t begin, end;
-	boolean success;
 	t_graph_type graph_type;
-
 	if (router_opts.route_type == GLOBAL) {
 		graph_type = GRAPH_GLOBAL;
 	} else {
-		graph_type = (
-				det_routing_arch.directionality == BI_DIRECTIONAL ?
+		graph_type = (det_routing_arch.directionality == BI_DIRECTIONAL ?
 						GRAPH_BIDIR : GRAPH_UNIDIR);
 	}
 
 	/* Set the channel widths */
-
-	init_chan(width_fac, chan_width_dist);
+	init_chan(width_fac, &router_opts.fixed_channel_width, chan_width_dist);
 
 	/* Free any old routing graph, if one exists. */
-
 	free_rr_graph();
 
-	begin = clock();
+	clock_t begin = clock();
 
 	/* Set up the routing resource graph defined by this FPGA architecture. */
-
+	int warning_count;
 	build_rr_graph(graph_type, num_types, type_descriptors, nx, ny, grid,
-			chan_width_x[0], NULL, det_routing_arch.switch_block_type,
+			chan_width_max, NULL, det_routing_arch.switch_block_type,
 			det_routing_arch.Fs, det_routing_arch.num_segment,
 			det_routing_arch.num_switch, segment_inf,
 			det_routing_arch.global_route_switch,
 			det_routing_arch.delayless_switch, timing_inf,
-			det_routing_arch.wire_to_ipin_switch, router_opts.base_cost_type,
+			det_routing_arch.wire_to_ipin_switch, 
+			router_opts.base_cost_type, 
+			router_opts.trim_empty_channels,
+			router_opts.trim_obs_channels,
 			directs, num_directs, FALSE,
-			&tmp);
+			&warning_count);
 
-	end = clock();
+	clock_t end = clock();
 #ifdef CLOCKS_PER_SEC
-	vpr_printf(TIO_MESSAGE_INFO, "Build rr_graph took %g seconds.\n", (float)(end - begin) / CLOCKS_PER_SEC);
+	vpr_printf_info("Build rr_graph took %g seconds.\n", (float)(end - begin) / CLOCKS_PER_SEC);
 #else
-	vpr_printf(TIO_MESSAGE_INFO, "Build rr_graph took %g seconds.\n", (float)(end - begin) / CLK_PER_SEC);
+	vpr_printf_info("Build rr_graph took %g seconds.\n", (float)(end - begin) / CLK_PER_SEC);
 #endif
 
-	/* Allocate and load some additional rr_graph information needed only by *
-	 * the router.                                                           */
+	boolean success = TRUE;
 
+#ifdef TORO_PREROUTED_ROUTING_ENABLE
+	bool valid = validate_prerouted_nets();
+	if (valid) {
+#endif
+
+	/* Allocate and load additional rr_graph information needed only by the router. */
 	alloc_and_load_rr_node_route_structs();
 
 	init_route_structs(router_opts.bb_factor);
 
 	if (router_opts.router_algorithm == BREADTH_FIRST) {
-		vpr_printf(TIO_MESSAGE_INFO, "Confirming Router Algorithm: BREADTH_FIRST.\n");
+		vpr_printf_info("Confirming router algorithm: BREADTH_FIRST.\n");
 		success = try_breadth_first_route(router_opts, clb_opins_used_locally,
 				width_fac);
 	} else { /* TIMING_DRIVEN route */
-		vpr_printf(TIO_MESSAGE_INFO, "Confirming Router Algorithm: TIMING_DRIVEN.\n");
+		vpr_printf_info("Confirming router algorithm: TIMING_DRIVEN.\n");
 		assert(router_opts.route_type != GLOBAL);
 		success = try_timing_driven_route(router_opts, net_delay, slacks,
 			clb_opins_used_locally,timing_inf.timing_analysis_enabled);
@@ -292,6 +296,9 @@ boolean try_route(int width_fac, struct s_router_opts router_opts,
 
 	free_rr_node_route_structs();
 
+#ifdef TORO_PREROUTED_ROUTING_ENABLE
+	}
+#endif
 	return (success);
 }
 
@@ -343,9 +350,9 @@ void pathfinder_update_one_cost(struct s_trace *route_segment_start,
 		 * node.                                                                    */
 
 		if (occ < capacity) {
-			rr_node_route_inf[inode].pres_cost = 1.;
+			rr_node_route_inf[inode].pres_cost = 1.0;
 		} else {
-			rr_node_route_inf[inode].pres_cost = 1.
+			rr_node_route_inf[inode].pres_cost = 1.0
 					+ (occ + 1 - capacity) * pres_fac;
 		}
 
@@ -378,7 +385,7 @@ void pathfinder_update_cost(float pres_fac, float acc_fac) {
 
 		if (occ > capacity) {
 			rr_node_route_inf[inode].acc_cost += (occ - capacity) * acc_fac;
-			rr_node_route_inf[inode].pres_cost = 1.
+			rr_node_route_inf[inode].pres_cost = 1.0
 					+ (occ + 1 - capacity) * pres_fac;
 		}
 
@@ -386,7 +393,7 @@ void pathfinder_update_cost(float pres_fac, float acc_fac) {
 		 * in pres_fac could have made it necessary to recompute the cost anyway.  */
 
 		else if (occ == capacity) {
-			rr_node_route_inf[inode].pres_cost = 1. + pres_fac;
+			rr_node_route_inf[inode].pres_cost = 1.0 + pres_fac;
 		}
 	}
 }
@@ -407,13 +414,13 @@ void init_route_structs(int bb_factor) {
 	 * really were.                                                           */
 
 	if (rr_modified_head != NULL) {
-		vpr_printf(TIO_MESSAGE_ERROR, "in init_route_structs. List of modified rr nodes is not empty.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_ROUTE, __FILE__, __LINE__, 
+			"in init_route_structs. List of modified rr nodes is not empty.\n");
 	}
 
 	if (heap_tail != 1) {
-		vpr_printf(TIO_MESSAGE_ERROR, "in init_route_structs. Heap is not empty.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_ROUTE, __FILE__, __LINE__, 
+			"in init_route_structs. Heap is not empty.\n");
 	}
 }
 
@@ -446,9 +453,9 @@ update_traceback(struct s_heap *hptr, int inet) {
 #ifdef DEBUG
 	rr_type = rr_node[inode].type;
 	if (rr_type != SINK) {
-		vpr_printf(TIO_MESSAGE_ERROR, "in update_traceback. Expected type = SINK (%d).\n", SINK);
-		vpr_printf(TIO_MESSAGE_ERROR, "\tGot type = %d while tracing back net %d.\n", rr_type, inet);
-		exit(1);
+		vpr_throw(VPR_ERROR_ROUTE, __FILE__, __LINE__, 
+			"in update_traceback. Expected type = SINK (%d).\n"
+			"\tGot type = %d while tracing back net %d.\n", SINK, rr_type, inet);
 	}
 #endif
 
@@ -784,8 +791,8 @@ void alloc_and_load_rr_node_route_structs(void) {
 	int inode;
 
 	if (rr_node_route_inf != NULL) {
- 		vpr_printf(TIO_MESSAGE_ERROR, "in alloc_and_load_rr_node_route_structs: old rr_node_route_inf array exists.\n");
-		exit(1);
+		vpr_throw(VPR_ERROR_ROUTE, __FILE__, __LINE__, 
+			"in alloc_and_load_rr_node_route_structs: old rr_node_route_inf array exists.\n");
 	}
 
 	rr_node_route_inf = (t_rr_node_route_inf *) my_malloc(num_rr_nodes * sizeof(t_rr_node_route_inf));
@@ -793,8 +800,8 @@ void alloc_and_load_rr_node_route_structs(void) {
 	for (inode = 0; inode < num_rr_nodes; inode++) {
 		rr_node_route_inf[inode].prev_node = NO_PREVIOUS;
 		rr_node_route_inf[inode].prev_edge = NO_PREVIOUS;
-		rr_node_route_inf[inode].pres_cost = 1.;
-		rr_node_route_inf[inode].acc_cost = 1.;
+		rr_node_route_inf[inode].pres_cost = 1.0;
+		rr_node_route_inf[inode].acc_cost = 1.0;
 		rr_node_route_inf[inode].path_cost = HUGE_POSITIVE_FLOAT;
 		rr_node_route_inf[inode].target_flag = 0;
 	}
@@ -812,8 +819,8 @@ void reset_rr_node_route_structs(void) {
 	for (inode = 0; inode < num_rr_nodes; inode++) {
 		rr_node_route_inf[inode].prev_node = NO_PREVIOUS;
 		rr_node_route_inf[inode].prev_edge = NO_PREVIOUS;
-		rr_node_route_inf[inode].pres_cost = 1.;
-		rr_node_route_inf[inode].acc_cost = 1.;
+		rr_node_route_inf[inode].pres_cost = 1.0;
+		rr_node_route_inf[inode].acc_cost = 1.0;
 		rr_node_route_inf[inode].path_cost = HUGE_POSITIVE_FLOAT;
 		rr_node_route_inf[inode].target_flag = 0;
 	}
@@ -845,10 +852,10 @@ static void load_route_bb(int bb_factor) {
 	int k, xmax, ymax, xmin, ymin, x, y, inet;
 
 	for (inet = 0; inet < num_nets; inet++) {
-		x = block[clb_net[inet].node_block[0]].x;
-		y =
-				block[clb_net[inet].node_block[0]].y
-						+ block[clb_net[inet].node_block[0]].type->pin_height[clb_net[inet].node_block_pin[0]];
+		x = block[clb_net[inet].node_block[0]].x
+			+ block[clb_net[inet].node_block[0]].type->pin_width[clb_net[inet].node_block_pin[0]];
+		y = block[clb_net[inet].node_block[0]].y
+			+ block[clb_net[inet].node_block[0]].type->pin_height[clb_net[inet].node_block_pin[0]];
 
 		xmin = x;
 		ymin = y;
@@ -856,10 +863,10 @@ static void load_route_bb(int bb_factor) {
 		ymax = y;
 
 		for (k = 1; k <= clb_net[inet].num_sinks; k++) {
-			x = block[clb_net[inet].node_block[k]].x;
-			y =
-					block[clb_net[inet].node_block[k]].y
-							+ block[clb_net[inet].node_block[k]].type->pin_height[clb_net[inet].node_block_pin[k]];
+			x = block[clb_net[inet].node_block[k]].x
+				+ block[clb_net[inet].node_block[k]].type->pin_width[clb_net[inet].node_block_pin[k]];
+			y = block[clb_net[inet].node_block[k]].y
+				+ block[clb_net[inet].node_block[k]].type->pin_height[clb_net[inet].node_block_pin[k]];
 
 			if (x < xmin) {
 				xmin = x;
@@ -882,10 +889,10 @@ static void load_route_bb(int bb_factor) {
 		/* Expand the net bounding box by bb_factor, then clip to the physical *
 		 * chip area.                                                          */
 
-		route_bb[inet].xmin = std::max(xmin - bb_factor, 0);
-		route_bb[inet].xmax = std::min(xmax + bb_factor, nx + 1);
-		route_bb[inet].ymin = std::max(ymin - bb_factor, 0);
-		route_bb[inet].ymax = std::min(ymax + bb_factor, ny + 1);
+		route_bb[inet].xmin = max(xmin - bb_factor, 0);
+		route_bb[inet].xmax = min(xmax + bb_factor, nx + 1);
+		route_bb[inet].ymin = max(ymin - bb_factor, 0);
+		route_bb[inet].ymax = min(ymax + bb_factor, ny + 1);
 	}
 }
 
@@ -951,8 +958,8 @@ get_heap_head(void) {
 
 	do {
 		if (heap_tail == 1) { /* Empty heap. */
-			vpr_printf(TIO_MESSAGE_WARNING, "Empty heap occurred in get_heap_head.\n");
-			vpr_printf(TIO_MESSAGE_WARNING, "Some blocks are impossible to connect in this architecture.\n");
+			vpr_printf_warning(__FILE__, __LINE__, "Empty heap occurred in get_heap_head.\n");
+			vpr_printf_warning(__FILE__, __LINE__, "Some blocks are impossible to connect in this architecture.\n");
 			return (NULL);
 		}
 
@@ -1093,8 +1100,6 @@ void print_route(char *route_file) {
 	int inet, inode, ipin, bnum, ilow, jlow, node_block_pin, iclass;
 	t_rr_type rr_type;
 	struct s_trace *tptr;
-	const char *name_type[] = { "SOURCE", "SINK", "IPIN", "OPIN", "CHANX", "CHANY",
-			"INTRA_CLUSTER_EDGE" };
 	FILE *fp;
 
 	fp = fopen(route_file, "w");
@@ -1116,7 +1121,8 @@ void print_route(char *route_file) {
 					ilow = rr_node[inode].xlow;
 					jlow = rr_node[inode].ylow;
 
-					fprintf(fp, "Node:\t%d\t%6s (%d,%d) ", inode, name_type[rr_type], ilow, jlow);
+					fprintf(fp, "Node:\t%d\t%6s (%d,%d) ", inode, 
+							rr_node[inode].rr_get_type_string(), ilow, jlow);
 
 					if ((ilow != rr_node[inode].xhigh)
 							|| (jlow != rr_node[inode].yhigh))
@@ -1149,9 +1155,9 @@ void print_route(char *route_file) {
 						break;
 
 					default:
-						vpr_printf(TIO_MESSAGE_ERROR, "in print_route: Unexpected traceback element type: %d (%s).\n", 
-								rr_type, name_type[rr_type]);
-						exit(1);
+						vpr_throw(VPR_ERROR_ROUTE, __FILE__, __LINE__, 
+								  "in print_route: Unexpected traceback element type: %d (%s).\n", 
+								  rr_type, rr_node[inode].rr_get_type_string());
 						break;
 					}
 
@@ -1270,18 +1276,82 @@ static void adjust_one_rr_occ_and_pcost(int inode, int add_or_sub,
 	rr_node[inode].occ = occ;
 
 	if (occ < capacity) {
-		rr_node_route_inf[inode].pres_cost = 1.;
+		rr_node_route_inf[inode].pres_cost = 1.0;
 	} else {
-		rr_node_route_inf[inode].pres_cost = 1.
-				+ (occ + 1 - capacity) * pres_fac;
+		rr_node_route_inf[inode].pres_cost = 1.0 + (occ + 1 - capacity) * pres_fac;
 	}
 }
-
 
 void free_chunk_memory_trace(void) {
 	if (trace_ch.chunk_ptr_head != NULL) {
 		free_chunk_memory(&trace_ch);
 	}
 }
+
+#ifdef TORO_PREROUTED_ROUTING_ENABLE
+//===========================================================================//
+bool validate_prerouted_nets(
+		void) {
+
+	bool valid = TRUE;
+
+	// Verify at least one pre-routed constraint has been defined
+	TCH_PreRoutedHandler_c& preRoutedHandler = TCH_PreRoutedHandler_c::GetInstance();
+	if (preRoutedHandler.IsValid()) {
+
+		vpr_printf_info("Validating preroutes using mode: %s.\n",
+			preRoutedHandler.GetOrderMode() == TCH_ROUTE_ORDER_FIRST ? "FIRST" : "AUTO");
+
+		// Initialize pre-routing handler based on local data structures
+		preRoutedHandler.Set( grid, nx, ny,
+					block, num_blocks,
+					clb_net, num_nets,
+					rr_node, num_rr_nodes);
+
+		// And, validate local data strucures using pre-routing handler
+		valid = preRoutedHandler.ValidatePreRoutes( );
+	}
+	return (valid);
+}
+
+//===========================================================================//
+bool restrict_prerouted_path(
+		int inet, 
+		int itry,
+		int src_node, int sink_node, 
+		int from_node, int to_node) {
+
+	bool restrict = FALSE;
+
+	// Verify at least one pre-routed constraint has been defined
+	TCH_PreRoutedHandler_c& preRoutedHandler = TCH_PreRoutedHandler_c::GetInstance();
+	if (preRoutedHandler.IsValid()) {
+
+		const char* pszNetName = clb_net[inet].name;
+
+		// Test if net is legal based on either ROUTED or FIXED status
+		if (preRoutedHandler.IsLegalPreRouteNet(pszNetName, itry)) {
+
+			// Test if net is a pre-route AND current source/sink is valid
+			// TRUE => need to further examine pre-route path
+			// FALSE => don't need to restrict
+			if (preRoutedHandler.IsMemberPreRouteNet(pszNetName, 
+								src_node, sink_node)) {
+
+				// Test if from/to nodes are part of net's pre-route path
+				// TRUE => don't need to restrict
+				// FALSE => need to restrict since from/to nodes are not part of pre-route path
+				if (!preRoutedHandler.IsMemberPreRoutePath(pszNetName, 
+									src_node, sink_node, 
+									from_node, to_node)) {
+					restrict = TRUE;
+				}
+			}
+		}
+	}
+	return (restrict);
+}
+//===========================================================================//
+#endif
 
 
