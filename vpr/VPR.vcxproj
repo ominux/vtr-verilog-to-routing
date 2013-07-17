@@ -81,7 +81,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\libarchfpga\include;SRC\pcre;SRC\util;SRC\timing;SRC\route;SRC\place;SRC\power;SRC\pack;SRC\base;../printhandler/SRC/TIO_InputOutputHandlers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libarchfpga\include;SRC\libcommon_c\pcre;SRC\util;SRC\timing;SRC\route;SRC\place;SRC\power;SRC\pack;SRC\draw;SRC\base;../libcommon_c++/SRC/TIO_InputOutputHandlers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;_CONSOLE;CREATE_ECHO_FILES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <SmallerTypeCheck>true</SmallerTypeCheck>
@@ -93,6 +93,7 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <DisableSpecificWarnings>4100; 4244; 4305;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <CompileAs>CompileAsCpp</CompileAs>
+      <ExceptionHandling>SyncCThrow</ExceptionHandling>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -111,7 +112,7 @@
       <WarningLevel>Level4</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4100; 4244; 4305;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>..\libarchfpga\include;SRC\pcre;SRC\util;SRC\timing;SRC\route;SRC\place;SRC\power;SRC\pack;SRC\base;../printhandler/SRC/TIO_InputOutputHandlers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libarchfpga\include;SRC\libcommon_c\pcre;SRC\util;SRC\timing;SRC\route;SRC\place;SRC\power;SRC\pack;SRC\draw;SRC\base;../libcommon_c++/SRC/TIO_InputOutputHandlers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
@@ -173,6 +174,8 @@
     <ClCompile Include="SRC\base\read_settings.c" />
     <ClCompile Include="SRC\base\verilog_writer.c" />
     <ClCompile Include="SRC\base\vpr_api.c" />
+    <ClCompile Include="SRC\draw\draw.c" />
+    <ClCompile Include="SRC\draw\graphics.c" />
     <ClCompile Include="SRC\main.c" />
     <ClCompile Include="SRC\base\check_netlist.c">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">SRC\util;SRC\timing;SRC\route;SRC\place;SRC\pack;SRC\base;..\libarchfpga\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -180,8 +183,6 @@
     <ClCompile Include="SRC\base\CheckArch.c" />
     <ClCompile Include="SRC\base\CheckOptions.c" />
     <ClCompile Include="SRC\base\CheckSetup.c" />
-    <ClCompile Include="SRC\base\draw.c" />
-    <ClCompile Include="SRC\base\graphics.c" />
     <ClCompile Include="SRC\base\OptionTokens.c" />
     <ClCompile Include="SRC\base\place_and_route.c" />
     <ClCompile Include="SRC\base\read_blif.c" />
@@ -242,11 +243,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SRC\base\check_netlist.h" />
-    <ClInclude Include="SRC\base\draw.h" />
-    <ClInclude Include="SRC\base\easygl_constants.h" />
     <ClInclude Include="SRC\base\globals.h" />
-    <ClInclude Include="SRC\base\globals_declare.h" />
-    <ClInclude Include="SRC\base\graphics.h" />
     <ClInclude Include="SRC\base\OptionTokens.h" />
     <ClInclude Include="SRC\base\place_and_route.h" />
     <ClInclude Include="SRC\base\read_blif.h" />
@@ -260,6 +257,9 @@
     <ClInclude Include="SRC\base\verilog_writer.h" />
     <ClInclude Include="SRC\base\vpr_api.h" />
     <ClInclude Include="SRC\base\vpr_types.h" />
+    <ClInclude Include="SRC\draw\draw.h" />
+    <ClInclude Include="SRC\draw\easygl_constants.h" />
+    <ClInclude Include="SRC\draw\graphics.h" />
     <ClInclude Include="SRC\pack\cluster_feasibility_filter.h" />
     <ClInclude Include="SRC\pack\cluster_placement.h" />
     <ClInclude Include="SRC\pack\prepack.h" />
@@ -313,10 +313,10 @@
     <ProjectReference Include="..\libarchfpga\libarchfpga.vcxproj">
       <Project>{cbba36e0-cd88-4586-afb6-a0e603d16796}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\pcre\pcre.vcxproj">
+    <ProjectReference Include="..\libcommon_c\pcre\pcre.vcxproj">
       <Project>{f15a8901-660a-4ffe-890e-74ccc94e862a}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\printhandler\printhandler.vcxproj">
+    <ProjectReference Include="..\libcommon_c++\printhandler.vcxproj">
       <Project>{a5092a9c-6dfd-4dec-9951-51606f5eaf3b}</Project>
     </ProjectReference>
   </ItemGroup>
