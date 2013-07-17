@@ -64,6 +64,8 @@ my $temp_dir = "./temp";
 my $percent_wires_cut = 0;
 my $num_cuts = 0;
 my $delay_increase = 0;
+my $placer_cost_constant = 0.0;
+my $constant_type = 0;
 
 my $stage_idx_odin   = 1;
 my $stage_idx_abc    = 2;
@@ -147,8 +149,15 @@ while ( $token = shift(@ARGV) ) {
 	elsif ( $token eq "-cuts" ){
 		$num_cuts = int (shift(@ARGV) );
 	}
+	elsif ( $token eq "-placer_cost_constant" ){
+		$placer_cost_constant = shift(@ARGV);
+		$placer_cost_constant = $placer_cost_constant * 1.0;
+	}
 	elsif ( $token eq "-delay" ){
 		$delay_increase = int (shift(@ARGV) );
+	}
+	elsif ( $token eq "-constant_type" ){
+		$constant_type = int (shift(@ARGV));
 	}
 	else {
 		die "Error: Invalid argument ($token)\n";
@@ -479,7 +488,9 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 			"--verify_binary_search",
 			"--percent_wires_cut",		"$percent_wires_cut",
 			"--num_cuts",			"$num_cuts",
-			"--delay_increase",		"0" # Doing binary search without increased delay
+			"--delay_increase",		"0", # Doing binary search without increased delay
+			"--placer_cost_constant",	"$placer_cost_constant",
+			"--constant_type", 		"$constant_type"
 		);
 		if ( $timing_driven eq "on" ) {
 			# Critical path delay is nonsensical at minimum channel width because congestion constraints completely dominate the cost function.
@@ -526,7 +537,9 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 					"--sdc_file",			 "$sdc_file_path",
 					"--percent_wires_cut",		"$percent_wires_cut",
 					"--num_cuts",			"$num_cuts",
-					"--delay_increase",		"$delay_increase"
+					"--delay_increase",		"$delay_increase",
+					"--placer_cost_constant",	"$placer_cost_constant",
+					"--constant_type",		"$constant_type"
 				);
 			}
 		}
@@ -543,7 +556,12 @@ if ( $ending_stage >= $stage_idx_vpr and !$error_code ) {
 			"--nodisp",                   "--cluster_seed_type",
 			"$vpr_cluster_seed_type",     @vpr_power_args,
 			"--gen_postsynthesis_netlist", "$gen_postsynthesis_netlist",
-			"--sdc_file",				  "$sdc_file_path"
+			"--sdc_file",				  "$sdc_file_path",
+			"--percent_wires_cut",		"$percent_wires_cut",
+			"--num_cuts",			"$num_cuts",
+			"--delay_increase",		"$delay_increase",
+			"--placer_cost_constant",	"$placer_cost_constant",
+			"--constant_type",		"$constant_type"
 		);
 	}
 	  					

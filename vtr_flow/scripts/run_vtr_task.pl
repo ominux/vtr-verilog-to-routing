@@ -63,6 +63,8 @@ my $system_type            = "local";
 my $percent_wires_cut		   = 0;
 my $num_cuts		   = 0;
 my $delay_increase		   = 0;
+my $placer_cost_constant   = 0.0;
+my $constant_type 	   = 0;
 
 # Parse Input Arguments
 while ( $token = shift(@ARGV) ) {
@@ -87,6 +89,15 @@ while ( $token = shift(@ARGV) ) {
 	
 	elsif ( $token eq "-delay_increase" ){
 		$delay_increase = int( shift(@ARGV) );
+	}
+
+	elsif ( $token eq "-placer_cost_constant" ){
+		$placer_cost_constant = shift(@ARGV);
+		$placer_cost_constant = $placer_cost_constant * 1.0;
+	}
+
+	elsif ( $token eq "-constant_type" ){
+		$constant_type = int( shift(@ARGV) );
 	}
 
 	elsif ( $token eq "-system" ) {
@@ -380,7 +391,7 @@ sub run_single_task {
 					# SDC file defaults to circuit_name.sdc
 					my $sdc = fileparse( $circuit, '\.[^.]+$' ) . ".sdc";
 					system(
-						"$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params -percent_wires_cut $percent_wires_cut -cuts $num_cuts -delay $delay_increase\n"
+						"$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params -percent_wires_cut $percent_wires_cut -cuts $num_cuts -delay $delay_increase -placer_cost_constant $placer_cost_constant -constant_type $constant_type\n"
 					);
 				}
 			}
@@ -401,7 +412,7 @@ sub run_single_task {
 					my $sdc = fileparse( $circuit, '\.[^.]+$' ) . ".sdc";
 
 					my $command =
-					  "$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params -percent_wires_cut $percent_wires_cut -cuts $num_cuts -delay $delay_increase";
+					  "$script_path $circuits_dir/$circuit $archs_dir/$arch -sdc_file $sdc_dir/$sdc $script_params -percent_wires_cut $percent_wires_cut -cuts $num_cuts -delay $delay_increase -placer_cost_constant $placer_cost_constant -constant_type $constant_type";
 					$thread_work->enqueue("$dir||||$command");
 				}
 			}
