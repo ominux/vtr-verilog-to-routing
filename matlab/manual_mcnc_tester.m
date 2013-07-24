@@ -45,13 +45,13 @@ labels = {
 
 %parseRegex ordering has to match labels ordering
 parseRegex = {
-                'Final critical path: (\d*\.\d*)',...
+                'Final critical path: (\d*\.*\d*)',...
                 'Total wirelength: (\d+)',...
-                'clb\s+Pin Diversity:\s+(\d*\.\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.\d*\s+Wire Homogeneity:\s+(\d*\.\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.\d*\s+Wire Homogeneity:\s+\d*\.\d*\s+Hamming Distance:\s+(\d*\.\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.\d*\s+Wire Homogeneity:\s+\d*\.\d*\s+Hamming Distance:\s+\d*\.\d*\s+Hamming Proximity:\s+(\d*\.\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.\d*\s+Wire Homogeneity:\s+\d*\.\d*\s+Hamming Distance:\s+\d*\.\d*\s+Hamming Proximity:\s+\d*\.\d*\s+Pin Homogeneity:\s+(\d*\.\d*)'
+                'clb\s+Pin Diversity:\s+(\d*\.*\d*)',...
+                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+(\d*\.*\d*)',...
+                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+\d*\.*\d*\s+Hamming Distance:\s+(\d*\.*\d*)',...
+                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+\d*\.*\d*\s+Hamming Distance:\s+\d*\.*\d*\s+Hamming Proximity:\s+(\d*\.*\d*)',...
+                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+\d*\.*\d*\s+Hamming Distance:\s+\d*\.*\d*\s+Hamming Proximity:\s+\d*\.*\d*\s+Pin Homogeneity:\s+(\d*\.*\d*)'
              };
 
 %goal is to run through each benchmark
@@ -60,41 +60,45 @@ parseRegex = {
 
 %we can then do this at different Fc values, etc.
 
-metricRange = 0.0 : 0.025 : 0.55;
+metricRange = 0 : 0.05 : 1;
 
-%get low stress channel widths for each circuit
-for ickt = 1:numCkts
-    benchmark = benchmark_list{ickt};
-        
-    %switch to full flow
-    t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
-    t.makeVPR();
-    vprString = [arch ' ' benchmark ' ' vprBaseOptions];
-    vprOut = t.runVprManual(vprString);
-
-    %get min chan width
-    minW = t.regexLastToken(vprOut, '.*channel width factor of (\d+).');
-    minW = str2double(minW);
-
-    %get low stress chan width
-    lowStressW(ickt) = floor(1.3 * minW);
-end
+%%get low stress channel widths for each circuit
+%for ickt = 1:numCkts
+%    benchmark = benchmark_list{ickt};
+%        
+%    %switch to full flow
+%    t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
+%    %t.replaceSingleLineInFile('/*#define LOAD_TRACKMAP', '//#define LOAD_TRACKMAP', t.rrGraphPath);   
+%    %t.replaceSingleLineInFile('/*#define STORE_TRACKMAP', '//#define STORE_TRACKMAP', t.rrGraphPath);   
+%    t.makeVPR();
+%    vprString = [arch ' ' benchmark ' ' vprBaseOptions];
+%    vprOut = t.runVprManual(vprString);
+%
+%    %get min chan width
+%    minW = t.regexLastToken(vprOut, '.*channel width factor of (\d+).');
+%    minW = str2double(minW);
+%
+%    %get low stress chan width
+%    lowStressW(ickt) = floor(1.3 * minW);
+%end
 
 i = 0;
 for metric = metricRange
     i = i + 1;
-    disp(['Run: ' num2str(i) '   Metric: ' num2str(metric)]);
     
     %this is the inner loop
     baselineCktMetrics = 0;
     adjustedCktMetrics = 0;
     for ickt = 1:numCkts
+        disp(['Run: ' num2str(i) '   Metric: ' num2str(metric) '  Circuit: ' num2str(ickt)]);
         benchmark = benchmark_list{ickt};
 
         %rerun at low stress to generate placement
         t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
+    	t.replaceSingleLineInFile('/*#define LOAD_TRACKMAP', '//#define LOAD_TRACKMAP', t.rrGraphPath);   
+    	%t.replaceSingleLineInFile('/*#define STORE_TRACKMAP', '//#define STORE_TRACKMAP', t.rrGraphPath);   
         t.makeVPR();
-        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' num2str(lowStressW(ickt))];
+        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90';];%num2str(lowStressW(ickt))];
         vprOut = t.runVprManual(vprString);
         %now parse
         for imetric = 1:length(parseRegex)
@@ -103,9 +107,18 @@ for metric = metricRange
 
         %rerun with metric adjustment enabled
         t.replaceSingleLineInFile('target_metric = \d*\.*\d+;', ['target_metric = ' num2str(metric) ';'], t.rrGraphPath);
-        t.replaceSingleLineInFile('/+#define TEST_METRICS', '#define TEST_METRICS', t.rrGraphPath);
+        %first time store the trackmap and second time load it
+        %if (ickt==1)
+        	t.replaceSingleLineInFile('/+#define TEST_METRICS', '#define TEST_METRICS', t.rrGraphPath);
+        	%t.replaceSingleLineInFile('/*#define LOAD_TRACKMAP', '//#define LOAD_TRACKMAP', t.rrGraphPath);   
+        	%t.replaceSingleLineInFile('/+#define STORE_TRACKMAP', '#define STORE_TRACKMAP', t.rrGraphPath);   
+        %else
+        	%t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
+        	%t.replaceSingleLineInFile('/+#define LOAD_TRACKMAP', '#define LOAD_TRACKMAP', t.rrGraphPath);   
+        	%t.replaceSingleLineInFile('/*#define STORE_TRACKMAP', '//#define STORE_TRACKMAP', t.rrGraphPath);   
+	%end
         t.makeVPR();
-        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' num2str(lowStressW(ickt)) ' -route'];
+        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90 -route'];%num2str(lowStressW(ickt)) ' -route'];
         vprOut = t.runVprManual(vprString);
         for imetric = 1:length(parseRegex)
            adjustedCktMetrics(ickt, imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));

@@ -1,7 +1,7 @@
 classdef Tester %< handle (or some other parent class)
     
    properties
-       vtrPath = '/home/oleg/Documents/work/UofT/Grad/my_vtr';                     %path to vtr folder
+       vtrPath = '/autofs/fs1.ece/fs1.eecg.vaughn/opetelin/my_vtr';                     %path to vtr folder
        vprPath = '';
        tasksPath = '';                                %run all .blif circuits here
        architecture = 'k6_frac_N10_mem32K_40nm_mine.xml';
@@ -17,7 +17,7 @@ classdef Tester %< handle (or some other parent class)
    methods
         %% Constructor
         function obj = Tester()
-           obj.vtrPath = '/home/oleg/Documents/work/UofT/Grad/my_vtr';                     %path to vtr folder
+           obj.vtrPath = '/autofs/fs1.ece/fs1.eecg.vaughn/opetelin/my_vtr';                     %path to vtr folder
            obj.vprPath = [obj.vtrPath '/vpr/'];
            obj.tasksPath = [obj.vtrPath '/vtr_flow/tasks'];                                    %run all .blif circuits here
            obj.architecture = 'k6_frac_N10_mem32K_40nm_mine.xml';
@@ -34,6 +34,12 @@ classdef Tester %< handle (or some other parent class)
       
         function resultString = regexLastToken(obj, string, pattern)
             resultString = regexp(string, pattern, 'tokens');
+            
+            if isempty(resultString) 
+               string
+               pattern
+               warning('regexLastToken: no match to pattern!');
+            end
             
             %return the last matching token
             resultString = resultString{end};

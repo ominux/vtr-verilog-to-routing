@@ -9,6 +9,14 @@
 #include "vpr_utils.h"
 #include "switchblock_metrics.h"
 
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
+using namespace std;
+
+
 
 static void get_num_fpga_blocks(OUTP int *num_fpga_blocks, INP int num_block_types, 
 		INP struct s_grid_tile **fpga_grid, INP int size_x, INP int size_y);
@@ -75,12 +83,8 @@ t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type,
 	i = Fc = iclass = pin = num_pin_type_pins = 0;
 
 	/* Find max Fc */
-	for (pin = 0; pin < block_type->num_pins; ++pin) {
-		iclass = block_type->pin_class[pin];
-		if (Fc_array[pin] > Fc && block_type->class_inf[iclass].type == pin_type) {
-			Fc = Fc_array[pin];
-		}
-	}
+	Fc = get_max_Fc(Fc_array, block_type, pin_type);
+
 	/* get number of pin_type_pins */
 	if (DRIVER == pin_type){
 		num_pin_type_pins = block_type->num_drivers;
@@ -221,11 +225,9 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP int num_segments, INP t_segment_inf *segment_inf){
 //TODO: move this up top so all functions han see what's being optimized.
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
-#define HAMMING_DISTANCE
+#define HAMMING_PROXIMITY
 //#define PRESERVE_TRACKS
-#ifdef HAMMING_DISTANCE
-	#define USE_ANNEALER
-#endif
+#define USE_ANNEALER
 
 	boolean success = FALSE;	
 	int Fc = 0;
@@ -260,12 +262,7 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 	}
 
 	/* Find max Fc */
-	for (int pin = 0; pin < block_type->num_pins; ++pin) {
-		int iclass = block_type->pin_class[pin];
-		if (Fc_array[pin] > Fc && block_type->class_inf[iclass].type == pin_type) {
-			Fc = Fc_array[pin];
-		}
-	}
+	Fc = get_max_Fc(Fc_array, block_type, pin_type);
 
 	srand(time(0));
 
@@ -333,8 +330,10 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 	/* start iterative process */
 #ifdef USE_ANNEALER
 	int no_luck = 0;
-#endif
 	int maxTries = 100000;
+#else
+	int maxTries = 100000;
+#endif
 	for (int tries = 0; tries < maxTries; tries++){
 		t_conn_block_homogeneity newMetrics;
 		int rand_side, rand_pin, rand_con;
@@ -397,12 +396,13 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		/* check if we're closer to hitting our target */
 		float test_condition = 0;
 #ifdef USE_ANNEALER
-		float temp = (1 - (float)tries / (float)maxTries);
+		float temp = fabs(init_hamming - target) * (1 - (float)tries / (float)maxTries);
 		test_condition = temp;
 #else
 		test_condition = old_diff;
 #endif
-		if(new_diff < test_condition &&
+		//TODO: make this cleaner
+		if((new_diff < test_condition || (new_diff > test_condition && new_diff < old_diff)) &&
 		    fabs(new_pin - init_pin) <= pin_tolerance){
 			printf("new_hamming %f   test_condition %f   new_diff %f   new_pin %f\n", new_hamming, test_condition, new_diff, new_pin);
 			/* check if we satisfy all constraints */
@@ -442,14 +442,6 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 	if (FALSE == success){
 		printf("failed to adjust hamming!\n");
 	}
-	//int total = 0;
-	//for (int side = 0; side < 4; side++){
-	//	for (int track = 0; track < nodes_per_chan; track++){
-	//		printf("Fc %d   side: %d   track %d   conns %d\n", Fc, side, track, wire_conns[side % 2][track]);
-	//		total += wire_conns[side % 2][track];
-	//	}
-	//}
-	//printf("total: %d\n", total);
 
 	free_matrix(wire_conns, 0, 3, 0, sizeof(int));
 	return;
@@ -493,12 +485,7 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 	}
 
 	/* Find max Fc */
-	for (int pin = 0; pin < block_type->num_pins; ++pin) {
-		int iclass = block_type->pin_class[pin];
-		if (Fc_array[pin] > Fc && block_type->class_inf[iclass].type == pin_type) {
-			Fc = Fc_array[pin];
-		}
-	}
+	Fc = get_max_Fc(Fc_array, block_type, pin_type);
 
 	srand(time(0));
 	
@@ -917,7 +904,7 @@ static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_typ
 			total_pins_on_side += counted_pins_per_side[side + mult*i];
 		}
 		total_conns = total_pins_on_side * Fc;
-		unconnected_wires = (total_conns) ? std::max(0, nodes_per_chan - total_conns)  :  0 ;
+		unconnected_wires = (total_conns) ? max(0, nodes_per_chan - total_conns)  :  0 ;
 		mean = (float)total_conns / (float)(nodes_per_chan - unconnected_wires);
 		//printf("total_conns %d  mean: %f   unconnected: %d\n", total_conns, mean, unconnected_wires);
 		wire_homogeneity[side] = 0;
@@ -1058,7 +1045,7 @@ static void get_num_fpga_blocks(OUTP int *num_fpga_blocks, INP int num_block_typ
 				continue;	/* not the parent block */
 			} else {
 				block_index = fpga_grid[ix][iy].type->index;
-				block_usage = std::max(fpga_grid[ix][iy].usage, 1);	/* TODO: check if large blocks always have usage=0 */
+				block_usage = max(fpga_grid[ix][iy].usage, 1);	/* TODO: check if large blocks always have usage=0 */
 				num_fpga_blocks[block_index] += block_usage;	
 			}
 		}	
@@ -1068,7 +1055,122 @@ static void get_num_fpga_blocks(OUTP int *num_fpga_blocks, INP int num_block_typ
 }
 
 
+/* Gets the maximum Fc value from the Fc_array of this pin type */
+int get_max_Fc(INP int *Fc_array, INP t_type_ptr block_type, INP e_pin_type pin_type){
+	int Fc = 0;
+	for (int ipin = 0; ipin < block_type->num_pins; ++ipin) {
+		int iclass = block_type->pin_class[ipin];
+		if (Fc_array[ipin] > Fc && block_type->class_inf[iclass].type == pin_type) {
+			Fc = Fc_array[ipin];
+		}
+	}
+	return Fc;
+}
 
+/* Reads the trackmap from the specified file. */
+void read_trackmap_from_file(INP char *filename, OUTP int *****tracks_connected_to_pin, INP e_pin_type pin_type,
+		INP t_type_ptr block_type, INP int Fc){
+	
+	assert(pin_type != OPEN);
 
+	ifstream myfile;
 
+	/* open the file for reading */
+	myfile.open(filename);
+	if ( !myfile.is_open() ){
+		/* couldn't open file */
+		vpr_printf(TIO_MESSAGE_ERROR, "File %s, Line %d, %s couldn't open file\n", __FILE__, __LINE__, __func__);
+		exit(1);
+	}
 
+	/* clear the track map before reading in data */
+	for (int iside = 0; iside < 4; iside++)
+		for (int iwidth = 0; iwidth < block_type->width; iwidth++)
+			for (int iheight = 0; iheight < block_type->height; iheight++)
+				for (int ipin = 0; ipin < block_type->num_pins; ipin++)
+					for (int iconn = 0; iconn < Fc; iconn++)
+						tracks_connected_to_pin[ipin][iwidth][iheight][iside][iconn] = OPEN;
+
+	/* skip the first line of file as it does not contain data */
+	string next_line;
+	stringstream ss;
+	getline(myfile, next_line);
+
+	/* now read the track map data */
+	int pin, width, height, side, conn, track;
+	while (getline(myfile, next_line)){
+		ss << next_line;		//TODO: this is such a hack way to do it; rewrite
+		ss >> pin >> width >> height >> side >> conn >> track;
+		tracks_connected_to_pin[pin][width][height][side][conn] = track;
+		ss.clear();
+	}
+
+	return;
+}
+
+/* Writes the specified trackmap to the file with the specified filename 	*
+   Crashes hard if it is unable to open the specified file			*/
+void write_trackmap_to_file(INP char *filename, INP int *****tracks_connected_to_pin, INP e_pin_type pin_type,
+		INP t_type_ptr block_type, INP int Fc){
+	
+	assert(pin_type != OPEN);
+
+	ofstream myfile;
+	myfile.open(filename);
+	if ( !myfile.is_open() ){
+		/* couldn't open/create file */
+		vpr_printf(TIO_MESSAGE_ERROR, "File %s, Line %d, %s couldn't open file\n", __FILE__, __LINE__, __func__);
+		exit(1);
+	}
+
+	int num_pin_type_pins = 0;
+	if (pin_type == DRIVER)
+		num_pin_type_pins = block_type->num_drivers;
+	else if (pin_type == RECEIVER)
+		num_pin_type_pins = block_type->num_receivers;
+	else assert(FALSE);
+
+	/* print the first line of the file */
+	myfile << "pin\t" << "width\t" << "height\t" << "side\t" << "conn\t" << "track\n";	
+
+	/* now print the trackmap to the file */
+	int counted_pins = 0;
+	for (int iside = 0; iside < 4; iside++){
+		for (int iwidth = 0; iwidth < block_type->width; iwidth++){
+			for (int iheight = 0; iheight < block_type->height; iheight++){
+				for (int ipin = 0; ipin < block_type->num_pins; ipin++){
+					/* only doing pin_type pins */
+					if (block_type->class_inf[block_type->pin_class[ipin]].type != pin_type){
+						continue;
+					}
+
+					if (counted_pins == num_pin_type_pins){
+						/* Some blocks like io appear to have four sides, but only one	*
+						*  of those sides is actually used in practice. So here we try	*
+						*  not to count the unused pins.				*/
+						break;
+					}
+					
+					/* check that pin has connections at this height/width/side */
+					int track = tracks_connected_to_pin[ipin][iwidth][iheight][iside][0];
+					if (OPEN == track){
+						continue;
+					}
+					
+					for(int iconn = 0; iconn < Fc; iconn++){
+						/* get next track */
+						track = tracks_connected_to_pin[ipin][iwidth][iheight][iside][iconn];
+					
+						/* print info for this pin/width/height/side/conn */
+						myfile << ipin << "\t" << iwidth << "\t" << iheight << "\t" << iside 
+							<< "\t" << iconn << "\t" << track << "\n";
+					}
+					counted_pins++;
+				}
+			}
+		}
+	}
+
+	myfile.close();
+	return;
+}

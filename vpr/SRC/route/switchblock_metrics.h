@@ -45,4 +45,15 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, 
 		INP int num_segments, INP t_segment_inf *segment_inf);
 
+void write_trackmap_to_file(INP char *filename, INP int *****tracks_connected_to_pin, INP e_pin_type pin_type,
+		INP t_type_ptr block_type, INP int Fc);
+
+void read_trackmap_from_file(INP char *filename, OUTP int *****tracks_connected_to_pin, INP e_pin_type pin_type,
+		INP t_type_ptr block_type, INP int Fc);
+
+int get_max_Fc(INP int *Fc_array, INP t_type_ptr block_type, INP e_pin_type pin_type);
+
+//need to find a way to write track connections to a file
+// first check if something like this already exists in our libraries
+
 #endif /*SWITCHBLOCK_METRICS_H*/

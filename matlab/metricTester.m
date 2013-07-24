@@ -7,7 +7,7 @@
 %parse the output of the command shell -new
 %repeat
 tic
-metricRange = 0.0 : 0.02 : 0.25;
+metricRange = 0.0 : 0.0008 : 0.01;
 
 labels = { 
             'High Stress Delay',...
@@ -30,7 +30,7 @@ system(['rm ' t.outLogPath '/run* -R']);
 t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
 t.makeVPR();
 %switch to route chan width
-t.switchToRouteChan(t.configPath, 80);
+t.switchToRouteChan(t.configPath, 90);
 %run first time
 t.runVtrTask('regression_mcnc');
 t.parseVtrTask('regression_mcnc');
@@ -47,7 +47,7 @@ for metric = metricRange
     %enable metric
     t.replaceSingleLineInFile('/+#define TEST_METRICS', '#define TEST_METRICS', t.rrGraphPath);
     t.makeVPR();
-    t.switchToRouteOnly(t.configPath, 80);
+    t.switchToRouteOnly(t.configPath, 90);
     system(['rm ' t.outLogPath '/run* -R']);
     avgResults(i,1:length(labels)) = 0;
     for irun = 1:numInnerIter

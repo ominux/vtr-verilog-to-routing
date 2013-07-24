@@ -452,10 +452,11 @@ void build_rr_graph(
 	if (BI_DIRECTIONAL == directionality) {
 		t_conn_block_homogeneity *conn_block_homogeneity, fpga_homogeneity;
 		boolean perturb_opins = FALSE;
-
 //#define MY_ALGORITHM
 #define TEST_METRICS
-
+//#define STORE_TRACKMAP
+//#define LOAD_TRACKMAP
+		
 		conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
@@ -472,7 +473,17 @@ void build_rr_graph(
 				target_metric = 1;
 			#ifdef TEST_METRICS	
 				//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-				adjust_hamming(target_metric, 0.0005, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+				adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+			#endif
+
+			
+			int Fc = get_max_Fc(Fc_out[i], &types[i], DRIVER);
+			#ifdef STORE_TRACKMAP
+				write_trackmap_to_file("clb_trackmap.txt", opin_to_track_map[i], DRIVER,
+						&types[i], Fc);
+			#elif defined LOAD_TRACKMAP
+				read_trackmap_from_file("clb_trackmap.txt", opin_to_track_map[i], DRIVER,
+						&types[i], Fc);
 			#endif
 			}
 	

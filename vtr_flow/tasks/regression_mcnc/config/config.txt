@@ -41,4 +41,4 @@ parse_file=mine.txt
 # Pass requirements
 pass_requirements_file=pass_requirements.txt
 
-script_params=-no_mem -starting_stage vpr -vpr_route_chan_width 80 -route_from_net_and_placement ../../../temp
+script_params=-no_mem -starting_stage vpr -vpr_route_chan_width 90 -route_from_net_and_placement ../../../temp
