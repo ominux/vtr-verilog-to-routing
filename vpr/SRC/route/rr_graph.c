@@ -480,22 +480,25 @@ void build_rr_graph(
 			#endif
 
 			
-			#ifdef STORE_TRACKMAP
-				printf("storing track map\n");
-				write_trackmap_to_file("clb_trackmap.txt", opin_to_track_map[i], DRIVER,
-						&types[i], Fc);
-			#elif defined LOAD_TRACKMAP
-				read_trackmap_from_file("clb_trackmap.txt", opin_to_track_map[i], DRIVER,
-						&types[i], Fc);
-			#elif defined MANAGE_TRACKMAP
+			#ifdef MANAGE_TRACKMAP
 				/* loads an existing trackmap if the given chan width has already been routed before */
 				/* used for min chan width of metrics-guided place & route */
 				int Fc = get_max_Fc(Fc_out[i], &types[i], DRIVER);
 				static int w_done[1000] = {0};
 
-				char filename[] = "clb_trackmap?.txt";
-				filename[12] = (char) nodes_per_chan;	//TODO: total hackery. recode
-				
+				char filename[] = "clb_trackmap000.txt";
+				char chanwidth[] = "000\0";
+				/* basically itoa */
+				int number = nodes_per_chan;
+				for (int ilen = 2; ilen >= 0; ilen--){
+					chanwidth[ilen] = (number % 10) + 48;
+					number = floor(number / 10);
+				}
+
+				for (int ilen = 0; ilen < 3; ilen++){
+					filename[12 + ilen] = chanwidth[ilen];
+				}	
+
 				if (w_done[nodes_per_chan]){
 					printf("loading track map %s\n", filename);
 					read_trackmap_from_file(filename, opin_to_track_map[i], DRIVER,
