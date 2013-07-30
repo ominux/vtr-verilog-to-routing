@@ -15,8 +15,6 @@ typedef enum e_neon_exceptions{
 } t_neon_exceptions;
 extern const char *neon_exception_name[]; 
 
-/**** Function Definitions ****/
-void neon_throw(char *message, t_neon_exceptions type, char *file, int line);
 
 
 /**** Class Declarations ****/
@@ -34,20 +32,34 @@ public:
 	std::string file;
 	int line;
 
-	/* Constructor */
-	Neon_Exception(char *m, t_neon_exceptions t, char *f, int l) : 
+	/* Constructor for chars */
+	Neon_Exception(std::string m, t_neon_exceptions t, char *f, int l) : 
 	exception_name("Neon Exception")
 	{
- 		this->message = char_to_string(m);
+ 		this->message = m;
 		this->type = t;
-		this->file = char_to_string(f);
+		this->file = convert_to_string(f);
 		this->line = l;
 	}
+
+	
 };
 /* prototype for Neon_Exception's << overloaded operator */
 std::ostream &operator <<(std::ostream &stream, Neon_Exception obj);
 
 
 
+/**** Function Declarations ****/
+template <typename T> void  neon_throw(T &message, t_neon_exceptions type, char *file, int line);
+
+
+/**** Function Definitions ****/
+/* Builds and throws a Neon_Exception based on the provided parameters */
+//sadly can't put templates in cxx file as compiler doesn't see definition at the same time as function is used... wonky
+template <typename T> void  neon_throw(T &message, t_neon_exceptions type, char *file, int line){
+	std::string str = convert_to_string(message);	
+	Neon_Exception ex(str.c_str(), type, file, line);
+	throw ex;
+}
 
 #endif /*EXCEPTION_H*/

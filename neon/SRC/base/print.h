@@ -3,11 +3,12 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
 #include "neon_types.h"
 
 /**** Defines ****/
 #ifndef DEBUG_LEVEL
-	#define DEBUG_LEVEL 0
+	#define DEBUG_LEVEL 1
 #endif
 
 /* checks display priority */
@@ -20,7 +21,7 @@
 #define print_info(pp, str) do{ if( CHECK_PP(pp) ) std::cout << str; } while(false)
 
 /* overloads print_info above to only take str -- priority is automatically set to low */
-#define print_debug(str) print_info(PP_LOW, str)
+#define print_debug(str) print_info(PP_LOW, "DEBUG: " << str)
 
 /* prints string preceded by WARNING, checks print priority */
 #define print_warn(pp, str) do{ if( CHECK_PP(pp) ) std::cout << "WARNING: " << str; } while(false)
@@ -38,8 +39,11 @@ enum e_print_priority{
 
 
 /**** Function Definitions ****/
-/* Convert specified character array to string */
-std::string char_to_string(INP char *ch);
+/* Overloaded methods to convert specified type to string */
+std::string convert_to_string(INP char *ch);
+std::string convert_to_string(INP char const *ch);
+std::string convert_to_string(INP std::stringstream &ss);
+std::string convert_to_string(INP std::string &str);	//useful when called by template f'n
 
 
 #endif /*PRINT_H*/
