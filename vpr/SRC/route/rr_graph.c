@@ -460,7 +460,8 @@ void build_rr_graph(
 //#define LOAD_TRACKMAP
 #define MANAGE_TRACKMAP
 		
-		conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
+		//conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
+		conn_block_homogeneity = new t_conn_block_homogeneity[L_num_types];
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
 			perturb_opins = get_perturb_opins(&types[i], Fc_out[i], nodes_per_chan,
@@ -473,11 +474,7 @@ void build_rr_graph(
 
 			if (strcmp("clb", types[i].name) == 0){
 				float target_metric;
-				target_metric = 0.2;
-			#ifdef TEST_METRICS	
-				//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-				adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-			#endif
+				target_metric = 0.48;
 
 			
 			#ifdef MANAGE_TRACKMAP
@@ -504,6 +501,10 @@ void build_rr_graph(
 					read_trackmap_from_file(filename, opin_to_track_map[i], DRIVER,
 							&types[i], Fc);
 				} else {
+			#ifdef TEST_METRICS	
+					//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+					adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+			#endif
 					printf("storing track map %s\n", filename);
 					write_trackmap_to_file(filename, opin_to_track_map[i], DRIVER,
 							&types[i], Fc);
@@ -511,24 +512,23 @@ void build_rr_graph(
 				}				
 			#endif
 			}
-	
-			conn_block_homogeneity[i] = get_conn_block_homogeneity(&types[i], opin_to_track_map[i], 
+			get_conn_block_homogeneity(conn_block_homogeneity[i], &types[i], opin_to_track_map[i], 
 				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f   Pin Homogeneity: %f\n", types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
 				conn_block_homogeneity[i].hamming_distance, conn_block_homogeneity[i].hamming_proximity, conn_block_homogeneity[i].pin_homogeneity);
 		}
 
 		//Calculate FPGA homogeneity here
-		fpga_homogeneity = get_conn_block_homogeneity_fpga(conn_block_homogeneity, L_num_types,
-					L_grid, L_nx, L_ny, types, DRIVER);
+		//fpga_homogeneity = get_conn_block_homogeneity_fpga(conn_block_homogeneity, L_num_types,
+		//			L_grid, L_nx, L_ny, types, DRIVER);
 		vpr_printf(TIO_MESSAGE_INFO,"Block Type: FPGA  Pin Homogeneity: %f  Wire Homogeneity: %f\n",
 			fpga_homogeneity.pin_homogeneity, fpga_homogeneity.wire_homogeneity); 
-		
-		free(conn_block_homogeneity);
+		//free(conn_block_homogeneity);
+		delete [] conn_block_homogeneity;
 		conn_block_homogeneity = NULL; 
 	}
+	
 	/* END OPINP MAP */
-
 	/* UDSD Modifications by WMF begin */
 	/* I'm adding 2 new fields to t_rr_node, and I want them initialized to 0. */
 	for (i = 0; i < num_rr_nodes; i++) {

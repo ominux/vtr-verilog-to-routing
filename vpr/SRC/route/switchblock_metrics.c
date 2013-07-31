@@ -18,6 +18,8 @@ using namespace std;
 
 
 
+
+/**** Function Declarations ****/
 static void get_num_fpga_blocks(OUTP int *num_fpga_blocks, INP int num_block_types, 
 		INP struct s_grid_tile **fpga_grid, INP int size_x, INP int size_y);
 
@@ -38,7 +40,7 @@ static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_typ
 		INP int num_pin_type_pins, INP int exponent, INP boolean both_sides);
 
 static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,
 		INP int num_pin_type_pins, INP int exponent, INP boolean both_sides);
 
@@ -71,17 +73,26 @@ int get_num_wire_types(INP int num_segments, INP t_segment_inf *segment_inf){
 
 /* Gets the connection block homogeneity according to the pin<->wire connections
 *  specified in tracks_connected_to_pin. Only done for the pin_type specified. */
-t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type, 
+void get_conn_block_homogeneity(OUTP t_conn_block_homogeneity &cbm, INP t_type_ptr block_type, 
 		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
 		INP int *Fc_array, INP int nodes_per_chan, INP int num_segments, 
 		INP t_segment_inf *segment_inf){
-	
 	/* can not have diversity for open pins */
 	assert(OPEN != pin_type);	
+
+	if ( block_type->num_pins == 0 ){
+		vpr_printf(TIO_MESSAGE_WARNING, "get_conn_block_homogeneity: got block with no pins. skipping\n");
+		cbm.pin_homogeneity = 0;
+		cbm.pin_diversity = 0;
+		cbm.wire_homogeneity = 0;
+		cbm.hamming_proximity = 0;
+		cbm.hamming_distance = 0;
+		return;
+	}
 	
 	int  i, Fc, iclass, pin, num_pin_type_pins;
 	i = Fc = iclass = pin = num_pin_type_pins = 0;
-
+	
 	/* Find max Fc */
 	Fc = get_max_Fc(Fc_array, block_type, pin_type);
 
@@ -95,34 +106,41 @@ t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type,
 	}
 
 	int num_wire_types = get_num_wire_types(num_segments, segment_inf);
-	int **wh_wire_conns = (int **) alloc_matrix(0, 3, 0, nodes_per_chan - 1, sizeof(int));
-	int **ph_pin_averages = (int **) alloc_matrix(0, block_type->num_pins - 1, 0, num_wire_types - 1, sizeof(int));
-	int ***hd_pin_array = (int ***) alloc_matrix3(0, 3, 0, block_type->num_pins - 1, 0, Fc - 1, sizeof(int));
+	cbm.num_wire_types = num_wire_types;
+	//int_array_2d wh_wire_conns(4, nodes_per_chan);
+	//int_array_2d ph_pin_averages(block_type->num_pins, num_wire_types);
+	//int_array_3d hd_pin_array(4, block_type->num_pins, Fc);
 
-	t_conn_block_homogeneity conn_block_homogeneity;	
-	conn_block_homogeneity.pin_homogeneity = 0;
-	conn_block_homogeneity.wire_homogeneity = 0;
+	
+	assert(num_wire_types != 0);
+	assert(block_type->num_pins != 0);
+	//t_conn_block_homogeneity cbm;	//conn block metrics
+	cbm.wh_wire_conns.alloc_array(4, nodes_per_chan);
+	cbm.ph_pin_averages.alloc_array(block_type->num_pins, num_wire_types);
+	cbm.hd_pin_array.alloc_array(4, block_type->num_pins, Fc);	
+	cbm.pin_homogeneity = 0;
+	cbm.wire_homogeneity = 0;
 
-	int side, height, width, counted_pins_per_side[4];
+
+	int side, height, width;
 	int counted_pins = 0;
 	int track = 0;
 	for (side = 0; side < 4; side++){
-		counted_pins_per_side[side] = 0;
+		cbm.counted_pins_per_side[side] = 0;
 		for (i = 0; i < nodes_per_chan; i++){
-			wh_wire_conns[side][i] = 0;
+			cbm.wh_wire_conns.ptr[side][i] = 0;
 		}
 		for (pin = 0; pin < block_type->num_pins; pin++){
 			for (i = 0; i < Fc; i++){
-				hd_pin_array[side][pin][i] = -1;
+				cbm.hd_pin_array.ptr[side][pin][i] = -1;
 			}
 		}
-	}	
+	}
 	for (pin = 0; pin < block_type->num_pins; pin++){
 		for (i = 0; i < num_wire_types; i++){
-			ph_pin_averages[pin][i] = 0;
+			cbm.ph_pin_averages.ptr[pin][i] = 0;
 		}
 	}
-
 
 	/* Here we make the arrays necessary for PH, HD, and WH */
 	for (side = 0; side < 4; side++){
@@ -149,24 +167,24 @@ t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type,
 					if (OPEN == track){
 						continue;
 					}
-					hd_pin_array[side][pin][0] = track;					
-					wh_wire_conns[side][track]++;
-					ph_pin_averages[pin][track % num_wire_types]++;
+					cbm.hd_pin_array.ptr[side][pin][0] = track;					
+					cbm.wh_wire_conns.ptr[side][track]++;
+					cbm.ph_pin_averages.ptr[pin][track % num_wire_types]++;
 					
 					//printf("side: %d  pin: %d  count: %d  track: %d\n", side, pin, 0, track);
 					for(i = 1; i < Fc; i++){
 						/* get next track */
 						track = tracks_connected_to_pin[pin][width][height][side][i];
 						
-						hd_pin_array[side][pin][i] = track;
+						cbm.hd_pin_array.ptr[side][pin][i] = track;
 						//printf("side: %d  pin: %d  count: %d  track: %d\n", side, pin, i, track);
 						/* find the number of times the pin connects to each wire class */
-						ph_pin_averages[pin][track % num_wire_types]++;
+						cbm.ph_pin_averages.ptr[pin][track % num_wire_types]++;
 						/* find the number of times a connection is made with each wire/side */
-						wh_wire_conns[side][track]++; 
+						cbm.wh_wire_conns.ptr[side][track]++; 
 					}
 					counted_pins++;
-					counted_pins_per_side[side]++;
+					cbm.counted_pins_per_side[side]++;
 				}
 			}
 		} 
@@ -188,34 +206,29 @@ t_conn_block_homogeneity get_conn_block_homogeneity(INP t_type_ptr block_type,
 		} else {
 			both_sides = FALSE;
 		}
-
-		conn_block_homogeneity.pin_homogeneity = get_pin_homogeneity(ph_pin_averages, block_type, tracks_connected_to_pin, 
+		cbm.pin_homogeneity = get_pin_homogeneity(cbm.ph_pin_averages.ptr, block_type, tracks_connected_to_pin, 
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2);
 
-		conn_block_homogeneity.wire_homogeneity = get_wire_homogeneity(wh_wire_conns, block_type, tracks_connected_to_pin,
+		cbm.wire_homogeneity = get_wire_homogeneity(cbm.wh_wire_conns.ptr, block_type, tracks_connected_to_pin,
 								pin_type, Fc, nodes_per_chan, num_wire_types,
-								num_pin_type_pins, 2, counted_pins_per_side, both_sides); 
+								num_pin_type_pins, 2, cbm.counted_pins_per_side, both_sides); 
 		
-		conn_block_homogeneity.hamming_distance = get_hamming_distance(hd_pin_array, block_type, tracks_connected_to_pin,
+		cbm.hamming_distance = get_hamming_distance(cbm.hd_pin_array.ptr, block_type, tracks_connected_to_pin,
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2, both_sides); 
 		
-		conn_block_homogeneity.hamming_proximity = get_hamming_proximity(hd_pin_array, block_type, tracks_connected_to_pin,
+		cbm.hamming_proximity = get_hamming_proximity(cbm.hd_pin_array.ptr, block_type,
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2, both_sides); 
 
-		conn_block_homogeneity.pin_diversity = get_pin_diversity(ph_pin_averages, block_type,
+		cbm.pin_diversity = get_pin_diversity(cbm.ph_pin_averages.ptr, block_type,
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins); 
 	}	
 
-	free_matrix(ph_pin_averages, 0, block_type->num_pins - 1, 0, sizeof(int));
-	free_matrix(wh_wire_conns, 0, 3, 0, sizeof(int));
-	free_matrix3(hd_pin_array, 0, 3, 0,block_type->num_pins - 1, 0, sizeof(int));
-	ph_pin_averages = NULL;
-	wh_wire_conns = NULL;
-	return conn_block_homogeneity;
+	//return cbm;
+	return;
 }
 
 
@@ -226,8 +239,8 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 //TODO: move this up top so all functions han see what's being optimized.
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
 #define HAMMING_PROXIMITY
-//#define PRESERVE_TRACKS
-#define USE_ANNEALER
+#define PRESERVE_TRACKS
+//#define USE_ANNEALER
 
 	boolean success = FALSE;	
 	int Fc = 0;
@@ -238,23 +251,23 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 				43, 47, 51, 55, 59};
 
 	/* get initial values of metrics */
-	t_conn_block_homogeneity initialMetrics;
-	initialMetrics = get_conn_block_homogeneity(block_type, 
+	t_conn_block_homogeneity metrics;
+	get_conn_block_homogeneity(metrics, block_type, 
 		tracks_connected_to_pin, pin_type, 
 		Fc_array, nodes_per_chan, num_segments, 
 		segment_inf);
 
 	float init_hamming, init_pin;
 #ifdef HAMMING_DISTANCE
-	init_hamming = initialMetrics.hamming_distance;
+	init_hamming = metrics.hamming_distance;
 #elif defined HAMMING_PROXIMITY
-	init_hamming = initialMetrics.hamming_proximity;
+	init_hamming = metrics.hamming_proximity;
 #elif defined WIRE_HOMOGENEITY
-	init_hamming = initialMetrics.wire_homogeneity;
+	init_hamming = metrics.wire_homogeneity;
 #else
 	//crash and burn
 #endif
-	init_pin = initialMetrics.pin_diversity;
+	init_pin = metrics.pin_diversity;
 	
 	if (fabs(init_hamming - target) <= target_tolerance){
 		/* already in correct range */
@@ -324,6 +337,7 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		} 
 	}
 
+	printf("max_fc: %d,  num_pin_type_pins: %d,  nodes_per_chan: %d\n", Fc, num_pin_type_pins, nodes_per_chan);
 
 	float old_diff, new_diff;
 	old_diff = fabs(init_hamming - target);
@@ -377,21 +391,45 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 			}
 		} while (invalid_new_track);
 
+/* here we will reuse the data already available in metrics
+   to avoid computing block metrics all over again */
+float new_hamming, new_pin;
+#ifdef HAMMING_DISTANCE
+
+#elif defined HAMMING_PROXIMITY
+					//cbm.hd_pin_array.ptr[side][pin][0] = track;					
+		metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = new_track;
+		metrics.hamming_proximity = get_hamming_proximity(metrics.hd_pin_array.ptr, block_type, 
+								pin_type, Fc, nodes_per_chan, metrics.num_wire_types,
+								num_pin_type_pins, 2, TRUE); 
+
+
+		new_hamming = metrics.hamming_proximity;
+#elif defined WIRE_HOMOGENEITY
+
+#endif
+		metrics.ph_pin_averages.ptr[rand_pin][ old_track % metrics.num_wire_types]--;
+		metrics.ph_pin_averages.ptr[rand_pin][ new_track % metrics.num_wire_types]++;
+		new_pin = get_pin_diversity(metrics.ph_pin_averages.ptr, block_type,
+								pin_type, Fc, nodes_per_chan, metrics.num_wire_types,
+								num_pin_type_pins); 
+track_ptr[rand_con] = new_track;
+
 		/* assign new track, and test metrics */
 		track_ptr[rand_con] = new_track;
-		newMetrics = get_conn_block_homogeneity(block_type, tracks_connected_to_pin, 
+		get_conn_block_homogeneity(metrics, block_type, tracks_connected_to_pin, 
 					pin_type, Fc_array, nodes_per_chan, num_segments, 
 					segment_inf);
 		
-		float new_hamming, new_pin;
-		new_pin = newMetrics.pin_diversity;
-#ifdef HAMMING_DISTANCE
-		new_hamming = newMetrics.hamming_distance;
-#elif defined HAMMING_PROXIMITY
-		new_hamming = newMetrics.hamming_proximity;
-#elif defined WIRE_HOMOGENEITY
-		new_hamming = newMetrics.wire_homogeneity;
-#endif 
+//		float new_hamming, new_pin;
+//		new_pin = metrics.pin_diversity;
+//#ifdef HAMMING_DISTANCE
+//		new_hamming = metrics.hamming_distance;
+//#elif defined HAMMING_PROXIMITY
+//		new_hamming = metrics.hamming_proximity;
+//#elif defined WIRE_HOMOGENEITY
+//		new_hamming = metrics.wire_homogeneity;
+//#endif 
 		new_diff = fabs(new_hamming - target);
 		/* check if we're closer to hitting our target */
 		float test_condition = 0;
@@ -404,7 +442,7 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		//TODO: make this cleaner
 		if((new_diff < test_condition || (new_diff > test_condition && new_diff < old_diff)) &&
 		    fabs(new_pin - init_pin) <= pin_tolerance){
-			printf("new_hamming %f   test_condition %f   new_diff %f   new_pin %f\n", new_hamming, test_condition, new_diff, new_pin);
+			printf("new_metric %f   test_condition %f   new_diff %f   new_pin %f\n", new_hamming, test_condition, new_diff, new_pin);
 			/* check if we satisfy all constraints */
 			if ( new_diff <= target_tolerance ){
 				/* we're done */
@@ -430,11 +468,21 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 				printf("test_condition %f   new_diff %f\n", test_condition, new_diff);
 				break;
 			}
-			if (tries%3 == 0){
-				tries--;
-			}
+			//if (tries%3 == 0){
+			//	tries--;
+			//}
 #endif
 			track_ptr[rand_con] = old_track;
+
+#ifdef HAMMING_DISTANCE
+
+#elif defined HAMMING_PROXIMITY
+			metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = old_track;
+#elif defined WIRE_HOMOGENEITY
+
+#endif
+			metrics.ph_pin_averages.ptr[rand_pin][ old_track % metrics.num_wire_types]++;
+			metrics.ph_pin_averages.ptr[rand_pin][ new_track % metrics.num_wire_types]--;
 		}
 		 
 		track_ptr = NULL;
@@ -442,7 +490,6 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 	if (FALSE == success){
 		printf("failed to adjust hamming!\n");
 	}
-
 	free_matrix(wire_conns, 0, 3, 0, sizeof(int));
 	return;
 }
@@ -467,7 +514,7 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 
 	/* get initial values of metrics */
 	t_conn_block_homogeneity initialMetrics;
-	initialMetrics = get_conn_block_homogeneity(block_type, 
+	get_conn_block_homogeneity(initialMetrics, block_type, 
 		tracks_connected_to_pin, pin_type, 
 		Fc_array, nodes_per_chan, num_segments, 
 		segment_inf);
@@ -519,7 +566,7 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 
 		/* assign new track, and test metrics */
 		track_ptr[rand_con] = new_track;
-		newMetrics = get_conn_block_homogeneity(block_type, tracks_connected_to_pin, 
+		get_conn_block_homogeneity(newMetrics, block_type, tracks_connected_to_pin, 
 					pin_type, Fc_array, nodes_per_chan, num_segments, 
 					segment_inf);
 		/* test if new metrics meet demand */
@@ -687,7 +734,7 @@ static float get_pin_diversity(INP int **pin_averages, INP t_type_ptr block_type
 
 /* Returns the hamming average hamming distance of the block's pins */
 static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,
 		INP int num_pin_type_pins, INP int exponent, INP boolean both_sides){
 	
@@ -991,6 +1038,7 @@ t_conn_block_homogeneity get_conn_block_homogeneity_fpga(INP t_conn_block_homoge
 
 	/* can not compute homogeneity for open pins */
 	assert( OPEN != pin_type );
+
 	
 	int iblock;
 	int num_pins, num_blocks_used, tot_block_pins, total_fpga_pins;
@@ -1174,3 +1222,8 @@ void write_trackmap_to_file(INP char *filename, INP int *****tracks_connected_to
 	myfile.close();
 	return;
 }
+
+
+//void build_filename(char *buffer, char *base, int append, chan *extension){
+//
+//}

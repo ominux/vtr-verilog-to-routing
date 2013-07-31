@@ -222,7 +222,7 @@ boolean try_route(int width_fac, struct s_router_opts router_opts,
 		t_timing_inf timing_inf, float **net_delay, t_slack * slacks,
 		t_chan_width_dist chan_width_dist, t_ivec ** clb_opins_used_locally,
 		boolean * Fc_clipped, t_direct_inf *directs, int num_directs) {
-
+	
 	/* Attempts a routing via an iterated maze router algorithm.  Width_fac *
 	 * specifies the relative width of the channels, while the members of   *
 	 * router_opts determine the value of the costs assigned to routing     *
