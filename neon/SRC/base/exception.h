@@ -5,7 +5,8 @@
 #include "print.h"
 
 /**** Defines ****/
-
+/* function for simplifying throwing method so that file & line info is automatically entered for us */
+#define NEON_THROW( message, type ) neon_throw(message, type, __FILE__, __LINE__)
 
 /**** Enumerations ****/
 /* NOTE: if you change this enum, modify neon_exception_name array in exception.cxx accordingly! */

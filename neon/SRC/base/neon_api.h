@@ -5,15 +5,17 @@
 #include "neon_types.h"
 
 /**** Function Declarations ****/
+/* Reads in user options and initializes the tool */
 void neon_init(INP int argc, INP char **argv);
-void neon_parse_command_args(INP int argc, INP char **argv, OUTP std::string &arch_file); 
+/* returns true if extension of 'filename' matches 'extension' TODO: move elsewhere */
 bool check_file_extension(INP std::string &filename, INP std::string extension);
-void neon_print_usage();
 
 
 /**** Class Declarations ****/
-class Neon_Options {
+/* Class containing user-settable options */
+class User_Options {
 public:
+	std::string arch_file;	/* path to architecture file */
 		
 };
 
