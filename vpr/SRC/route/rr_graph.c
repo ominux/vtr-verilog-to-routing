@@ -456,8 +456,6 @@ void build_rr_graph(
 		boolean perturb_opins = FALSE;
 //#define MY_ALGORITHM
 #define TEST_METRICS
-//#define STORE_TRACKMAP
-//#define LOAD_TRACKMAP
 #define MANAGE_TRACKMAP
 		
 		//conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
@@ -474,7 +472,7 @@ void build_rr_graph(
 
 			if (strcmp("clb", types[i].name) == 0){
 				float target_metric;
-				target_metric = 0.48;
+				target_metric = 0.0005;
 
 			
 			#ifdef MANAGE_TRACKMAP
@@ -503,7 +501,7 @@ void build_rr_graph(
 				} else {
 			#ifdef TEST_METRICS	
 					//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-					adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+					adjust_hamming(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 			#endif
 					printf("storing track map %s\n", filename);
 					write_trackmap_to_file(filename, opin_to_track_map[i], DRIVER,

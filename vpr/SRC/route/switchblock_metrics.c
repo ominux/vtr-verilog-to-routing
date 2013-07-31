@@ -35,7 +35,7 @@ static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_typ
 		INP boolean both_sides);
 
 static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,
 		INP int num_pin_type_pins, INP int exponent, INP boolean both_sides);
 
@@ -214,7 +214,7 @@ void get_conn_block_homogeneity(OUTP t_conn_block_homogeneity &cbm, INP t_type_p
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2, cbm.counted_pins_per_side, both_sides); 
 		
-		cbm.hamming_distance = get_hamming_distance(cbm.hd_pin_array.ptr, block_type, tracks_connected_to_pin,
+		cbm.hamming_distance = get_hamming_distance(cbm.hd_pin_array.ptr, block_type, 
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2, both_sides); 
 		
@@ -238,9 +238,9 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP int num_segments, INP t_segment_inf *segment_inf){
 //TODO: move this up top so all functions han see what's being optimized.
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
-#define HAMMING_PROXIMITY
+#define HAMMING_DISTANCE
 #define PRESERVE_TRACKS
-//#define USE_ANNEALER
+#define USE_ANNEALER
 
 	boolean success = FALSE;	
 	int Fc = 0;
@@ -395,15 +395,16 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
    to avoid computing block metrics all over again */
 float new_hamming, new_pin;
 #ifdef HAMMING_DISTANCE
-
+		metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = new_track;
+		metrics.hamming_distance = get_hamming_distance(metrics.hd_pin_array.ptr, block_type, 
+								pin_type, Fc, nodes_per_chan, metrics.num_wire_types,
+								num_pin_type_pins, 2, TRUE); 
+		new_hamming = metrics.hamming_distance;
 #elif defined HAMMING_PROXIMITY
-					//cbm.hd_pin_array.ptr[side][pin][0] = track;					
 		metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = new_track;
 		metrics.hamming_proximity = get_hamming_proximity(metrics.hd_pin_array.ptr, block_type, 
 								pin_type, Fc, nodes_per_chan, metrics.num_wire_types,
 								num_pin_type_pins, 2, TRUE); 
-
-
 		new_hamming = metrics.hamming_proximity;
 #elif defined WIRE_HOMOGENEITY
 
@@ -475,7 +476,7 @@ track_ptr[rand_con] = new_track;
 			track_ptr[rand_con] = old_track;
 
 #ifdef HAMMING_DISTANCE
-
+			metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = old_track;
 #elif defined HAMMING_PROXIMITY
 			metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = old_track;
 #elif defined WIRE_HOMOGENEITY
@@ -827,7 +828,7 @@ static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_ty
 
 /* Returns the hamming average hamming distance of the block's pins */
 static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,
 		INP int num_pin_type_pins, INP int exponent, INP boolean both_sides){
 	
