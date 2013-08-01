@@ -17,6 +17,21 @@
 using namespace std;
 
 
+/**** Class Declarations ****/
+/* basically a more convenient (for my purposes) way than the track map to keep track of pins and their connections */
+class clb_pin{
+public:
+	int pin_id;
+	int pin_side;
+	//assuming width/height are both 0
+	int_array_2d track_conns;
+
+	clb_pin() : 
+	track_conns(0,0){
+		pin_id = -1;
+	}
+};
+
 
 
 /**** Function Declarations ****/
@@ -277,7 +292,6 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 	/* Find max Fc */
 	Fc = get_max_Fc(Fc_array, block_type, pin_type);
 
-	srand(time(0));
 
 	int num_pin_type_pins = 0;
 	/* get number of pin_type_pins */
@@ -407,7 +421,7 @@ float new_hamming, new_pin;
 								num_pin_type_pins, 2, TRUE); 
 		new_hamming = metrics.hamming_proximity;
 #elif defined WIRE_HOMOGENEITY
-
+		//TODO
 #endif
 		metrics.ph_pin_averages.ptr[rand_pin][ old_track % metrics.num_wire_types]--;
 		metrics.ph_pin_averages.ptr[rand_pin][ new_track % metrics.num_wire_types]++;
@@ -1224,7 +1238,73 @@ void write_trackmap_to_file(INP char *filename, INP int *****tracks_connected_to
 	return;
 }
 
+/* tracks_connected_to_pin mustve already been generated before because this function gets info
+   about which pin connects at which side from this variable.
+   Further, this function assumes we're only dealing with blocks that:
+	a) have connections on each side of the block
+	b) have width/height = 1 
+   Basically it is currently used for only testing CLBs */
+void generate_random_trackmap(INOUTP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP int Fc, INP int nodes_per_chan, INP t_type_ptr block_type){
 
-//void build_filename(char *buffer, char *base, int append, chan *extension){
-//
-//}
+	assert(Fc > 0);
+
+	vpr_printf(TIO_MESSAGE_INFO, "generating random trackmap!\n");
+
+	int num_pin_type_pins = 0;
+	/* get number of pin_type_pins */
+	if (DRIVER == pin_type){
+		num_pin_type_pins = block_type->num_drivers;
+	} else if (RECEIVER == pin_type){
+		num_pin_type_pins = block_type->num_receivers;
+	} else {
+		assert(FALSE);
+	}
+	
+	/* get info about which pin connects to which side */
+	clb_pin *pins;
+	pins = new clb_pin[num_pin_type_pins];
+	int pin_count = 0;
+	for (int iside = 0; iside < 4; iside++){
+		for (int ipin = 0; ipin < block_type->num_pins; ipin++){
+
+			int track = tracks_connected_to_pin[ipin][0][0][iside][0];
+			if (OPEN == track){
+				continue;
+			} else {
+				/* we've found which side this pin connects to. mark it */
+				pins[pin_count].pin_id = ipin;
+				pins[pin_count].pin_side = iside;
+				pin_count++;
+			}
+		}
+	}
+
+	/* now assign random tracks to the marked pins */
+	for (int ipin = 0; ipin < pin_count; ipin++){
+		for (int iconn = 0; iconn < Fc; iconn++){
+			int pin = pins[ipin].pin_id;
+			int side = pins[ipin].pin_side;
+			boolean invalid_track = FALSE;
+			int new_track;
+			do{
+				/* make sure the same pin only connects to each given track once */
+				new_track = rand() % nodes_per_chan;
+				for (int i = 0; i < iconn; i++){
+					if (tracks_connected_to_pin[pin][0][0][side][i] == new_track){
+						invalid_track = TRUE;
+						break;
+					} else {
+						invalid_track = FALSE;
+					}
+				}
+			} while (invalid_track);
+
+			/* we now have a valid track -- assign */
+			tracks_connected_to_pin[pin][0][0][side][iconn] = new_track;
+		}
+	}
+
+	delete [] pins;
+	return;
+} 

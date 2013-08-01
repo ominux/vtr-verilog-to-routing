@@ -170,6 +170,9 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, 
 		INP int num_segments, INP t_segment_inf *segment_inf);
 
+void generate_random_trackmap(INOUTP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP int Fc, INP int nodes_per_chan, INP t_type_ptr block_type);
+
 void write_trackmap_to_file(INP char *filename, INP int *****tracks_connected_to_pin, INP e_pin_type pin_type,
 		INP t_type_ptr block_type, INP int Fc);
 
