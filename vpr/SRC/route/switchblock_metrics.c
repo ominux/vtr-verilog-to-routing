@@ -238,9 +238,9 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP int num_segments, INP t_segment_inf *segment_inf){
 //TODO: move this up top so all functions han see what's being optimized.
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
-#define HAMMING_DISTANCE
+#define HAMMING_PROXIMITY
 #define PRESERVE_TRACKS
-#define USE_ANNEALER
+//#define USE_ANNEALER
 
 	boolean success = FALSE;	
 	int Fc = 0;

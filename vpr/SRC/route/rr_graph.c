@@ -454,9 +454,10 @@ void build_rr_graph(
 	if (BI_DIRECTIONAL == directionality) {
 		t_conn_block_homogeneity *conn_block_homogeneity, fpga_homogeneity;
 		boolean perturb_opins = FALSE;
+
+/* This enables a different connection block creating algorithm than the one currently
+   used by VPR. Was used for early tests, but is not currently used for metrics tests */
 //#define MY_ALGORITHM
-#define TEST_METRICS
-#define MANAGE_TRACKMAP
 		
 		//conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		conn_block_homogeneity = new t_conn_block_homogeneity[L_num_types];
@@ -472,43 +473,50 @@ void build_rr_graph(
 
 			if (strcmp("clb", types[i].name) == 0){
 				float target_metric;
-				target_metric = 0.0005;
+				target_metric = 0.15;
 
-			
-			#ifdef MANAGE_TRACKMAP
+				/* Here begins the metrics test code. The controlling variables are located in globals, 
+				   and are also used in binary_search_place_and_route (place_and_route.c) so that metrics
+				   may work well with the full VPR flow (if I want to test routability of metric-guided
+				   conn blocks). For other tests though, they should be disabled in the binary search f'n, 
+				   and enabled/disabled right from the globals file by the external testing script. */
+
 				/* loads an existing trackmap if the given chan width has already been routed before */
 				/* used for min chan width of metrics-guided place & route */
 				int Fc = get_max_Fc(Fc_out[i], &types[i], DRIVER);
 				static int w_done[1000] = {0};
+				if (test_metrics){
+					char filename[] = "clb_trackmap000.txt";
+					char chanwidth[] = "000\0";
+					/* basically itoa */
+					int number = nodes_per_chan;
+					for (int ilen = 2; ilen >= 0; ilen--){
+						chanwidth[ilen] = (number % 10) + 48;
+						number = floor(number / 10);
+					}
 
-				char filename[] = "clb_trackmap000.txt";
-				char chanwidth[] = "000\0";
-				/* basically itoa */
-				int number = nodes_per_chan;
-				for (int ilen = 2; ilen >= 0; ilen--){
-					chanwidth[ilen] = (number % 10) + 48;
-					number = floor(number / 10);
+					for (int ilen = 0; ilen < 3; ilen++){
+						filename[12 + ilen] = chanwidth[ilen];
+					}
+	
+					if (manage_trackmap && w_done[nodes_per_chan]){
+						/* load */
+						printf("loading track map %s\n", filename);
+						read_trackmap_from_file(filename, opin_to_track_map[i], DRIVER,
+								&types[i], Fc);
+					} else {
+						/* generate */
+						//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						if (manage_trackmap && (!w_done[nodes_per_chan])){
+							/* store */
+							printf("storing track map %s\n", filename);
+							write_trackmap_to_file(filename, opin_to_track_map[i], DRIVER,
+									&types[i], Fc);
+							w_done[nodes_per_chan] = 1;
+						}
+					}
 				}
-
-				for (int ilen = 0; ilen < 3; ilen++){
-					filename[12 + ilen] = chanwidth[ilen];
-				}	
-
-				if (w_done[nodes_per_chan]){
-					printf("loading track map %s\n", filename);
-					read_trackmap_from_file(filename, opin_to_track_map[i], DRIVER,
-							&types[i], Fc);
-				} else {
-			#ifdef TEST_METRICS	
-					//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-					adjust_hamming(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-			#endif
-					printf("storing track map %s\n", filename);
-					write_trackmap_to_file(filename, opin_to_track_map[i], DRIVER,
-							&types[i], Fc);
-					w_done[nodes_per_chan] = 1;
-				}				
-			#endif
 			}
 			get_conn_block_homogeneity(conn_block_homogeneity[i], &types[i], opin_to_track_map[i], 
 				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
