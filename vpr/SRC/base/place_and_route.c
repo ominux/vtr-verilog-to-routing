@@ -63,7 +63,7 @@ boolean place_and_route(enum e_operation operation,
 		t_timing_inf timing_inf, t_chan_width_dist chan_width_dist,
 		struct s_model *models,
 		t_direct_inf *directs, int num_directs) {
-
+	
 	/* This routine controls the overall placement and routing of a circuit. */
 	char msg[BUFSIZE];
 
@@ -235,10 +235,13 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 		struct s_det_routing_arch det_routing_arch, t_segment_inf * segment_inf,
 		t_timing_inf timing_inf, t_chan_width_dist chan_width_dist,
 		 t_model *models, t_direct_inf *directs, int num_directs) {
-
+	
 	/* This routine performs a binary search to find the minimum number of      *
 	 * tracks per channel required to successfully route a circuit, and returns *
 	 * that minimum width_fac.                                                  */
+
+	/* OP -- Test */
+	test_metrics = manage_trackmap = TRUE;
 
 	struct s_trace **best_routing; /* Saves the best routing found so far. */
 	int current, low, high, final;
@@ -512,7 +515,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 			router_opts.trim_obs_channels,
 			directs, num_directs, FALSE,
 			&warnings);
-
+	
 	restore_routing(best_routing, clb_opins_used_locally,
 			saved_clb_opins_used_locally);
 	check_route(router_opts.route_type, det_routing_arch.num_switch,

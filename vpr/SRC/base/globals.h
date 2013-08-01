@@ -30,6 +30,14 @@ Checking OS System
  User Netlist Globals
  ********************************************************************/
 
+/**** OP - test variables ****/
+/* once turned on, metrics are used to guide the conn block creation */
+extern boolean test_metrics;	
+/* if turned on, track map will be loaded/stored depending on whether the given W was already covered.
+   test_metrics must be turned on for this variable to have effect */
+extern boolean manage_trackmap;
+
+
 /* external-to-complex block nets in the user netlist */
 extern int num_nets;
 extern struct s_net *clb_net;
