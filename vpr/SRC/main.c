@@ -43,7 +43,27 @@ int main(int argc, char **argv) {
 		/* If the user requests packing, do packing */
 		if (vpr_setup.PackerOpts.doPacking) {
 			vpr_pack(vpr_setup, Arch);
+
+
 		}
+
+		/* ANDRE: printing the hypergraph */
+		/*FILE *hypergraph;
+		hypergraph = fopen("hypergraph.txt", "w");
+
+		fprintf(hypergraph, "%d %d 11\n", num_nets, num_blocks); // first line of file: numnets, numblocks, format (weighted edges and nodes)
+		for(int i = 0; i < num_nets; i++){
+			fprintf(hypergraph, "%d", 1 - clb_net[i].is_global); //weight of the edge, 0 if it is global
+			for(int j = 0; j <= clb_net[i].num_sinks; j++)
+				fprintf(hypergraph, " %d", clb_net[i].node_block[j]);
+			fprintf(hypergraph, "\n");
+		}
+		for(int i = 0; i < num_blocks; i++){
+			fprintf(hypergraph, "%d\n", clb_net[i].type.width * clb_net[i].type.height);
+		}	
+
+		fclose(hypergraph);*/
+
 
 		if (vpr_setup.PlacerOpts.doPlacement || vpr_setup.RouterOpts.doRouting) {
 			vpr_init_pre_place_and_route(vpr_setup, Arch);
