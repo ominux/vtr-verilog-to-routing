@@ -82,7 +82,7 @@ static void handle_bracket( INP const Formula_Object &fobj, INOUTP vector<Formul
 static int parse_rpn_vector( INOUTP vector<Formula_Object> &rpn_vec );
 
 /* applies operation specified by 'op' to the given arguments. arg1 comes before arg2 */
-static int parse_rpn_apply_op( INP const Formula_Object &arg1, INP const Formula_Object &arg2, 
+static int apply_rpn_op( INP const Formula_Object &arg1, INP const Formula_Object &arg2, 
 					INP const Formula_Object &op );
 
 /* checks if specified character represents an ASCII number */
@@ -113,7 +113,7 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 	result = parse_rpn_vector(rpn_output);
 
 	printf("result: %d\n\n", result);
-
+	
 	return result;
 }
 
@@ -136,13 +136,10 @@ static void formula_to_rpn( INP const char* formula, INP const s_formula_data &m
 		if ('\0' == (*ch)){
 			/* we're done */
 			break;
+		} else if (' ' == (*ch)){
+			/* skip space */
 		} else {
-			/* skip spaces */
-			if (' ' == (*ch)){
-				ichar++;
-				continue;
-			}
-		
+			/* at this point we can parse the character */
 			get_formula_object( ch, ichar, mydata, &fobj );
 			switch (fobj.type){
 				case E_FML_NUMBER:
@@ -331,7 +328,6 @@ static void handle_operator( INP const Formula_Object &fobj, INOUTP vector<Formu
 	/* place new operator object on top of stack */
 	op_stack.push(fobj);
 	
-
 	return;
 }
 
@@ -412,7 +408,7 @@ static int parse_rpn_vector( INOUTP vector<Formula_Object> &rpn_vec ){
 
 		/* now we apply the selected operation to the two previous entries */
 		/* the result is stored in the object that used to be the operation */
-		rpn_vec.at(ivec).data.num = parse_rpn_apply_op( rpn_vec.at(ivec-2), rpn_vec.at(ivec-1), rpn_vec.at(ivec) );
+		rpn_vec.at(ivec).data.num = apply_rpn_op( rpn_vec.at(ivec-2), rpn_vec.at(ivec-1), rpn_vec.at(ivec) );
 		rpn_vec.at(ivec).type = E_FML_NUMBER;
 
 		/* remove the previous two entries from the vector */
@@ -430,20 +426,20 @@ static int parse_rpn_vector( INOUTP vector<Formula_Object> &rpn_vec ){
 }
 
 /* applies operation specified by 'op' to the given arguments. arg1 comes before arg2 */
-static int parse_rpn_apply_op( INP const Formula_Object &arg1, INP const Formula_Object &arg2, 
+static int apply_rpn_op( INP const Formula_Object &arg1, INP const Formula_Object &arg2, 
 					INP const Formula_Object &op ){
 	int result = -1;
 	
 	/* arguments must be numbers */
 	if ( E_FML_NUMBER != arg1.type || 
 	     E_FML_NUMBER != arg2.type){
-		vpr_printf(TIO_MESSAGE_ERROR, "in parse_rpn_apply_op: one of the arguments is not a number\n");
+		vpr_printf(TIO_MESSAGE_ERROR, "in apply_rpn_op: one of the arguments is not a number\n");
 		exit(1);
 	}
 
 	/* check that op is actually an operation */
 	if ( E_FML_OPERATOR != op.type ){
-		vpr_printf(TIO_MESSAGE_ERROR, "in parse_rpn_apply_op: the object specified as the operation is not of operation type\n");
+		vpr_printf(TIO_MESSAGE_ERROR, "in apply_rpn_op: the object specified as the operation is not of operation type\n");
 		exit(1);
 	}
 
@@ -462,7 +458,7 @@ static int parse_rpn_apply_op( INP const Formula_Object &arg1, INP const Formula
 			result = arg1.data.num / arg2.data.num;
 			break;
 		default:
-			vpr_printf(TIO_MESSAGE_ERROR, "in parse_rpn_apply_op: invalid operation: %d\n", op.data.op);
+			vpr_printf(TIO_MESSAGE_ERROR, "in apply_rpn_op: invalid operation: %d\n", op.data.op);
 			exit(1);
 			break;
 	}
