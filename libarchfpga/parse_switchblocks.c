@@ -1,3 +1,14 @@
+/* 
+===== Description =====
+The contents of this file assist in parsing switchblock descriptions specified
+in the XML architecture file.
+
+A large chunk of this file is dedicated to helping parse the initial switchblock
+specificaiton in the XML arch file, providing error checking, etc.
+
+Another large chunk of this code is dedicated to parsing the actual formulas 
+specified by the switchblock permutation functions into their numeric counterparts.
+*/
 
 
 #include <string.h>
@@ -6,9 +17,12 @@
 #include <sstream>
 #include <vector>
 #include <stack>
+#include <utility>
 #include "util.h"
+#include "read_xml_util.h"
 #include "arch_types.h"
-#include "xml_arch_switchblocks.h"
+#include "physical_types.h"
+#include "parse_switchblocks.h"
 
 using namespace std;
 
@@ -33,6 +47,8 @@ typedef enum e_operator{
 } t_operator;
 
 /**** Class Definitions ****/
+/* This class is used to represent an object in a formula, such as 
+   a number, a bracket, an operator, or a variable */
 class Formula_Object{
 public:
 	/* indicates the type of formula object this is */
@@ -86,10 +102,224 @@ static int apply_rpn_op( INP const Formula_Object &arg1, INP const Formula_Objec
 					INP const Formula_Object &op );
 
 /* checks if specified character represents an ASCII number */
-static bool is_char_number ( INP const char &ch );
+static bool is_char_number( INP const char &ch );
+
+
 
 /**** Function Definitions ****/
 
+/* Reads-in the wire connections specified for the switchblock in the xml arch file */
+void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
+	
+	/* Make sure that Node is a switchblock */
+	CheckElement(Node, "switchblock");
+	
+	int num_wireconns;
+	ezxml_t SubElem;
+	const char *char_prop;
+	int int_prop;	
+
+	/* count the number of specified wire connections for this SB */
+	num_wireconns = CountChildren(Node, "wireconn", 1);
+	
+	/* allocate the wireconn list for the SB */
+	sb->num_wireconns = num_wireconns;
+	sb->wireconns = (t_wireconn_inf *) my_malloc( num_wireconns * sizeof(t_wireconn_inf) );
+
+	for (int i = 0; i < num_wireconns; i++){
+		SubElem = ezxml_child(Node, "wireconn");
+
+		/* get first wire type */
+		char_prop = FindProperty(SubElem, "T1", TRUE);
+		sb->wireconns[i].type1 = my_strdup(char_prop);
+		ezxml_set_attr(SubElem, "T1", NULL);
+
+		/* get second wire type */
+		char_prop = FindProperty(SubElem, "T2", TRUE);
+		sb->wireconns[i].type2 = my_strdup(char_prop);
+		ezxml_set_attr(SubElem, "T2", NULL);
+
+		/* get first wire group */
+		int_prop = GetIntProperty(SubElem, "G1", TRUE, -1);
+		sb->wireconns[i].group1 = int_prop;
+		ezxml_set_attr(SubElem, "G1", NULL);
+
+		/* get first wire group */
+		int_prop = GetIntProperty(SubElem, "G2", TRUE, -1);
+		sb->wireconns[i].group2 = int_prop;
+		ezxml_set_attr(SubElem, "G2", NULL);
+
+		FreeNode(SubElem);
+	}
+
+	return;
+}
+
+/* Loads permutation funcs specified under Node into t_switchblock_inf. Node should be 
+   <switchfuncs> */
+void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
+	
+	/* Make sure the passed-in is correct */
+	CheckElement(Node, "switchfuncs");
+	
+	ezxml_t SubElem;
+
+	/* Make structure that pairs switch going in one direction with a switch going in other direction.
+	   This is useful for the bidir case where only 6 of the 12 permutation functions are specified.
+	   Each element of a pair is a pointer to a vector in the switchblock struct that specifies the permutation
+	   function(s) for that particular side->side connection. */
+	pair< vector<const char*> *, vector<const char*> * > func_pairs[6] = 
+					{
+						make_pair( &(sb->lr), &(sb->rl) ), 
+						make_pair( &(sb->lt), &(sb->tl) ), 
+						make_pair( &(sb->lb), &(sb->bl) ), 
+						make_pair( &(sb->rt), &(sb->tr) ), 
+						make_pair( &(sb->rb), &(sb->br) ), 
+						make_pair( &(sb->bt), &(sb->tb) )
+					};
+	/* an enumeration to help access the above array of pairs */
+	enum{
+		E_LR = 0,
+		E_LT,
+		E_LB,
+		E_RT,
+		E_RB,
+		E_BT,
+		E_NUM_FUNC_PAIRS
+	};
+
+	/* Used to designate if a predifined function such as 'wilton' has been found.
+	   If a predifined function is specified, only one function entry is allowed */
+	bool predefined_sb_found = false;
+
+	/* is switchblock bidirectional? */
+	bool is_bidir = (BI_DIRECTIONAL == (*sb).directionality);
+	
+	/* get the number of specified permutation functions */
+	int num_funcs = CountChildren(Node, "func", 1);
+
+	const char * func_type;
+	const char * func_formula;
+	vector<const char *> * func_ptr;
+
+	/* now we iterate through all the specified permutation functions, and 
+	   load them into the switchblock structure as appropriate */
+	for (int ifunc = 0; ifunc < num_funcs; ifunc++){
+		/* get the next switchblock function */
+		SubElem = ezxml_child(Node, "func");
+		/* get function type */
+		func_type = FindProperty(SubElem, "type", TRUE);
+		if (!func_type){
+			vpr_printf(TIO_MESSAGE_ERROR, "empty function specification in switchblock\n");
+			exit(1);
+		}
+		ezxml_set_attr(SubElem, "type", NULL);
+		/* get function formula */
+		func_formula = FindProperty(SubElem, "formula", TRUE);
+		if (!func_formula){
+			vpr_printf(TIO_MESSAGE_ERROR, "empty formula specification in switchblock\n");
+			exit(1);
+		}
+		ezxml_set_attr(SubElem, "formula", NULL);
+
+
+		/* a predefined function should be the only entry */
+		if (predefined_sb_found && ifunc > 0){
+			vpr_printf(TIO_MESSAGE_ERROR, "Predefined switchblock function should be the only entry in the switchfuncs section. Other entry found: %s = %s\n", func_type, func_formula);
+			exit(1);
+		}
+
+		/* go through all the possible cases of func_type */
+		if (0 == strcmp(func_type, "lt")){
+			func_ptr = func_pairs[E_LT].first;
+		} else if (0 == strcmp(func_type, "lr")) {
+			func_ptr = func_pairs[E_LR].first; 
+		} else if (0 == strcmp(func_type, "lb")) {
+			func_ptr = func_pairs[E_LB].first; 
+		} else if (0 == strcmp(func_type, "tl")) {
+			func_ptr = func_pairs[E_LT].second; 
+		} else if (0 == strcmp(func_type, "tb")) {
+			func_ptr = func_pairs[E_BT].second; 
+		} else if (0 == strcmp(func_type, "tr")) {
+			func_ptr = func_pairs[E_RT].second; 
+		} else if (0 == strcmp(func_type, "rt")) {
+			func_ptr = func_pairs[E_RT].first; 
+		} else if (0 == strcmp(func_type, "rl")) {
+			func_ptr = func_pairs[E_LR].second; 
+		} else if (0 == strcmp(func_type, "rb")) {
+			func_ptr = func_pairs[E_RB].first; 
+		} else if (0 == strcmp(func_type, "bl")) {
+			func_ptr = func_pairs[E_LB].second; 
+		} else if (0 == strcmp(func_type, "bt")) {
+			func_ptr = func_pairs[E_BT].first; 
+		} else if (0 == strcmp(func_type, "br")) {
+			func_ptr = func_pairs[E_RB].second; 
+		} else if (0 == strcmp(func_type, "predefined")){
+			/* a predifined permutation function */
+			predefined_sb_found = true;
+		} else {
+			/* unknown permutation function */
+			vpr_printf(TIO_MESSAGE_ERROR, "Unknown permutation function specified: %s\n", func_type);
+			exit(1);
+		}
+
+		/* Here we load the specified switch function(s) */
+		if (predefined_sb_found){
+			//TODO: load_predefined_switchfuncs( const char *predef_switch, ...? );
+		} else {
+			func_ptr->push_back( my_strdup(func_formula) );
+		}
+	
+		func_ptr = NULL;
+		FreeNode(SubElem);
+	}
+	
+	/* Here we check the completeness of the specified switchblock.
+	   In the bidirectional case, only 6 of the 12 functions have to be specified 
+	   therefore we have to check that only one entry in each func pair has been
+	   specified. For the unidirectional case, all 12 funcs must be specified*/
+	/* In the bidir case, the remaining 6 funcs are filled in later */
+	if (!predefined_sb_found){
+		for (int ifunc = 0; ifunc < E_NUM_FUNC_PAIRS; ifunc ++){
+			if (func_pairs[ifunc].first->size() && func_pairs[ifunc].second->size()){
+				if (is_bidir){
+					/* only one pair entry can have size > 0 */
+					vpr_printf(TIO_MESSAGE_ERROR, "Bidir switchblock specification incomplete\n");
+					exit(1);
+				} else {
+					//Correct. Nothing to do.
+				}
+			} else {
+				if (is_bidir){
+					/* Bidir case doesn't have the required 6 functions specified */
+					if ( func_pairs[ifunc].first->empty() && func_pairs[ifunc].second->empty() ){
+						vpr_printf(TIO_MESSAGE_ERROR, "Required switch is not specified in bidir switchblock\n");
+						exit(1);
+					}
+				} else {
+					/* Unidir case doesn't have all 12 functions specified */
+					vpr_printf(TIO_MESSAGE_ERROR, "Not all 12 permutation functions specified for unidirectional switchblock.\n");
+					exit(1);
+				}
+			}
+		}
+	}
+
+	return;
+} /* read_sb_switchfuncs */
+
+
+
+
+
+
+
+
+
+
+
+
+/* returns integer result according to the specified formula and data */
 int get_sb_formula_result( INP const char* formula, INP const s_formula_data &mydata ){
 	/* the result of the formula will be an integer */
 	int result = -1;
@@ -106,7 +336,6 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 	vector<Formula_Object> rpn_output;	/* output in reverse-polish notation */
 
 	/* now we have to run the shunting-yard algorithm to convert formula to reverse polish notation */
-	//we will have a stack for the operators, and a vector for the RPN output
 	formula_to_rpn( formula, mydata, OUTP rpn_output );
 	
 	/* then we run an RPN parser to get the final result */
@@ -123,9 +352,8 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 static void formula_to_rpn( INP const char* formula, INP const s_formula_data &mydata, 
 				INOUTP vector<Formula_Object> &rpn_output ){
 
-
-	stack<Formula_Object> op_stack;		/* stack for handling operators in formula */
-	Formula_Object fobj;			/* for parsing formula objects */
+	stack<Formula_Object> op_stack;		/* stack for handling operators and brackets in formula */
+	Formula_Object fobj;		 	/* for parsing formula objects */
 
 	int ichar = 0;
 	const char *ch = NULL;
@@ -139,7 +367,7 @@ static void formula_to_rpn( INP const char* formula, INP const s_formula_data &m
 		} else if (' ' == (*ch)){
 			/* skip space */
 		} else {
-			/* at this point we can parse the character */
+			/* parse the character */
 			get_formula_object( ch, ichar, mydata, &fobj );
 			switch (fobj.type){
 				case E_FML_NUMBER:
@@ -147,9 +375,11 @@ static void formula_to_rpn( INP const char* formula, INP const s_formula_data &m
 					rpn_output.push_back( fobj );
 					break;
 				case E_FML_OPERATOR:
+					/* operators may be pushed to op_stack or rpn_output */
 					handle_operator( fobj, rpn_output, op_stack);
 					break;
 				case E_FML_BRACKET:
+					/* brackets are only ever pushed to op_stack, not rpn_output */
 					handle_bracket( fobj, rpn_output, op_stack);
 					break;
 				default:
@@ -166,7 +396,7 @@ static void formula_to_rpn( INP const char* formula, INP const s_formula_data &m
 		fobj_dummy = op_stack.top();
 
 		if (E_FML_BRACKET == fobj_dummy.type){
-			vpr_printf(TIO_MESSAGE_ERROR, "Mismatched brackets in user-provided formula\n");
+			vpr_printf(TIO_MESSAGE_ERROR, "in formula_to_rpn: Mismatched brackets in user-provided formula\n");
 			exit(1);
 		}		
 
