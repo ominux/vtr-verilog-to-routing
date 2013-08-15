@@ -1915,8 +1915,11 @@ static void read_activity(char * activity_file) {
 	}
 
 	for (net_idx = 0; net_idx < num_logical_nets; net_idx++) {
-		vpack_net[net_idx].probability = -1.0;
-		vpack_net[net_idx].density = -1.0;
+		if (!vpack_net[net_idx].net_power) {
+			vpack_net[net_idx].net_power = new t_net_power;
+		}
+		vpack_net[net_idx].net_power->probability = -1.0;
+		vpack_net[net_idx].net_power->density = -1.0;
 	}
 
 	act_file_hdl = my_fopen(activity_file, "r", FALSE);
@@ -1940,8 +1943,9 @@ static void read_activity(char * activity_file) {
 
 	/* Make sure all nets have an activity value */
 	for (net_idx = 0; net_idx < num_logical_nets; net_idx++) {
-		if (vpack_net[net_idx].probability < 0.0
-				|| vpack_net[net_idx].density < 0.0) {
+		if (!vpack_net[net_idx].net_power
+				|| vpack_net[net_idx].net_power->probability < 0.0
+				|| vpack_net[net_idx].net_power->density < 0.0) {
 			printf("Error: Activity file does not contain signal %s\n",
 					vpack_net[net_idx].name);
 			fail = TRUE;
@@ -1963,8 +1967,8 @@ bool add_activity_to_net(char * net_name, float probability, float density) {
 	while (h_ptr != NULL ) {
 		if (strcmp(h_ptr->name, net_name) == 0) {
 			net_idx = h_ptr->index;
-			vpack_net[net_idx].probability = probability;
-			vpack_net[net_idx].density = density;
+			vpack_net[net_idx].net_power->probability = probability;
+			vpack_net[net_idx].net_power->density = density;
 			return false;
 		}
 		h_ptr = h_ptr->next;

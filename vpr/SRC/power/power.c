@@ -20,14 +20,16 @@
  */
 
 /************************* INCLUDES *********************************/
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <csignal>
+#include <ctime>
+#include <cmath>
+using namespace std;
+
 #include <ctype.h>
-#include <math.h>
-#include <time.h>
+#include <assert.h>
 
 #include "power.h"
 #include "power_components.h"
@@ -154,7 +156,8 @@ static void power_usage_primitive(t_power_usage * power_usage, t_pb * pb,
 		} else {
 			SRAM_values = alloc_SRAM_values_from_truth_table(LUT_size, NULL);
 		}
-		power_usage_lut(&sub_power_usage, LUT_size, SRAM_values,
+		power_usage_lut(&sub_power_usage, LUT_size,
+				g_power_arch->LUT_transistor_size, SRAM_values,
 				input_probabilities, input_densities, g_solution_inf.T_crit);
 		power_add_usage(power_usage, &sub_power_usage);
 		free(SRAM_values);
@@ -181,8 +184,8 @@ static void power_usage_primitive(t_power_usage * power_usage, t_pb * pb,
 		clk_prob = g_clock_arch->clock_inf[0].prob;
 		clk_dens = g_clock_arch->clock_inf[0].dens;
 
-		power_usage_ff(&sub_power_usage, D_prob, D_dens, Q_prob, Q_dens,
-				clk_prob, clk_dens, g_solution_inf.T_crit);
+		power_usage_ff(&sub_power_usage, g_power_arch->FF_size, D_prob, D_dens,
+				Q_prob, Q_dens, clk_prob, clk_dens, g_solution_inf.T_crit);
 		power_add_usage(power_usage, &sub_power_usage);
 
 	} else {
@@ -588,7 +591,6 @@ static void power_reset_tile_usage(void) {
  */
 static void power_usage_blocks(t_power_usage * power_usage) {
 	int x, y, z;
-	int type_idx;
 
 	power_zero_usage(power_usage);
 
@@ -597,7 +599,6 @@ static void power_usage_blocks(t_power_usage * power_usage) {
 	/* Loop through all grid locations */
 	for (x = 0; x < nx + 2; x++) {
 		for (y = 0; y < ny + 2; y++) {
-			type_idx = grid[x][y].type->index;
 
 			if ((grid[x][y].offset != 0) || (grid[x][y].type == EMPTY_TYPE)) {
 				continue;
@@ -625,17 +626,11 @@ static void power_usage_blocks(t_power_usage * power_usage) {
  */
 static void power_usage_clock(t_power_usage * power_usage,
 		t_clock_arch * clock_arch) {
-	float Clock_power_dissipation;
-	int total_clock_buffers, total_clock_segments;
 	int clock_idx;
 
 	/* Initialization */
 	power_usage->dynamic = 0.;
 	power_usage->leakage = 0.;
-
-	Clock_power_dissipation = 0;
-	total_clock_buffers = 0;
-	total_clock_segments = 0;
 
 	/* if no global clock, then return */
 	if (clock_arch->num_global_clocks == 0) {
@@ -692,7 +687,6 @@ static void power_usage_clock_single(t_power_usage * power_usage,
 	 * It is assumed that there are a single-inverter buffers placed along each wire,
 	 * with spacing equal to the FPGA block size (1 buffer/block) */
 	t_power_usage clock_buffer_power;
-	boolean clock_used;
 	int length;
 	t_power_usage buffer_power;
 	t_power_usage wire_power;
@@ -704,9 +698,7 @@ static void power_usage_clock_single(t_power_usage * power_usage,
 
 	/* Check if this clock is active - this is used for calculating leakage */
 	if (single_clock->dens) {
-		clock_used = TRUE;
 	} else {
-		clock_used = FALSE;
 		assert(0);
 	}
 
@@ -877,8 +869,10 @@ static void power_usage_routing(t_power_usage * power_usage,
 
 				/* Multiplexor */
 				power_usage_mux_multilevel(&sub_power_usage,
-						power_get_mux_arch(node->fan_in), node_power->in_prob,
-						node_power->in_dens, node_power->selected_input, TRUE,
+						power_get_mux_arch(node->fan_in,
+								g_power_arch->mux_transistor_size),
+						node_power->in_prob, node_power->in_dens,
+						node_power->selected_input, TRUE,
 						g_solution_inf.T_crit);
 				power_add_usage(power_usage, &sub_power_usage);
 				power_component_add_usage(&sub_power_usage,
@@ -909,9 +903,10 @@ static void power_usage_routing(t_power_usage * power_usage,
 
 			/* Multiplexor */
 			power_usage_mux_multilevel(&sub_power_usage,
-					power_get_mux_arch(node->fan_in), node_power->in_prob,
-					node_power->in_dens, node_power->selected_input, TRUE,
-					g_solution_inf.T_crit);
+					power_get_mux_arch(node->fan_in,
+							g_power_arch->mux_transistor_size),
+					node_power->in_prob, node_power->in_dens,
+					node_power->selected_input, TRUE, g_solution_inf.T_crit);
 			power_add_usage(power_usage, &sub_power_usage);
 			power_component_add_usage(&sub_power_usage,
 					POWER_COMPONENT_ROUTE_SB);
@@ -925,7 +920,7 @@ static void power_usage_routing(t_power_usage * power_usage,
 				 // / (float) g_power_arch->seg_buffer_split;
 				 buffer_size = power_buffer_size_from_logical_effort(
 				 C_per_seg_split);
-				 buffer_size = std::max(buffer_size, 1.0F);
+				 buffer_size = max(buffer_size, 1.0F);
 				 */
 				buffer_size = power_calc_buffer_size_from_Cout(
 						switch_inf[node_power->driver_switch_type].Cout);
@@ -933,7 +928,7 @@ static void power_usage_routing(t_power_usage * power_usage,
 			case POWER_BUFFER_TYPE_ABSOLUTE_SIZE:
 				buffer_size =
 						switch_inf[node_power->driver_switch_type].power_buffer_size;
-				buffer_size = std::max(buffer_size, 1.0F);
+				buffer_size = max(buffer_size, 1.0F);
 				break;
 			case POWER_BUFFER_TYPE_NONE:
 				buffer_size = 0.;
@@ -1153,10 +1148,13 @@ void power_routing_init(t_det_routing_arch * routing_arch) {
 
 	/* Copy probability/density values to new netlist */
 	for (net_idx = 0; net_idx < num_nets; net_idx++) {
-		clb_net[net_idx].probability =
-				vpack_net[clb_to_vpack_net_mapping[net_idx]].probability;
-		clb_net[net_idx].density =
-				vpack_net[clb_to_vpack_net_mapping[net_idx]].density;
+		if (!clb_net[net_idx].net_power) {
+			clb_net[net_idx].net_power = new t_net_power;
+		}
+		clb_net[net_idx].net_power->probability =
+				vpack_net[clb_to_vpack_net_mapping[net_idx]].net_power->probability;
+		clb_net[net_idx].net_power->density =
+				vpack_net[clb_to_vpack_net_mapping[net_idx]].net_power->density;
 	}
 
 	/* Initialize RR Graph Structures */
@@ -1181,9 +1179,9 @@ void power_routing_init(t_det_routing_arch * routing_arch) {
 
 		switch (node->type) {
 		case IPIN:
-			max_IPIN_fanin = std::max(max_IPIN_fanin,
+			max_IPIN_fanin = max(max_IPIN_fanin,
 					static_cast<int>(node->fan_in));
-			max_fanin = std::max(max_fanin, static_cast<int>(node->fan_in));
+			max_fanin = max(max_fanin, static_cast<int>(node->fan_in));
 
 			node_power->in_dens = (float*) my_calloc(node->fan_in,
 					sizeof(float));
@@ -1201,11 +1199,10 @@ void power_routing_init(t_det_routing_arch * routing_arch) {
 					fanout_to_seg++;
 				}
 			}
-			max_seg_to_IPIN_fanout = std::max(max_seg_to_IPIN_fanout,
+			max_seg_to_IPIN_fanout = max(max_seg_to_IPIN_fanout,
 					fanout_to_IPIN);
-			max_seg_to_seg_fanout = std::max(max_seg_to_seg_fanout,
-					fanout_to_seg);
-			max_fanin = std::max(max_fanin, static_cast<int>(node->fan_in));
+			max_seg_to_seg_fanout = max(max_seg_to_seg_fanout, fanout_to_seg);
+			max_fanin = max(max_fanin, static_cast<int>(node->fan_in));
 
 			node_power->in_dens = (float*) my_calloc(node->fan_in,
 					sizeof(float));
@@ -1277,8 +1274,7 @@ boolean power_init(char * power_out_filepath,
 
 	/* Set global power architecture & options */
 	g_power_arch = arch->power;
-	g_power_commonly_used = (t_power_commonly_used*) my_malloc(
-			sizeof(t_power_commonly_used));
+	g_power_commonly_used = new t_power_commonly_used;
 	g_power_tech = (t_power_tech*) my_malloc(sizeof(t_power_tech));
 	g_power_output = (t_power_output*) my_malloc(sizeof(t_power_output));
 
@@ -1297,10 +1293,6 @@ boolean power_init(char * power_out_filepath,
 			error = TRUE;
 		}
 	}
-
-	/* Initialize Commonly Used Values */
-	g_power_commonly_used->mux_arch = NULL;
-	g_power_commonly_used->mux_arch_max_size = 0;
 
 	/* Load technology properties */
 	power_tech_init(cmos_tech_behavior_filepath);
@@ -1322,6 +1314,8 @@ boolean power_init(char * power_out_filepath,
 
 	/* Size all components */
 	power_sizing_init(arch);
+
+	//power_print_spice_comparison();
 
 	return error;
 }
@@ -1357,14 +1351,16 @@ boolean power_uninit(void) {
 	free(rr_node_power);
 
 	/* Free mux architectures */
-	for (mux_size = 1; mux_size <= g_power_commonly_used->mux_arch_max_size;
-			mux_size++) {
-		//free(g_power_commonly_used->mux_arch[mux_size].encoding_types);
-		free(g_power_commonly_used->mux_arch[mux_size].transistor_sizes);
-		dealloc_mux_graph(
-				g_power_commonly_used->mux_arch[mux_size].mux_graph_head);
+	for (std::map<float, t_power_mux_info*>::iterator it =
+			g_power_commonly_used->mux_info.begin();
+			it != g_power_commonly_used->mux_info.end(); it++) {
+		t_power_mux_info * mux_info = it->second;
+		for (mux_size = 1; mux_size <= mux_info->mux_arch_max_size;
+				mux_size++) {
+			dealloc_mux_graph(mux_info->mux_arch[mux_size].mux_graph_head);
+		}
+		delete mux_info;
 	}
-	free(g_power_commonly_used->mux_arch);
 	free(g_power_commonly_used);
 
 	if (g_power_output->out) {
@@ -1751,7 +1747,6 @@ e_power_ret_code power_total(float * run_time_s, t_vpr_setup vpr_setup,
 	//power_print_title(g_power_output->out, "Spice Comparison");
 	//power_print_spice_comparison();
 
-
 	t_end = clock();
 
 	*run_time_s = (float) (t_end - t_start) / CLOCKS_PER_SEC;
@@ -1803,7 +1798,7 @@ static void power_print_breakdown_pb(FILE * fp) {
 					"\t\tinput pins. Static power is absolute.\n"
 					"\tC-Internal: Dynamic power is calculated using an internal equivalent\n"
 					"\t\tcapacitance for PB type. Static power is absolute.\n"
-					"\tAbsolute: Dynaic and static power are absolutes from the architecture file.\n"
+					"\tAbsolute: Dynamic and static power are absolutes from the architecture file.\n"
 					"\tSum of Children: Power of PB is only the sum of all child PBs; interconnect\n"
 					"\t\tbetween the PB and its children is ignored.\n"
 					"\tIgnore: Power of PB is ignored.\n\n\n");

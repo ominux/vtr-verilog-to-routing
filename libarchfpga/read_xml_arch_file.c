@@ -3452,6 +3452,32 @@ static void ProcessPower( INOUTP ezxml_t parent,
 				"transistors_per_bit", TRUE, 0);
 		FreeNode(Cur);
 	}
+
+	/* Get Mux transistor size */
+	power_arch->mux_transistor_size = 1.0;
+	Cur = FindElement(parent, "mux_transistor_size", FALSE);
+	if (Cur) {
+		power_arch->mux_transistor_size = GetFloatProperty(Cur,
+				"mux_transistor_size", TRUE, 0);
+		FreeNode(Cur);
+	}
+
+	/* Get FF size */
+	power_arch->FF_size = 1.0;
+	Cur = FindElement(parent, "FF_size", FALSE);
+	if (Cur) {
+		power_arch->FF_size = GetFloatProperty(Cur, "FF_size", TRUE, 0);
+		FreeNode(Cur);
+	}
+
+	/* Get LUT transistor size */
+	power_arch->LUT_transistor_size = 1.0;
+	Cur = FindElement(parent, "LUT_transistor_size", FALSE);
+	if (Cur) {
+		power_arch->LUT_transistor_size = GetFloatProperty(Cur,
+				"LUT_transistor_size", TRUE, 0);
+		FreeNode(Cur);
+	}
 }
 
 /* Get the clock architcture */

@@ -97,16 +97,17 @@ enum e_pin_to_pin_pack_pattern_annotations {
 };
 
 /* Power Estimation type for a PB */
-typedef enum {
-	POWER_METHOD_UNDEFINED = 0,
-	POWER_METHOD_IGNORE,			/* Ignore power of this PB, and all children PB */
-	POWER_METHOD_SUM_OF_CHILDREN,	/* Ignore power of this PB, but consider children */
-	POWER_METHOD_AUTO_SIZES,		/* Transistor-level, auto-sized buffers/wires */
-	POWER_METHOD_SPECIFY_SIZES,		/* Transistor-level, user-specified buffers/wires */
-	POWER_METHOD_TOGGLE_PINS,		/* Dynamic: Energy per pin toggle, Static: Absolute */
-	POWER_METHOD_C_INTERNAL,		/* Dynamic: Equiv. Internal capacitance, Static: Absolute */
-	POWER_METHOD_ABSOLUTE			/* Dynamic: Aboslute, Static: Absolute */
-} e_power_estimation_method;
+enum e_power_estimation_method_ {
+	POWER_METHOD_UNDEFINED = 0, POWER_METHOD_IGNORE, /* Ignore power of this PB, and all children PB */
+	POWER_METHOD_SUM_OF_CHILDREN, /* Ignore power of this PB, but consider children */
+	POWER_METHOD_AUTO_SIZES, /* Transistor-level, auto-sized buffers/wires */
+	POWER_METHOD_SPECIFY_SIZES, /* Transistor-level, user-specified buffers/wires */
+	POWER_METHOD_TOGGLE_PINS, /* Dynamic: Energy per pin toggle, Static: Absolute */
+	POWER_METHOD_C_INTERNAL, /* Dynamic: Equiv. Internal capacitance, Static: Absolute */
+	POWER_METHOD_ABSOLUTE /* Dynamic: Aboslute, Static: Absolute */
+};
+typedef enum e_power_estimation_method_ e_power_estimation_method;
+typedef enum e_power_estimation_method_ t_power_estimation_method;
 
 /*************************************************************************************************/
 /* FPGA grid layout data types                                                                   */
@@ -166,6 +167,9 @@ struct s_power_arch {
 	float logical_effort_factor;
 	float local_interc_factor;
 	float transistors_per_SRAM_bit;
+	float mux_transistor_size;
+	float FF_size;
+	float LUT_transistor_size;
 };
 
 /* Power usage for an entity */
