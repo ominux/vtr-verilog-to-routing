@@ -89,12 +89,12 @@ void free_chan_details(
 		int nodes_per_chan,
 		INP int L_nx, INP int L_ny);
 
-int get_seg_start(
+int init_seg_start(
 		INP t_seg_details * seg_details,
 		INP int itrack,
 		INP int chan_num,
 		INP int seg_num);
-int get_seg_end(INP t_seg_details * seg_details,
+int init_seg_end(INP t_seg_details * seg_details,
 		INP int itrack,
 		INP int istart,
 		INP int chan_num,

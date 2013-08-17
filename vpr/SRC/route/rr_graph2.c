@@ -229,6 +229,9 @@ t_seg_details *alloc_and_load_seg_details(
 		group_start = 0;
 		for (itrack = 0; itrack < ntracks; itrack++) {
 
+			/* Set the name of the segment type this track belongs to */
+			seg_details[cur_track].type_name = my_strdup( segment_inf[i].name );
+
 			/* Remember the start track of the current wire group */
 			if ((itrack / fac) % length == 0 && (itrack % fac) == 0) {
 				group_start = cur_track;
@@ -246,7 +249,7 @@ t_seg_details *alloc_and_load_seg_details(
 			seg_details[cur_track].start = (cur_track / fac) % length + 1;
 
 			/* These properties are used for vpr_to_phy_track to determine
-			 * * twisting of wires. */
+			 * twisting of wires. */
 			seg_details[cur_track].group_start = group_start;
 			seg_details[cur_track].group_size = 
 					std::min(ntracks + first_track - group_start, length * fac);
@@ -402,12 +405,12 @@ t_chan_details* init_chan_details(
 				p_seg_details[i].seg_end = -1;
 
 				if (seg_details_type == SEG_DETAILS_X) {
-					p_seg_details[i].seg_start = get_seg_start(p_seg_details, i, y, x);
-					p_seg_details[i].seg_end = get_seg_end(p_seg_details, i, p_seg_details[i].seg_start, y, L_nx);
+					p_seg_details[i].seg_start = init_seg_start(p_seg_details, i, y, x);
+					p_seg_details[i].seg_end = init_seg_end(p_seg_details, i, p_seg_details[i].seg_start, y, L_nx);
 				}
 				if (seg_details_type == SEG_DETAILS_Y) {
-					p_seg_details[i].seg_start = get_seg_start(p_seg_details, i, x, y);
-					p_seg_details[i].seg_end = get_seg_end(p_seg_details, i, p_seg_details[i].seg_start, x, L_ny);
+					p_seg_details[i].seg_start = init_seg_start(p_seg_details, i, x, y);
+					p_seg_details[i].seg_end = init_seg_end(p_seg_details, i, p_seg_details[i].seg_start, x, L_ny);
 				}
 
 				int length = seg_details[i].length;
@@ -629,74 +632,61 @@ void free_chan_details(
 }
 
 /* Returns the segment number at which the segment this track lies on        *
- * started.                                                                  */
-int get_seg_start(
+ * started. Used to initialize the seg_start field in t_seg_details          */
+int init_seg_start(
 		INP t_seg_details * seg_details, INP int itrack,
 		INP int chan_num, INP int seg_num) {
 
-	int seg_start = 0;
-	if (seg_details[itrack].seg_start >= 0) {
+	int seg_start = 1;
+	if (FALSE == seg_details[itrack].longline) {
 
-		seg_start = seg_details[itrack].seg_start;
+		int length = seg_details[itrack].length;
+		int start = seg_details[itrack].start;
 
-	} else {
+		/* Start is guaranteed to be between 1 and length.  Hence adding length to *
+		 * the quantity in brackets below guarantees it will be nonnegative.       */
 
-		seg_start = 1;
-		if (FALSE == seg_details[itrack].longline) {
+		assert(start > 0);
+		assert(start <= length);
 
-			int length = seg_details[itrack].length;
-			int start = seg_details[itrack].start;
-
-			/* Start is guaranteed to be between 1 and length.  Hence adding length to *
-			 * the quantity in brackets below guarantees it will be nonnegative.       */
-
-			assert(start > 0);
-			assert(start <= length);
-
-			/* NOTE: Start points are staggered between different channels.
-			 * The start point must stagger backwards as chan_num increases.
-			 * Unidirectional routing expects this to allow the N-to-N 
-			 * assumption to be made with respect to ending wires in the core. */
-			seg_start = seg_num - (seg_num + length + chan_num - start) % length;
-			if (seg_start < 1) {
-				seg_start = 1;
-			}
+		/* NOTE: Start points are staggered between different channels.
+		 * The start point must stagger backwards as chan_num increases.
+		 * Unidirectional routing expects this to allow the N-to-N 
+		 * assumption to be made with respect to ending wires in the core. */
+		seg_start = seg_num - (seg_num + length + chan_num - start) % length;
+		if (seg_start < 1) {
+			seg_start = 1;
 		}
 	}
+
 	return seg_start;
 }
 
-int get_seg_end(INP t_seg_details * seg_details, INP int itrack, INP int istart,
+/* Returns the segment number at which the segment this track lies on        *
+ * ends. Used to initialize the seg_end field in t_seg_details        	     */
+int init_seg_end(INP t_seg_details * seg_details, INP int itrack, INP int istart,
 		INP int chan_num, INP int seg_max) {
 
-	int seg_end = 0;
-	if (seg_details[itrack].seg_end >= 0) {
+	int len = seg_details[itrack].length;
+	int ofs = seg_details[itrack].start;
 
-		seg_end = seg_details[itrack].seg_end;
+	/* Normal endpoint */
+	int seg_end = istart + len - 1;
 
-	} else {
-
-		int len = seg_details[itrack].length;
-		int ofs = seg_details[itrack].start;
-
-		/* Normal endpoint */
-		seg_end = istart + len - 1;
-
-		/* If start is against edge it may have been clipped */
-		if (1 == istart) {
-			/* If the (staggered) startpoint of first full wire wasn't
-			 * also 1, we must be the clipped wire */
-			int first_full = (len - (chan_num % len) + ofs - 1) % len + 1;
-			if (first_full > 1) {
-				/* then we stop just before the first full seg */
-				seg_end = first_full - 1;
-			}
+	/* If start is against edge it may have been clipped */
+	if (1 == istart) {
+		/* If the (staggered) startpoint of first full wire wasn't
+		 * also 1, we must be the clipped wire */
+		int first_full = (len - (chan_num % len) + ofs - 1) % len + 1;
+		if (first_full > 1) {
+			/* then we stop just before the first full seg */
+			seg_end = first_full - 1;
 		}
+	}
 
-		/* Clip against far edge */
-		if (seg_end > seg_max) {
-			seg_end = seg_max;
-		}
+	/* Clip against far edge */
+	if (seg_end > seg_max) {
+		seg_end = seg_max;
 	}
 	return seg_end;
 }
@@ -875,7 +865,7 @@ boolean is_cblock(INP int chan, INP int seg, INP int track,
 	length = seg_details[track].length;
 
 	/* Make sure they gave us correct start */
-	start_seg = get_seg_start(seg_details, track, chan, seg);
+	start_seg = seg_details[track].seg_start;
 
 	ofs = seg - start_seg;
 
@@ -1070,6 +1060,8 @@ void dump_sblock_pattern(
 
 						for (int from_track = 0; from_track < nodes_per_chan; ++from_track) {
 
+							// OP: Seems like this first bit of code is to check whether the given from_track
+							// connection is just totally empty. We print info if not totally empty.
 							int to_track = sblock_pattern[x][y][from_side][to_side][from_track][1];
 							if (to_track == UN_SET)
 								to_track = sblock_pattern[x][y][from_side][to_side][from_track][0];
@@ -1170,7 +1162,7 @@ static void load_chan_rr_indices(
 				if (seg_details[track].length <= 0)
 					continue;
 
-				int start = get_seg_start(seg_details, track, chan, seg);
+				int start = seg_details[track].seg_start;
 
 				/* If the start of the wire doesn't have a inode, 
 				 * assign one to it. */
@@ -1471,7 +1463,7 @@ int get_track_to_pins(
 	t_type_ptr type;
 
 	/* End of this wire */
-	end = get_seg_end(seg_details, track, seg, chan, chan_length);
+	end = seg_details[track].seg_end; 
 
 	edge_list_head = *edge_list_ptr;
 	num_conn = 0;
@@ -1559,10 +1551,10 @@ int get_track_to_tracks(
 	boolean from_is_sblock, is_behind, Fs_clipped;
 	enum e_side from_side_a, from_side_b, to_side;
 
-	assert(from_seg == get_seg_start(from_seg_details, from_track, from_chan, from_seg));
+	assert(from_seg == from_seg_details[from_track].seg_start); 
 
 	from_switch = from_seg_details[from_track].wire_switch;
-	from_end = get_seg_end(from_seg_details, from_track, from_seg, from_chan, chan_len);
+	from_end = from_seg_details[from_track].seg_end; 	
 	from_first = from_seg - 1;
 
 	/* Figure out the sides of SB the from_wire will use */
@@ -1840,7 +1832,7 @@ static int get_unidir_track_to_chan_seg(
 
 	/* Get the target label */
 	to_mux = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][0];
-	to_track = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][1];
+	//to_track = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][1];	//doesn't do anything -- is set below
 
 	/* Handle Fs > 3 but assigning consecutive muxes. */
 	count = 0;
@@ -1885,7 +1877,7 @@ boolean is_sblock(INP int chan, INP int wire_seg, INP int sb_seg, INP int track,
 	length = seg_details[track].length;
 
 	/* Make sure they gave us correct start */
-	wire_seg = get_seg_start(seg_details, track, chan, wire_seg);
+	wire_seg = seg_details[track].seg_start; 
 
 	ofs = sb_seg - wire_seg + 1; /* Ofset 0 is behind us, so add 1 */
 
@@ -2020,10 +2012,15 @@ short ******alloc_sblock_pattern_lookup(
 	from_track_list = (short **) my_malloc(sizeof(short *) * items);
 	items *= (2);
 	from_track_types = (short *) my_malloc(sizeof(short) * items);
+	//What is from_track_types? Why is this index of length 2?
+	//Actually, the only time the '1' index is used in this file is when we *print* this data structure...
+	//Looking at svn logs, this is an addition made for Toro from r2197... it is not actually used anywhere in VPR...
+	//This change is not documented in the r2197 commit, so I don't know what it does
 
 	/* Build the pointer lists to form the multidimensional array */
 	result = i_list;
-	i_list += (L_nx + 1); /* Skip forward nx+1 items */
+	//i_list += (L_nx + 1); /* Skip forward nx+1 items */ //doesn't do anything 
+
 	for (i = 0; i < (L_nx + 1); ++i) {
 
 		result[i] = j_list;
@@ -2610,8 +2607,8 @@ static int *label_wire_muxes(
 
 		/* Find the tracks that are starting. */
 		for (itrack = 0; itrack < nodes_per_chan; ++itrack) {
-			start = get_seg_start(seg_details, itrack, chan_num, seg_num);
-			end = get_seg_end(seg_details, itrack, start, chan_num, max_len);
+			start = seg_details[itrack].seg_start; 	
+			end = seg_details[itrack].seg_end; 
 
 			/* Skip tracks going the wrong way */
 			if (seg_details[itrack].direction != dir) {
@@ -2663,8 +2660,8 @@ static int *label_incoming_wires(
 	for (pass = 0; pass < 2; ++pass) {
 		for (itrack = 0; itrack < nodes_per_chan; ++itrack) {
 			if (seg_details[itrack].direction == dir) {
-				start = get_seg_start(seg_details, itrack, chan_num, seg_num);
-				end = get_seg_end(seg_details, itrack, start, chan_num, max_len);
+				start = seg_details[itrack].seg_start; 	
+				end = seg_details[itrack].seg_end; 
 
 				/* Determine if we are a wire endpoint */
 				is_endpoint = (boolean)(seg_num == end);

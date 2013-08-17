@@ -475,7 +475,7 @@ void build_rr_graph(
 			if (strcmp("clb", types[i].name) == 0){
 				srand(time(0));
 				float target_metric;
-				target_metric = 0.15;
+				target_metric = 1;
 
 				/* Here begins the metrics test code. The controlling variables are located in globals, 
 				   and are also used in binary_search_place_and_route (place_and_route.c) so that metrics
@@ -509,9 +509,9 @@ void build_rr_graph(
 					} else {
 						/* generate */
 						//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-						//adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 						
-						generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
+						//generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
 						if (manage_trackmap && (!w_done[nodes_per_chan])){
 							/* store */
 							printf("storing track map %s\n", filename);
@@ -1274,8 +1274,8 @@ static void build_rr_xchan(INP int i, INP int j,
 		if (seg_details[track].length == 0)
 			continue;
 
-		int start = get_seg_start(seg_details, track, j, i);
-		int end = get_seg_end(seg_details, track, start, j, nx);
+		int start = seg_details[track].seg_start; 	
+		int end = seg_details[track].seg_end; 
 
 		if (i > start)
 			continue; /* Not the start of this segment. */
@@ -1386,8 +1386,8 @@ static void build_rr_ychan(INP int i, INP int j,
 		if (seg_details[track].length == 0)
 			continue;
 
-		int start = get_seg_start(seg_details, track, i, j);
-		int end = get_seg_end(seg_details, track, start, i, ny);
+		int start = seg_details[track].seg_start; 	
+		int end = seg_details[track].seg_end; 
 
 		if (j > start)
 			continue; /* Not the start of this segment. */
@@ -2566,8 +2566,8 @@ static void view_mux_size_distribution(t_ivec *** L_rr_node_indices,
 				assert(nodes_per_chan > 0);
 				for (itrack = 0; itrack < nodes_per_chan; itrack++)
 				{
-					start = get_seg_start(seg_details, itrack, seg_num, chan_num);
-					end = get_seg_end(seg_details, itrack, start, chan_num, max_len);
+					start = seg_details[itrack].seg_start; 	
+					end = seg_details[itrack].seg_end; 
 
 					if ((seg_details[itrack].direction == direction) 
 							&& (((start == seg_num) && (direction == INC_DIRECTION))
