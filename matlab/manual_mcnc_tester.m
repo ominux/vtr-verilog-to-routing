@@ -35,6 +35,7 @@ vprOptionsFullFlow = vprBaseOptions;
 
 labels = { 
             'Low Stress Delay',...
+	    'Chan Width',...
             'Low Stress Wirelength',....
             'LS clb PD',...
             'LS clb WH',...
@@ -46,6 +47,7 @@ labels = {
 %parseRegex ordering has to match labels ordering
 parseRegex = {
                 'Final critical path: (\d*\.*\d*)',...
+		'channel width factor of (\d+)',...
                 'Total wirelength: (\d+)',...
                 'clb\s+Pin Diversity:\s+(\d*\.*\d*)',...
                 'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+(\d*\.*\d*)',...
@@ -60,7 +62,8 @@ parseRegex = {
 
 %we can then do this at different Fc values, etc.
 
-metricRange = 0 : 0.05 : 1;
+metricRange = 0.98 : -0.04 : 0.48;
+%metricRange = 0.14:0.14; %test
 
 %%get low stress channel widths for each circuit
 %for ickt = 1:numCkts
@@ -68,8 +71,6 @@ metricRange = 0 : 0.05 : 1;
 %        
 %    %switch to full flow
 %    t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
-%    %t.replaceSingleLineInFile('/*#define LOAD_TRACKMAP', '//#define LOAD_TRACKMAP', t.rrGraphPath);   
-%    %t.replaceSingleLineInFile('/*#define STORE_TRACKMAP', '//#define STORE_TRACKMAP', t.rrGraphPath);   
 %    t.makeVPR();
 %    vprString = [arch ' ' benchmark ' ' vprBaseOptions];
 %    vprOut = t.runVprManual(vprString);
@@ -81,6 +82,7 @@ metricRange = 0 : 0.05 : 1;
 %    %get low stress chan width
 %    lowStressW(ickt) = floor(1.3 * minW);
 %end
+    
 
 i = 0;
 for metric = metricRange
@@ -93,32 +95,28 @@ for metric = metricRange
         disp(['Run: ' num2str(i) '   Metric: ' num2str(metric) '  Circuit: ' num2str(ickt)]);
         benchmark = benchmark_list{ickt};
 
-        %rerun at low stress to generate placement
-        t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
-    	t.replaceSingleLineInFile('/*#define LOAD_TRACKMAP', '//#define LOAD_TRACKMAP', t.rrGraphPath);   
-    	%t.replaceSingleLineInFile('/*#define STORE_TRACKMAP', '//#define STORE_TRACKMAP', t.rrGraphPath);   
-        t.makeVPR();
-        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90';];%num2str(lowStressW(ickt))];
-        vprOut = t.runVprManual(vprString);
-        %now parse
-        for imetric = 1:length(parseRegex)
-           baselineCktMetrics(ickt, imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));
-        end
+         %rerun at low stress to generate placement
+%           t.replaceSingleLineInFile('boolean test_metrics = \w+;', 'boolean test_metrics = FALSE;', t.globalsPath);
+%           t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = FALSE;', t.globalsPath)
+%           t.makeVPR();
+%           vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90';];%num2str(lowStressW(ickt))];
+%           vprOut = t.runVprManual(vprString);
+%           %now parse
+%           for imetric = 1:length(parseRegex)
+%              baselineCktMetrics(ickt, imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));
+%           end
 
         %rerun with metric adjustment enabled
         t.replaceSingleLineInFile('target_metric = \d*\.*\d+;', ['target_metric = ' num2str(metric) ';'], t.rrGraphPath);
         %first time store the trackmap and second time load it
         %if (ickt==1)
-        	t.replaceSingleLineInFile('/+#define TEST_METRICS', '#define TEST_METRICS', t.rrGraphPath);
-        	%t.replaceSingleLineInFile('/*#define LOAD_TRACKMAP', '//#define LOAD_TRACKMAP', t.rrGraphPath);   
-        	%t.replaceSingleLineInFile('/+#define STORE_TRACKMAP', '#define STORE_TRACKMAP', t.rrGraphPath);   
+        	%t.replaceSingleLineInFile('boolean test_metrics = \w+;', 'boolean test_metrics = TRUE;', t.globalsPath);
+            %t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = TRUE;   ', t.globalsPath);
         %else
         	%t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
-        	%t.replaceSingleLineInFile('/+#define LOAD_TRACKMAP', '#define LOAD_TRACKMAP', t.rrGraphPath);   
-        	%t.replaceSingleLineInFile('/*#define STORE_TRACKMAP', '//#define STORE_TRACKMAP', t.rrGraphPath);   
 	%end
         t.makeVPR();
-        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90 -route'];%num2str(lowStressW(ickt)) ' -route'];
+        vprString = [arch ' ' benchmark ' ' vprBaseOptions];% ' -route_chan_width ' '90 -route'];%num2str(lowStressW(ickt)) ' -route'];
         vprOut = t.runVprManual(vprString);
         for imetric = 1:length(parseRegex)
            adjustedCktMetrics(ickt, imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));
@@ -130,12 +128,12 @@ for metric = metricRange
 end
 
 %print data to file
-baselineAvgMetrics = [metricRange' baselineAvgMetrics];
+%baselineAvgMetrics = [metricRange' baselineAvgMetrics];
 labels = ['metric' labels];
 %and then print
-t.printDataToFile('./run_metrics.txt', baselineAvgMetrics, labels, false);
+%t.printDataToFile('./run_metrics.txt', baselineAvgMetrics, labels, false);
 
 adjustedAvgMetrics = [metricRange' adjustedAvgMetrics];
-t.printDataToFile('./run_metrics.txt', adjustedAvgMetrics, labels, true);
+t.printDataToFile('./run_metrics.txt', adjustedAvgMetrics, labels, false); %CHANGE BACK TO TRUE!
 
 toc

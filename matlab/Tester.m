@@ -9,6 +9,7 @@ classdef Tester %< handle (or some other parent class)
        outLogPath = '';                               %read results from this output
 
        rrGraphPath = '';
+       globalsPath = '';
        configPath = '';
    end %properties
    
@@ -25,6 +26,7 @@ classdef Tester %< handle (or some other parent class)
            obj.outLogPath = [obj.tasksPath '/regression_mcnc'];                                %read results from this output
 
            obj.rrGraphPath = [obj.vtrPath '/vpr/SRC/route/rr_graph.c'];
+           obj.globalsPath = [obj.vtrPath '/vpr/SRC/base/globals.c'];
            obj.configPath = [obj.tasksPath '/regression_mcnc/config/config.txt'];
         end
         
@@ -121,8 +123,9 @@ classdef Tester %< handle (or some other parent class)
             restoreDir = cd;
             cd(obj.vprPath); 
             system('pwd');
-            result = system('make');
+            [result, info] = system('make');
             if (result ~= 0)
+               info
                error('makeVPR: failed to make VPR');
             else
                result = 1;
