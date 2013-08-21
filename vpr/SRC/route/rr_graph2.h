@@ -101,15 +101,12 @@ int init_seg_end(INP t_seg_details * seg_details,
 		INP int seg_max);
 
 boolean is_cblock(
-		INP int chan,
 		INP int seg,
 		INP int track,
 		INP t_seg_details * seg_details,
 		INP enum e_directionality directionality);
 
 boolean is_sblock(
-		INP int chan,
-		INP int wire_seg,
 		INP int sb_seg,
 		INP int track,
 		INP t_seg_details * seg_details,

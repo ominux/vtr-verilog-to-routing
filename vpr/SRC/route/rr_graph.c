@@ -1277,10 +1277,10 @@ static void build_rr_xchan(INP int i, INP int j,
 		int start = seg_details[track].seg_start; 	
 		int end = seg_details[track].seg_end; 
 
-		if (i > start)
+		if (i != start)
 			continue; /* Not the start of this segment. */
 
-		struct s_linked_edge *edge_list = NULL;
+		t_linked_edge *edge_list = NULL;
 
 		/* First count number of edges and put the edges in a linked list. */
 		int num_edges = 0;
@@ -1389,10 +1389,10 @@ static void build_rr_ychan(INP int i, INP int j,
 		int start = seg_details[track].seg_start; 	
 		int end = seg_details[track].seg_end; 
 
-		if (j > start)
+		if (j != start)
 			continue; /* Not the start of this segment. */
 
-		struct s_linked_edge *edge_list = NULL;
+		t_linked_edge *edge_list = NULL;
 
 		/* First count number of edges and put the edges in a linked list. */
 		int num_edges = 0;

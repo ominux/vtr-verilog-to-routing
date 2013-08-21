@@ -701,7 +701,7 @@ int get_bidir_opin_connections(
 		INP int Fc, INP boolean * L_rr_edge_done,
 		INP t_ivec *** L_rr_node_indices, INP t_seg_details * seg_details) {
 
-	int iside, num_conn, tr_i, tr_j, chan, seg;
+	int iside, num_conn, tr_i, tr_j, seg; //OP: , chan;
 	int to_track, to_switch, to_node, iconn;
 	int is_connected_track;
 	t_type_ptr type;
@@ -722,7 +722,7 @@ int get_bidir_opin_connections(
 
 		to_type = ((iside == LEFT) || (iside == RIGHT)) ? CHANY : CHANX;
 
-		chan = ((to_type == CHANX) ? tr_j : tr_i);
+		//OP: chan = ((to_type == CHANX) ? tr_j : tr_i);
 		seg = ((to_type == CHANX) ? tr_i : tr_j);
 
 		/* Don't connect where no tracks on fringes */
@@ -753,7 +753,7 @@ int get_bidir_opin_connections(
 			}
 
 			/* Only connect to wire if there is a CB */
-			if (is_cblock(chan, seg, to_track, seg_details, BI_DIRECTIONAL)) {
+			if (is_cblock(seg, to_track, seg_details, BI_DIRECTIONAL)) {
 				to_switch = seg_details[to_track].wire_switch;
 				to_node = get_rr_node_index(tr_i, tr_j, to_type, to_track,
 						L_rr_node_indices);
@@ -856,7 +856,11 @@ int get_unidir_opin_connections(
 	return num_edges;
 }
 
-boolean is_cblock(INP int chan, INP int seg, INP int track,
+/* Determines if the specified track (tracK) from the specified channel segment (seg_details)
+   has a CB connection at the specified location (seg) along the track. seg is the segment
+   coordinate at which we check for a CB. This coordinate is converted to [0..length-1] for
+   accessing t_seg_details->*sb */
+boolean is_cblock(INP int seg, INP int track,
 		INP t_seg_details * seg_details,
 		INP enum e_directionality directionality) {
 
@@ -1469,7 +1473,7 @@ int get_track_to_pins(
 	num_conn = 0;
 
 	for (j = seg; j <= end; j++) {
-		if (is_cblock(chan, j, track, seg_details, directionality)) {
+		if (is_cblock(j, track, seg_details, directionality)) {
 			for (pass = 0; pass < 2; ++pass) {
 				if (CHANX == chan_type) {
 					x = j;
@@ -1514,22 +1518,23 @@ int get_track_to_pins(
 	return (num_conn);
 }
 
-/* Counts how many connections should be made from this segment to the y-   *
- * segments in the adjacent channels at to_j.  It returns the number of     *
- * connections, and updates edge_list_ptr to point at the head of the       *
- * (extended) linked list giving the nodes to which this segment connects   *
- * and the switch type used to connect to each.                             *
- *                                                                          *
- * An edge is added from this segment to a y-segment if:                    *
- * (1) this segment should have a switch box at that location, or           *
- * (2) the y-segment to which it would connect has a switch box, and the    *
- *     switch type of that y-segment is unbuffered (bidirectional pass      *
- *     transistor).                                                         *
- *                                                                          *
- * For bidirectional:                                                       *
- * If the switch in each direction is a pass transistor (unbuffered), both  *
- * switches are marked as being of the types of the larger (lower R) pass   *
- * transistor.                                                              */
+
+/* Counts how many connections should be made from this segment to the 
+ * adjacent segments at 'to_seg'/'to_type'. It returns the number of 
+ * connections, and updates edge_list to point at the head of the (extended)
+ * linked list giving the nodes to which this segment connects and the
+ * switch type used to connect to each.
+ *
+ * An edge is added from this segment to the specified adjacent segments if:
+ * (1) This segment should have a switch box at that location, or
+ * (2) The specific adjacent segment to which it would connect has a switch
+ *     box, and the switch type of that segment is unbuffered (bidirectional
+ *     pass transistor).
+ *
+ * For bidirectional:
+ * If the switch in each direction is a pass transistor (unbuffered), both
+ * switches are marked as being of the types of the larger (lower R) pass
+ * transistor. */
 int get_track_to_tracks(
 		INP int from_chan, INP int from_seg, INP int from_track,
 		INP t_rr_type from_type, INP int to_seg, INP t_rr_type to_type,
@@ -1544,9 +1549,9 @@ int get_track_to_tracks(
 		INP struct s_ivec ***switch_block_conn) {
 
 	int num_conn;
-	int from_switch, from_end, from_sb, from_first;
+	int from_switch, from_end, from_sb, from_first_sb;
 	int to_chan, to_sb;
-	int start, end;
+	int start_sb, end_sb;
 	struct s_ivec conn_tracks;
 	boolean from_is_sblock, is_behind, Fs_clipped;
 	enum e_side from_side_a, from_side_b, to_side;
@@ -1555,9 +1560,11 @@ int get_track_to_tracks(
 
 	from_switch = from_seg_details[from_track].wire_switch;
 	from_end = from_seg_details[from_track].seg_end; 	
-	from_first = from_seg - 1;
 
-	/* Figure out the sides of SB the from_wire will use */
+	/* the 'seg' coordinate of the switchblock at the beginning of the current segment */
+	from_first_sb = from_seg - 1;
+
+	/* Figure out the sides of SB the source track may use */
 	if (CHANX == from_type) {
 		from_side_a = RIGHT;
 		from_side_b = LEFT;
@@ -1567,12 +1574,13 @@ int get_track_to_tracks(
 		from_side_b = BOTTOM;
 	}
 
-	/* Figure out if the to_wire is connecting to a SB 
-	 * that is behind it. */
+	/* OP: Figure out whether the destination segment will connect to an SB
+	   that is behind it. Here, 'behind' is w.r.t. VPR's coordinate system,
+	   for which (0,0) is at the bottom-left (?? verify...) corner of the FPGA */
 	is_behind = FALSE;
 	if (to_type == from_type) {
-		/* If inline, check that they only are trying
-		 * to connect at endpoints. */
+		/* If source and destination segments share the same channel, check
+		   that they are going to connect at endpoints */
 		assert((to_seg == (from_end + 1)) || (to_seg == (from_seg - 1)));
 		if (to_seg > from_end) {
 			is_behind = TRUE;
@@ -1586,8 +1594,7 @@ int get_track_to_tracks(
 		}
 	}
 
-	/* Figure out the side of SB the to_wires will use.
-	 * The to_seg and from_chan are in same direction. */
+	/* Figure out which side of the SB the destination segment will connect to */
 	if (CHANX == to_type) {
 		to_side = (is_behind ? RIGHT : LEFT);
 	} else {
@@ -1596,30 +1603,33 @@ int get_track_to_tracks(
 	}
 
 	/* Set the loop bounds */
-	start = from_first;
-	end = from_end;
+	start_sb = from_first_sb;
+	end_sb = from_end;
 
-	/* If we are connecting in same direction the connection is 
-	 * on one of the two sides so clip the bounds to the SB of
-	 * interest and proceed normally. */
+	/* If source and destination segments both lie along the same channel, then
+	   the connection will be made on one of the two sides of the source segment,
+	   so clip the loop bouds to the SB of interest and proceed normally */
 	if (to_type == from_type) {
-		start = (is_behind ? end : start);
-		end = start;
+		start_sb = (is_behind ? end_sb : start_sb);
+		end_sb = start_sb;
 	}
 
-	/* Iterate over the SBs */
+	/* Here we iterate over 'seg' coordinates which could contain switchblocks that will connect us from the current
+	   segment to the desired segment/channel */
 	num_conn = 0;
-	for (from_sb = start; from_sb <= end; ++from_sb) {
+	for (from_sb = start_sb; from_sb <= end_sb; ++from_sb) {
 		/* Figure out if we are at a sblock */
-		from_is_sblock = is_sblock(from_chan, from_seg, from_sb, from_track,
+		from_is_sblock = is_sblock(from_sb, from_track,
 				from_seg_details, directionality);
 		/* end of wire must be an sblock */
-		if (from_sb == from_end || from_sb == from_first) {
+		if (from_sb == from_end || from_sb == from_first_sb) {
 			from_is_sblock = TRUE; /* Endpoints always default to true */
 		}
 
-		/* to_chan is the current segment if different directions,
-		 * otherwise to_chan is the from_chan */
+		/* Get the coordinates of the current SB from the perspective of the destination channel.
+		   i.e. for segments laid in the x-direction, from_sb corresponds to the x coordinate and from_chan to the y,
+		   but for segments in the y-direction, from_chan is the x coordinate and from_sb is the y. So here we reverse
+		   the coordinates if necessary */
 		to_chan = from_sb;
 		to_sb = from_chan;
 		if (from_type == to_type) {
@@ -1627,6 +1637,8 @@ int get_track_to_tracks(
 			to_sb = from_sb;
 		}
 
+		/* to_chan_details may correspond to an x-directed or y-directed channel, depending for which 
+		   channel type this function is used; so coordinates are reversed appropriately as necessary */
 		if (to_type == CHANX) {
 			to_seg_details = to_chan_details[to_seg][to_chan];
 		} else {
@@ -1636,9 +1648,16 @@ int get_track_to_tracks(
 		if (to_seg_details[0].length == 0 )
 			continue;
 
-		/* Do the edges going to the left or down */
+		/* To get to the destination seg/chan, the source track can connect to the SB from
+		   one of two directions. If we're in CHANX, we can connect to it from the left or
+		   right, provided we're not at a track endpoint. And similarly for a source track
+		   in CHANY. */
+		/* Do edges going to the right SB side (if we're in CHANX) or top (if we're in CHANY). 
+		   However, can't connect to right (top) if already at rightmost (topmost) track end */
 		if (from_sb < from_end) {
 			if (BI_DIRECTIONAL == directionality) {
+				/* For bidir, the target segment might have an unbuffered (bidir pass transistor)
+				   switchbox, so we follow through regardless of whether the current segment has an SB */
 				conn_tracks = switch_block_conn[from_side_a][to_side][from_track];
 				num_conn += get_bidir_track_to_chan_seg(conn_tracks,
 						L_rr_node_indices, to_chan, to_seg, to_sb, to_type,
@@ -1647,12 +1666,12 @@ int get_track_to_tracks(
 			}
 			if (UNI_DIRECTIONAL == directionality) {
 				/* No fanout if no SB. */
-				/* We are connecting from the top or right of SB so it
-				 * makes the most sense to only there from DEC_DIRECTION wires. */
+				/* Also, we are connecting from the top or right of SB so it
+				 * makes the most sense to only get there from DEC_DIRECTION wires. */
 				if ((from_is_sblock)
-						&& (DEC_DIRECTION == from_seg_details[from_track].direction)) {
+				     && (DEC_DIRECTION == from_seg_details[from_track].direction)) {
 					num_conn += get_unidir_track_to_chan_seg(
-							(boolean)(from_sb == from_first), from_track, to_chan,
+							(boolean)(from_sb == from_first_sb), from_track, to_chan,
 							to_seg, to_sb, to_type, nodes_per_chan, nx, ny,
 							from_side_a, to_side, Fs_per_side, opin_mux_size,
 							sblock_pattern, L_rr_node_indices, to_seg_details,
@@ -1661,11 +1680,14 @@ int get_track_to_tracks(
 			}
 		}
 
-		/* Do the edges going to the right or up */
-		if (from_sb > from_first) {
+
+		/* Do the edges going to the right SB side (if we're in CHANX) or bottom (if we're in CHANY)
+		   However, can't connect to left (bottom) if already at leftmost (bottommost) track end */
+		if (from_sb > from_first_sb) {
 			if (BI_DIRECTIONAL == directionality) {
-				conn_tracks =
-						switch_block_conn[from_side_b][to_side][from_track];
+				/* For bidir, the target segment might have an unbuffered (bidir pass transistor)
+				   switchbox, so we follow through regardless of whether the current segment has an SB */
+				conn_tracks = switch_block_conn[from_side_b][to_side][from_track];
 				num_conn += get_bidir_track_to_chan_seg(conn_tracks,
 						L_rr_node_indices, to_chan, to_seg, to_sb, to_type,
 						to_seg_details, from_is_sblock, from_switch, L_rr_edge_done,
@@ -1673,10 +1695,10 @@ int get_track_to_tracks(
 			}
 			if (UNI_DIRECTIONAL == directionality) {
 				/* No fanout if no SB. */
-				/* We are connecting from the bottom or left of SB so it
-				 * makes the most sense to only there from INC_DIRECTION wires. */
+				/* Also, we are connecting from the bottom or left of SB so it
+				 * makes the most sense to only get there from INC_DIRECTION wires. */
 				if ((from_is_sblock)
-						&& (INC_DIRECTION == from_seg_details[from_track].direction)) {
+				     && (INC_DIRECTION == from_seg_details[from_track].direction)) {
 					num_conn += get_unidir_track_to_chan_seg(
 							(boolean)(from_sb == from_end), from_track, to_chan, to_seg,
 							to_sb, to_type, nodes_per_chan, nx, ny, from_side_b,
@@ -1729,7 +1751,7 @@ static int get_bidir_track_to_chan_seg(
 		/* Get the switches for any edges between the two tracks */
 		to_switch = seg_details[to_track].wire_switch;
 
-		to_is_sblock = is_sblock(to_chan, to_seg, to_sb, to_track, seg_details,
+		to_is_sblock = is_sblock(to_sb, to_track, seg_details,
 				directionality);
 		get_switch_type(from_is_sblock, to_is_sblock, from_switch, to_switch,
 				switch_types);
@@ -1793,11 +1815,16 @@ static int get_unidir_track_to_chan_seg(
 	*Fs_clipped = FALSE;
 
 	/* SBs go from (0, 0) to (nx, ny) */
+	/* Is SB at corner of the FPGA */
 	is_corner = (boolean)(((sb_x < 1) || (sb_x >= L_nx))
 			&& ((sb_y < 1) || (sb_y >= L_ny)));
+	/* Is SB on the edge (but not corner) of FPGA */
 	is_fringe = (boolean)((FALSE == is_corner)
 			&& ((sb_x < 1) || (sb_y < 1) || (sb_x >= L_nx) || (sb_y >= L_ny)));
+	/* Is SB within the core of the FPGA */
 	is_core = (boolean)((FALSE == is_corner) && (FALSE == is_fringe));
+	
+	/* Is the connection straight, or is it a bend? */
 	is_straight = (boolean)((from_side == RIGHT && to_side == LEFT)
 			|| (from_side == LEFT && to_side == RIGHT)
 			|| (from_side == TOP && to_side == BOTTOM)
@@ -1806,6 +1833,7 @@ static int get_unidir_track_to_chan_seg(
 	/* Ending wires use N-to-N mapping if not fringe or if goes straight */
 	if (is_end_sb && (is_core || is_corner || is_straight)) {
 		/* Get the list of possible muxes for the N-to-N mapping. */
+		//OP: returns a list of tracks to which we can connect
 		mux_labels = label_wire_muxes(to_chan, to_seg, seg_details, max_len,
 				to_dir, nodes_per_chan, &num_labels);
 	} else {
@@ -1818,10 +1846,8 @@ static int get_unidir_track_to_chan_seg(
 
 	/* Can't connect if no muxes. */
 	if (num_labels < 1) {
-		if (mux_labels) {
-			free(mux_labels);
-			mux_labels = NULL;
-		}
+		free(mux_labels);
+		mux_labels = NULL;
 		return 0;
 	}
 
@@ -1831,8 +1857,9 @@ static int get_unidir_track_to_chan_seg(
 	}
 
 	/* Get the target label */
+	//OP: VPR only handles Fs=3, and assigns the tracks to the 0'th index. index 1 seems to be for TORO and Fs > 3?
 	to_mux = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][0];
-	//to_track = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][1];	//doesn't do anything -- is set below
+	//to_track = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][1];	//OP: doesn't do anything -- is set below
 
 	/* Handle Fs > 3 but assigning consecutive muxes. */
 	count = 0;
@@ -1856,14 +1883,16 @@ static int get_unidir_track_to_chan_seg(
 		++count;
 	}
 
-	if (mux_labels) {
-		free(mux_labels);
-		mux_labels = NULL;
-	}
+	free(mux_labels);
+	mux_labels = NULL;
 	return count;
 }
 
-boolean is_sblock(INP int chan, INP int wire_seg, INP int sb_seg, INP int track,
+/* Determines if the specified track (tracK) from the specified channel segment (seg_details)
+   has a SB connection at the specified location (sb_seg) along the track. sb_seg is the segment
+   coordinate at which we check for an SB. This coordinate is converted to [0..length] for
+   accessing t_seg_details->*sb */
+boolean is_sblock(INP int sb_seg, INP int track,
 		INP t_seg_details * seg_details,
 		INP enum e_directionality directionality) {
 
@@ -1876,8 +1905,8 @@ boolean is_sblock(INP int chan, INP int wire_seg, INP int sb_seg, INP int track,
 
 	length = seg_details[track].length;
 
-	/* Make sure they gave us correct start */
-	wire_seg = seg_details[track].seg_start; 
+	/* Get the start segment */
+	int wire_seg = seg_details[track].seg_start; 
 
 	ofs = sb_seg - wire_seg + 1; /* Ofset 0 is behind us, so add 1 */
 
@@ -2582,6 +2611,8 @@ static int *label_wire_muxes_for_balance(
 	return final_labels;
 }
 
+
+//OP: max_len, chan_num, not used
 static int *label_wire_muxes(
 		INP int chan_num, INP int seg_num,
 		INP t_seg_details * seg_details, INP int max_len,
@@ -2596,16 +2627,18 @@ static int *label_wire_muxes(
 	int *labels = NULL;
 	boolean is_endpoint;
 
-	/* COUNT pass then a LOAD pass */
+	/* Count pass to determine the number of mux labels
+	   Load pass to allocate and load the mux labels */
 	num_labels = 0;
 	for (pass = 0; pass < 2; ++pass) {
-		/* Alloc the list on LOAD pass */
+		/* Alloc the list on load pass */
 		if (pass > 0) {
 			labels = (int *) my_malloc(sizeof(int) * num_labels);
 			num_labels = 0;
 		}
 
-		/* Find the tracks that are starting. */
+		/* For each track in the channel, find the ones that go in the desired
+		   direction and are just starting (ie, find elegible wire startpoints) */
 		for (itrack = 0; itrack < nodes_per_chan; ++itrack) {
 			start = seg_details[itrack].seg_start; 	
 			end = seg_details[itrack].seg_end; 
@@ -2616,8 +2649,10 @@ static int *label_wire_muxes(
 			}
 
 			/* Determine if we are a wire startpoint */
+			/* If track is in INC direction, we connect to start point */
 			is_endpoint = (boolean)(seg_num == start);
 			if (DEC_DIRECTION == seg_details[itrack].direction) {
+				/* If track is in DEC direction, we connect to endpoint */
 				is_endpoint = (boolean)(seg_num == end);
 			}
 
@@ -2670,7 +2705,7 @@ static int *label_incoming_wires(
 				}
 
 				/* Determine if we have a sblock on the wire */
-				sblock_exists = is_sblock(chan_num, seg_num, sb_seg, itrack,
+				sblock_exists = is_sblock(sb_seg, itrack,
 						seg_details, UNI_DIRECTIONAL);
 
 				switch (pass) {
