@@ -1064,8 +1064,7 @@ void dump_sblock_pattern(
 
 						for (int from_track = 0; from_track < nodes_per_chan; ++from_track) {
 
-							// OP: Seems like this first bit of code is to check whether the given from_track
-							// connection is just totally empty. We print info if not totally empty.
+							/* Check if both track connections are unset, and continue if that is the case */
 							int to_track = sblock_pattern[x][y][from_side][to_side][from_track][1];
 							if (to_track == UN_SET)
 								to_track = sblock_pattern[x][y][from_side][to_side][from_track][0];
@@ -1857,11 +1856,10 @@ static int get_unidir_track_to_chan_seg(
 	}
 
 	/* Get the target label */
-	//OP: VPR only handles Fs=3, and assigns the tracks to the 0'th index. index 1 seems to be for TORO and Fs > 3?
 	to_mux = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][0];
-	//to_track = sblock_pattern[sb_x][sb_y][from_side][to_side][from_track][1];	//OP: doesn't do anything -- is set below
 
 	/* Handle Fs > 3 but assigning consecutive muxes. */
+	/* Fs > 3 is currently applicable to Toro */
 	count = 0;
 	for (i = 0; i < Fs_per_side; ++i) {
 
@@ -2041,14 +2039,9 @@ short ******alloc_sblock_pattern_lookup(
 	from_track_list = (short **) my_malloc(sizeof(short *) * items);
 	items *= (2);
 	from_track_types = (short *) my_malloc(sizeof(short) * items);
-	//What is from_track_types? Why is this index of length 2?
-	//Actually, the only time the '1' index is used in this file is when we *print* this data structure...
-	//Looking at svn logs, this is an addition made for Toro from r2197... it is not actually used anywhere in VPR...
-	//This change is not documented in the r2197 commit, so I don't know what it does
 
 	/* Build the pointer lists to form the multidimensional array */
 	result = i_list;
-	//i_list += (L_nx + 1); /* Skip forward nx+1 items */ //doesn't do anything 
 
 	for (i = 0; i < (L_nx + 1); ++i) {
 
@@ -2072,6 +2065,8 @@ short ******alloc_sblock_pattern_lookup(
 						from_track_types += (2); /* Skip forward 2 items */
 
 						/* Set initial value to be unset */
+						/* Index 1 has been added to account for Fs > 3. Although Fs > 3 is 
+						   not currently supported by VPR, it is included for Toro purposes */
 						result[i][j][from_side][to_side][from_track][0] = UN_SET;
 						result[i][j][from_side][to_side][from_track][1] = UN_SET;
 					}
