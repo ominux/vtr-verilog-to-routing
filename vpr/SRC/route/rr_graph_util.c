@@ -6,11 +6,9 @@
 t_linked_edge *
 insert_in_edge_list(INP t_linked_edge * head, INP int edge, INP short iswitch) {
 
-	/* Inserts a new element at the head of a linked list.  Returns the new head *
-	 * of the list.  One argument is the address of the head of a list of free   *
-	 * edge_list elements.  If there are any elements on this free list, the new *
-	 * element is taken from it.  Otherwise a new one is malloced.               */
-
+	/* Allocated and inserts a new element at the head of a linked list.  
+	   Returns the new head of the list. */
+ 
 	t_linked_edge *linked_edge;
 
 	linked_edge = (t_linked_edge *) my_malloc(sizeof(t_linked_edge));
