@@ -68,11 +68,11 @@ static struct s_ivec ****alloc_and_load_track_to_pin_lookup(
 		INP int width, INP int height,
 		INP int num_pins, INP int nodes_per_chan);
 
-static void build_bidir_rr_opins(
-		INP int i, INP int j,
+static void build_bidir_rr_opins(INP int i, INP int j,
+		INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
 		INP int ******opin_to_track_map, INP int **Fc_out,
-		INP boolean * L_rr_edge_done, INP t_seg_details * seg_details,
+		INP boolean * L_rr_edge_done, INP t_seg_details * seg_details,	//OP: remove seg_details
 		INP struct s_grid_tile **L_grid, INP int delayless_switch,
 		INP t_direct_inf *directs, INP int num_directs, INP t_clb_to_clb_directs *clb_to_clb_directs);
 
@@ -852,8 +852,9 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 	for (int i = 0; i <= (L_nx + 1); ++i) {
 		for (int j = 0; j <= (L_ny + 1); ++j) {
 			if (BI_DIRECTIONAL == directionality) {
-				build_bidir_rr_opins(i, j, L_rr_node, L_rr_node_indices,
-						opin_to_track_map, Fc_out, L_rr_edge_done, seg_details,
+				build_bidir_rr_opins(i, j, chan_details_x, chan_details_y, 
+						L_rr_node, L_rr_node_indices,
+						opin_to_track_map, Fc_out, L_rr_edge_done, seg_details,	//pass in chan_details_x/y
 						L_grid, delayless_switch,
 						directs, num_directs, clb_to_clb_directs);
 			} else {
@@ -907,11 +908,12 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 }
 
 static void build_bidir_rr_opins(INP int i, INP int j,
+		INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
 		INP int ******opin_to_track_map, INP int **Fc_out,
-		INP boolean * L_rr_edge_done, INP t_seg_details * seg_details,
+		INP boolean * L_rr_edge_done, INP t_seg_details * seg_details,	//OP: remove seg_details
 		INP struct s_grid_tile **L_grid, INP int delayless_switch,
-		INP t_direct_inf *directs, INP int num_directs, INP t_clb_to_clb_directs *clb_to_clb_directs) {
+		INP t_direct_inf *directs, INP int num_directs, INP t_clb_to_clb_directs *clb_to_clb_directs){
 
 	/* OPINP edges need to be done at once so let the offset 0
 	 * block do the work. */
@@ -935,7 +937,7 @@ static void build_bidir_rr_opins(INP int i, INP int j,
 				for (int height = 0; height < type->height; ++height) {
 					num_edges += get_bidir_opin_connections(i + width, j + height, pin_index,
 							&edge_list, opin_to_track_map, Fc[pin_index], L_rr_edge_done,
-							L_rr_node_indices, seg_details);
+							L_rr_node_indices, chan_details_x, chan_details_y);
 				}
 			}
 		}
@@ -947,6 +949,7 @@ static void build_bidir_rr_opins(INP int i, INP int j,
 		int node_index = get_rr_node_index(i, j, OPIN, pin_index, L_rr_node_indices);
 		alloc_and_load_edges_and_switches(L_rr_node, node_index, num_edges,
 				L_rr_edge_done, edge_list);
+
 		while (edge_list != NULL) {
 			struct s_linked_edge *next_edge = edge_list->next;
 			free(edge_list);

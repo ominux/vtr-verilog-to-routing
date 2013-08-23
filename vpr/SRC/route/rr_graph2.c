@@ -258,6 +258,9 @@ t_seg_details *alloc_and_load_seg_details(
 				seg_details[cur_track].group_size = length * fac;
 			}
 
+			//seg_details[cur_track].seg_start = -1;
+			//seg_details[cur_track].seg_end = -1;
+
 			seg_details[cur_track].seg_start = -1;
 			seg_details[cur_track].seg_end = -1;
 
@@ -693,13 +696,14 @@ int init_seg_end(INP t_seg_details * seg_details, INP int itrack, INP int istart
 
 /* Returns the number of tracks to which clb opin #ipin at (i,j) connects.   *
  * Also stores the nodes to which this pin connects in the linked list       *
- * pointed to by *edge_list_ptr.                                             */
+ * pointed to by *edge_list.                                                 */
 int get_bidir_opin_connections(
 		INP int i, INP int j, INP int ipin,
 		INP struct s_linked_edge **edge_list, 
 		INP int ******opin_to_track_map,
 		INP int Fc, INP boolean * L_rr_edge_done,
-		INP t_ivec *** L_rr_node_indices, INP t_seg_details * seg_details) {
+		INP t_ivec *** L_rr_node_indices,
+		INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y) {
 
 	int iside, num_conn, tr_i, tr_j, seg; //OP: , chan;
 	int to_track, to_switch, to_node, iconn;
@@ -737,6 +741,14 @@ int get_bidir_opin_connections(
 		}
 		if ((CHANY == to_type) && (tr_j < 1)) {
 			continue;
+		}
+
+		/* Get the segment details at the coordinates and channel determined earlier */
+		t_seg_details *seg_details;
+		if (to_type == CHANX){
+			seg_details = chan_details_x[tr_i][tr_j];
+		} else {
+			seg_details = chan_details_y[tr_i][tr_j];
 		}
 
 		is_connected_track = FALSE;
@@ -868,8 +880,15 @@ boolean is_cblock(INP int seg, INP int track,
 
 	length = seg_details[track].length;
 
-	/* Make sure they gave us correct start */
+	/* Get seg start */
 	start_seg = seg_details[track].seg_start;
+
+//OK... the issue is that we should never be passing in un-initialized variables anyway...
+//so the solution is to initialize this elsewhere, before passing it in. back in build_rr_graph i think
+
+//int init_seg_start(
+//		INP t_seg_details * seg_details, INP int itrack,
+//		INP int chan_num, INP int seg_num) {
 
 	ofs = seg - start_seg;
 

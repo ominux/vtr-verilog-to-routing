@@ -120,7 +120,8 @@ int get_bidir_opin_connections(
 		INP int Fc,
 		INP boolean * L_rr_edge_done,
 		INP t_ivec *** L_rr_node_indices,
-		INP t_seg_details * seg_details);
+		INP t_chan_details *chan_details_x, 
+		INP t_chan_details *chan_details_y);
 
 int get_unidir_opin_connections(
 		INP int chan,
