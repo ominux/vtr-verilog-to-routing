@@ -258,9 +258,6 @@ t_seg_details *alloc_and_load_seg_details(
 				seg_details[cur_track].group_size = length * fac;
 			}
 
-			//seg_details[cur_track].seg_start = -1;
-			//seg_details[cur_track].seg_end = -1;
-
 			seg_details[cur_track].seg_start = -1;
 			seg_details[cur_track].seg_end = -1;
 
@@ -882,13 +879,6 @@ boolean is_cblock(INP int seg, INP int track,
 
 	/* Get seg start */
 	start_seg = seg_details[track].seg_start;
-
-//OK... the issue is that we should never be passing in un-initialized variables anyway...
-//so the solution is to initialize this elsewhere, before passing it in. back in build_rr_graph i think
-
-//int init_seg_start(
-//		INP t_seg_details * seg_details, INP int itrack,
-//		INP int chan_num, INP int seg_num) {
 
 	ofs = seg - start_seg;
 

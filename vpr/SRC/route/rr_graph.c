@@ -72,7 +72,7 @@ static void build_bidir_rr_opins(INP int i, INP int j,
 		INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
 		INP int ******opin_to_track_map, INP int **Fc_out,
-		INP boolean * L_rr_edge_done, INP t_seg_details * seg_details,	//OP: remove seg_details
+		INP boolean * L_rr_edge_done,
 		INP struct s_grid_tile **L_grid, INP int delayless_switch,
 		INP t_direct_inf *directs, INP int num_directs, INP t_clb_to_clb_directs *clb_to_clb_directs);
 
@@ -854,7 +854,7 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 			if (BI_DIRECTIONAL == directionality) {
 				build_bidir_rr_opins(i, j, chan_details_x, chan_details_y, 
 						L_rr_node, L_rr_node_indices,
-						opin_to_track_map, Fc_out, L_rr_edge_done, seg_details,	//pass in chan_details_x/y
+						opin_to_track_map, Fc_out, L_rr_edge_done,
 						L_grid, delayless_switch,
 						directs, num_directs, clb_to_clb_directs);
 			} else {
@@ -911,7 +911,7 @@ static void build_bidir_rr_opins(INP int i, INP int j,
 		INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y,
 		INOUTP t_rr_node * L_rr_node, INP t_ivec *** L_rr_node_indices,
 		INP int ******opin_to_track_map, INP int **Fc_out,
-		INP boolean * L_rr_edge_done, INP t_seg_details * seg_details,	//OP: remove seg_details
+		INP boolean * L_rr_edge_done, 
 		INP struct s_grid_tile **L_grid, INP int delayless_switch,
 		INP t_direct_inf *directs, INP int num_directs, INP t_clb_to_clb_directs *clb_to_clb_directs){
 
