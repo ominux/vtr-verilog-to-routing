@@ -28,12 +28,14 @@
 #include <assert.h>
 #include <map>
 #include <string>
+#include <sstream>
 #include "util.h"
 #include "arch_types.h"
 #include "ReadLine.h"
 #include "ezxml.h"
 #include "read_xml_arch_file.h"
 #include "read_xml_util.h"
+#include "parse_switchblocks.h"
 
 using namespace std;
 
@@ -98,6 +100,13 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 		OUTP struct s_segment_inf **Segs, OUTP int *NumSegs,
 		INP struct s_switch_inf *Switches, INP int NumSwitches,
 		INP boolean timing_enabled);
+
+/* Processes the switchblocklist section from the xml architecture file. */
+static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *switchblocks, OUTP int *num_switchblocks, 
+				INP t_switch_inf *switches, INP int num_switches, 
+				INP t_segment_inf *segments, INP int num_segments,
+				INP boolean timing_enabled);
+
 static void ProcessCB_SB(INOUTP ezxml_t Node, INOUTP boolean * list,
 		INP int len);
 static void ProcessPower( INOUTP ezxml_t parent,
@@ -2711,6 +2720,7 @@ void XmlReadArch(INP const char *ArchFile, INP boolean timing_enabled,
 	ProcessDevice(Next, arch, timing_enabled);
 	FreeNode(Next);
 
+
 	/* Process types */
 	Next = FindElement(Cur, "complexblocklist", TRUE);
 	ProcessComplexBlocks(Next, Types, NumTypes, timing_enabled);
@@ -2726,6 +2736,12 @@ void XmlReadArch(INP const char *ArchFile, INP boolean timing_enabled,
 	Next = FindElement(Cur, "segmentlist", TRUE);
 	ProcessSegments(Next, &(arch->Segments), &(arch->num_segments),
 			arch->Switches, arch->num_switches, timing_enabled);
+	FreeNode(Next);
+	
+	/* Process switchblock. This depends on segments and switches */
+	Next = FindElement(Cur, "switchblocklist", TRUE);
+	ProcessSwitchblocks(Next, arch->switchblocks, &(arch->num_switchblocks), arch->Switches, arch->num_switches,
+					arch->Segments, arch->num_segments, timing_enabled);
 	FreeNode(Next);
 
 	/* Process directs */
@@ -2812,6 +2828,19 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 	/* Load the segments. */
 	for (i = 0; i < *NumSegs; ++i) {
 		Node = ezxml_child(Parent, "segment");
+
+		/* Get segment name */
+		tmp = FindProperty(Node, "name", FALSE);
+		if (tmp) {
+			(*Segs)[i].name = my_strdup(tmp);
+		} else {
+			/* set name to default: "unnamed_segment_<segment_index>" */
+			stringstream ss;
+			ss << "unnamed_segment_" << i;
+			tmp = ss.str().c_str();
+			(*Segs)[i].name = my_strdup(tmp);
+		}
+		ezxml_set_attr(Node, "name", NULL);
 
 		/* Get segment length */
 		length = 1; /* DEFAULT */
@@ -2927,6 +2956,8 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 			FreeNode(SubElem);
 		}
 
+		/* TODO: check for duplicate names */
+
 		/* Setup the CB list if they give one, otherwise use full */
 		(*Segs)[i].cb_len = length;
 		(*Segs)[i].cb = (boolean *) my_malloc(length * sizeof(boolean));
@@ -2953,6 +2984,86 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 		FreeNode(Node);
 	}
 }
+
+/* Processes the switchblocklist section from the xml architecture file. */
+static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *switchblocks, OUTP int *num_switchblocks, 
+				INP t_switch_inf *switches, INP int num_switches, 
+				INP t_segment_inf *segments, INP int num_segments,
+				INP boolean timing_enabled){
+
+	ezxml_t Node;
+	ezxml_t SubElem;
+	const char *tmp;
+	
+	/* get the number of switchblocks */
+	*num_switchblocks = CountChildren(Parent, "switchblock", 1);
+
+	/* allocate switchblock list */
+	switchblocks = NULL;
+
+	/* we must use new to allocate because this structure uses variables that call constructors
+	   (STL's map, vector, string); memset doesn't do this. Alternatively, we could use my_malloc with
+	   placement new, but then we'll run into problems with deletion as 'free' doesn't call destructors.
+	   Better to just use 'new' and 'delete' to begin with. */
+	switchblocks = new t_switchblock_inf[(*num_switchblocks)];
+
+	/* read-in all switchblock data */
+	for (int i_sb = 0; i_sb < (*num_switchblocks); i_sb++){
+		Node = ezxml_child(Parent, "switchblock");
+
+		/* get name */
+		tmp = FindProperty(Node, "name", TRUE);
+		if (tmp){
+			switchblocks[i_sb].name = my_strdup(tmp);
+		}
+		ezxml_set_attr(Node, "name", NULL);
+
+		/* get type */
+		tmp = FindProperty(Node, "type", TRUE);
+		if (tmp){
+			if (0 == strcmp(tmp, "bidir")){
+				switchblocks[i_sb].directionality = BI_DIRECTIONAL;
+			} else if (0 == strcmp(tmp, "unidir")){
+				switchblocks[i_sb].directionality = UNI_DIRECTIONAL;
+			} else {
+				vpr_printf(TIO_MESSAGE_ERROR, "unsupported switchblock type: %s\n", tmp);
+				exit(1);
+			}
+		}
+		ezxml_set_attr(Node, "type", NULL);
+
+		/* get switch type */
+		SubElem = ezxml_child(Node, "switch_type");
+		tmp = FindProperty(SubElem, "name", TRUE);
+		if (tmp){
+			switchblocks[i_sb].switch_name = my_strdup(tmp);
+		}
+		ezxml_set_attr(SubElem, "name", NULL);
+		FreeNode(SubElem);
+
+		/* get switchblock permutation functions */
+		SubElem = ezxml_child(Node, "switchfuncs");
+		read_sb_switchfuncs(SubElem, &switchblocks[i_sb]);
+		FreeNode(SubElem);
+		
+		read_sb_wireconns(Node, &switchblocks[i_sb]);
+		
+		FreeNode(Node);
+	}
+
+	/* check for duplicate names */
+	/* check that specified switches exist */
+	/* check that specified wires exist */
+	/* check that type of switchblock matches type of switch specified */
+	//basically write a single function to check everything
+
+	/* check that no two switchblocks share the same wire connection entry */
+	//Actually, do we really want to do this?
+	//Maybe just issue a warning instead of erroring out
+
+	return;
+}
+
 
 static void ProcessCB_SB(INOUTP ezxml_t Node, INOUTP boolean * list,
 		INP int len) {

@@ -13,9 +13,6 @@ struct s_formula_data{
 	int Fs;
 	int Fc_in;
 	int Fc_out;
-
-	/* Initialize all members to 0 */
-	s_formula_data(){ memset(this, 0, sizeof(s_formula_data)); }
 };
 
 

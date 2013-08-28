@@ -28,6 +28,9 @@
 
 #include "logic_types.h"
 #include "util.h"
+#include <vector>
+#include <string>
+#include <map>
 
 typedef struct s_clock_arch t_clock_arch;
 typedef struct s_clock_network t_clock_network;
@@ -711,6 +714,7 @@ enum e_Fc_type {
  * (UDSD by AY) drivers: How do signals driving a routing track connect to   *
  *                       the track?                                          */
 typedef struct s_segment_inf {
+	char *name;
 	int frequency;
 	int length;
 	short wire_switch;
@@ -775,11 +779,83 @@ typedef struct s_direct_inf {
 	int line;
 } t_direct_inf;
 
+/* Used to list information about two segment types that connect together through a switchblock */
+typedef struct s_wireconn_inf{
+	char *from_type;		/* connect from this wire type */
+	char *to_type;			/* to this wire type */
+	int from_group;			/* index of wire group belonging to from_type */	
+	int to_group;			/* index of wire group belong to to_type */
+
+	/* free any allocated variables */
+	~s_wireconn_inf(){
+		free(this->from_type);
+		free(this->to_type);
+		this->from_type = NULL;
+		this->to_type = NULL;
+	}
+} t_wireconn_inf;
+
+/* represents a connection between two sides of a switchblock */
+class Connect_SB_Sides{
+public:
+	/* specify the two SB sides that form a connection */
+	enum e_side from_side;
+	enum e_side to_side;
+
+	void set_sides( enum e_side from, enum e_side to ){
+		from_side = from;
+		to_side = to;
+	}
+
+	/* overload < operator which will be used by std::map */	
+	bool operator < (const Connect_SB_Sides &obj) const{
+		bool result;
+
+		if (from_side < obj.from_side){
+			result = true;
+		} else {
+			if (from_side == obj.from_side){
+				result = (to_side < obj.to_side) ? true : false;
+			} else {
+				result = false;
+			}
+		}
+
+		return result;
+	}
+};
+
+/* we use a map to index into the permutation functions used to connect from one side to another */
+typedef std::map< Connect_SB_Sides, std::vector<std::string> > t_permutation_map;
+
+/* Lists all information about switchblocks */
+typedef struct s_switchblock_inf{
+	char *name;
+	enum e_directionality directionality;
+	char *switch_name;	/* name of switch this switchblock uses -- must match entry in s_switch_inf */
+
+	t_permutation_map permutation_map;
+
+	t_wireconn_inf *wireconns;		/* list of wire types/groups this SB will connect */
+	int num_wireconns;			/* number of entries in the above list */
+
+	/* free any allocated variables */
+	~s_switchblock_inf(){
+		free(this->wireconns);
+		free(this->name);
+		free(this->switch_name);
+		this->wireconns = NULL;
+		this->name = NULL;
+		this->switch_name = NULL;
+	}
+} t_switchblock_inf;
+
 /*   Detailed routing architecture */
-typedef struct s_arch t_arch;
-struct s_arch {
+typedef struct s_arch {
 	t_chan_width_dist Chans;
 	enum e_switch_block_type SBType;
+	int num_switchblocks;
+	t_switchblock_inf * switchblocks;
 	float R_minW_nmos;
 	float R_minW_pmos;
 	int Fs;
@@ -798,7 +874,7 @@ struct s_arch {
 	t_model *model_library;
 	t_power_arch * power;
 	t_clock_arch * clocks;
-};
+} t_arch;
 
 #endif
 

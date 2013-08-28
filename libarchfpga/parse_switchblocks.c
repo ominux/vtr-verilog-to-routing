@@ -72,6 +72,19 @@ public:
 
 
 /**** Function Declarations ****/
+
+/*---- Functions for Parsing Switchblocks from Architecture ----*/
+
+/* checks for correctness of a unidir switchblock. hard exit if error found (to be changed to throw later) */
+static void check_unidir_switchblock( INP t_permutation_map *permutation_map );
+
+/* checks for correctness of a bidir switchblock. hard exit if error found (to be changed to throw later) */
+static void check_bidir_switchblock( INP t_permutation_map *permutation_map );
+
+
+
+/*---- Functions for Parsing the Symbolic Switchblock Formulas ----*/
+
 /* converts specified formula to a vector in reverse-polish notation */
 static void formula_to_rpn( INP const char* formula, INP const s_formula_data &mydata, 
 				INOUTP vector<Formula_Object> &rpn_output );
@@ -129,25 +142,25 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	for (int i = 0; i < num_wireconns; i++){
 		SubElem = ezxml_child(Node, "wireconn");
 
-		/* get first wire type */
-		char_prop = FindProperty(SubElem, "T1", TRUE);
-		sb->wireconns[i].type1 = my_strdup(char_prop);
-		ezxml_set_attr(SubElem, "T1", NULL);
+		/* get from type */
+		char_prop = FindProperty(SubElem, "FT", TRUE);
+		sb->wireconns[i].from_type = my_strdup(char_prop);
+		ezxml_set_attr(SubElem, "FT", NULL);
 
-		/* get second wire type */
-		char_prop = FindProperty(SubElem, "T2", TRUE);
-		sb->wireconns[i].type2 = my_strdup(char_prop);
-		ezxml_set_attr(SubElem, "T2", NULL);
+		/* get to type */
+		char_prop = FindProperty(SubElem, "TT", TRUE);
+		sb->wireconns[i].to_type = my_strdup(char_prop);
+		ezxml_set_attr(SubElem, "TT", NULL);
 
-		/* get first wire group */
-		int_prop = GetIntProperty(SubElem, "G1", TRUE, -1);
-		sb->wireconns[i].group1 = int_prop;
-		ezxml_set_attr(SubElem, "G1", NULL);
+		/* get from wire group */
+		int_prop = GetIntProperty(SubElem, "FG", TRUE, -1);
+		sb->wireconns[i].from_group = int_prop;
+		ezxml_set_attr(SubElem, "FG", NULL);
 
-		/* get first wire group */
-		int_prop = GetIntProperty(SubElem, "G2", TRUE, -1);
-		sb->wireconns[i].group2 = int_prop;
-		ezxml_set_attr(SubElem, "G2", NULL);
+		/* get to wire group */
+		int_prop = GetIntProperty(SubElem, "TG", TRUE, -1);
+		sb->wireconns[i].to_group = int_prop;
+		ezxml_set_attr(SubElem, "TG", NULL);
 
 		FreeNode(SubElem);
 	}
@@ -164,43 +177,22 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	
 	ezxml_t SubElem;
 
-	/* Make structure that pairs switch going in one direction with a switch going in other direction.
-	   This is useful for the bidir case where only 6 of the 12 permutation functions are specified.
-	   Each element of a pair is a pointer to a vector in the switchblock struct that specifies the permutation
-	   function(s) for that particular side->side connection. */
-	pair< vector<const char*> *, vector<const char*> * > func_pairs[6] = 
-					{
-						make_pair( &(sb->lr), &(sb->rl) ), 
-						make_pair( &(sb->lt), &(sb->tl) ), 
-						make_pair( &(sb->lb), &(sb->bl) ), 
-						make_pair( &(sb->rt), &(sb->tr) ), 
-						make_pair( &(sb->rb), &(sb->br) ), 
-						make_pair( &(sb->bt), &(sb->tb) )
-					};
-	/* an enumeration to help access the above array of pairs */
-	enum{
-		E_LR = 0,
-		E_LT,
-		E_LB,
-		E_RT,
-		E_RB,
-		E_BT,
-		E_NUM_FUNC_PAIRS
-	};
-
 	/* Used to designate if a predifined function such as 'wilton' has been found.
 	   If a predifined function is specified, only one function entry is allowed */
 	bool predefined_sb_found = false;
 
-	/* is switchblock bidirectional? */
-	bool is_bidir = (BI_DIRECTIONAL == (*sb).directionality);
+	/* get directionality */
+	enum e_directionality directionality = (*sb).directionality;
 	
 	/* get the number of specified permutation functions */
 	int num_funcs = CountChildren(Node, "func", 1);
 
 	const char * func_type;
 	const char * func_formula;
-	vector<const char *> * func_ptr;
+	vector<string> * func_ptr;
+
+	/* used to index into permutation map of switchblock */
+	Connect_SB_Sides conn;
 
 	/* now we iterate through all the specified permutation functions, and 
 	   load them into the switchblock structure as appropriate */
@@ -231,29 +223,29 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 
 		/* go through all the possible cases of func_type */
 		if (0 == strcmp(func_type, "lt")){
-			func_ptr = func_pairs[E_LT].first;
+			conn.set_sides(LEFT, TOP);
 		} else if (0 == strcmp(func_type, "lr")) {
-			func_ptr = func_pairs[E_LR].first; 
+			conn.set_sides(LEFT, RIGHT);
 		} else if (0 == strcmp(func_type, "lb")) {
-			func_ptr = func_pairs[E_LB].first; 
+			conn.set_sides(LEFT, BOTTOM);
 		} else if (0 == strcmp(func_type, "tl")) {
-			func_ptr = func_pairs[E_LT].second; 
+			conn.set_sides(TOP, LEFT);
 		} else if (0 == strcmp(func_type, "tb")) {
-			func_ptr = func_pairs[E_BT].second; 
+			conn.set_sides(TOP, BOTTOM);
 		} else if (0 == strcmp(func_type, "tr")) {
-			func_ptr = func_pairs[E_RT].second; 
+			conn.set_sides(TOP, RIGHT);
 		} else if (0 == strcmp(func_type, "rt")) {
-			func_ptr = func_pairs[E_RT].first; 
+			conn.set_sides(RIGHT, TOP);
 		} else if (0 == strcmp(func_type, "rl")) {
-			func_ptr = func_pairs[E_LR].second; 
+			conn.set_sides(RIGHT, LEFT);
 		} else if (0 == strcmp(func_type, "rb")) {
-			func_ptr = func_pairs[E_RB].first; 
+			conn.set_sides(RIGHT, BOTTOM);
 		} else if (0 == strcmp(func_type, "bl")) {
-			func_ptr = func_pairs[E_LB].second; 
+			conn.set_sides(BOTTOM, LEFT);
 		} else if (0 == strcmp(func_type, "bt")) {
-			func_ptr = func_pairs[E_BT].first; 
+			conn.set_sides(BOTTOM, TOP);
 		} else if (0 == strcmp(func_type, "br")) {
-			func_ptr = func_pairs[E_RB].second; 
+			conn.set_sides(BOTTOM, RIGHT);
 		} else if (0 == strcmp(func_type, "predefined")){
 			/* a predifined permutation function */
 			predefined_sb_found = true;
@@ -262,43 +254,64 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 			vpr_printf(TIO_MESSAGE_ERROR, "Unknown permutation function specified: %s\n", func_type);
 			exit(1);
 		}
+		func_ptr = &(*sb).permutation_map[conn];
 
 		/* Here we load the specified switch function(s) */
 		if (predefined_sb_found){
 			//TODO: load_predefined_switchfuncs( const char *predef_switch, ...? );
 		} else {
-			func_ptr->push_back( my_strdup(func_formula) );
+			string tmp(func_formula);
+			func_ptr->push_back( tmp );
 		}
-	
+ 
 		func_ptr = NULL;
 		FreeNode(SubElem);
 	}
 	
-	/* Here we check the completeness of the specified switchblock.
-	   In the bidirectional case, only 6 of the 12 functions have to be specified 
-	   therefore we have to check that only one entry in each func pair has been
-	   specified. For the unidirectional case, all 12 funcs must be specified*/
-	/* In the bidir case, the remaining 6 funcs are filled in later */
-	if (!predefined_sb_found){
-		for (int ifunc = 0; ifunc < E_NUM_FUNC_PAIRS; ifunc ++){
-			if (func_pairs[ifunc].first->size() && func_pairs[ifunc].second->size()){
-				if (is_bidir){
-					/* only one pair entry can have size > 0 */
-					vpr_printf(TIO_MESSAGE_ERROR, "Bidir switchblock specification incomplete\n");
-					exit(1);
-				} else {
-					//Correct. Nothing to do.
-				}
-			} else {
-				if (is_bidir){
-					/* Bidir case doesn't have the required 6 functions specified */
-					if ( func_pairs[ifunc].first->empty() && func_pairs[ifunc].second->empty() ){
-						vpr_printf(TIO_MESSAGE_ERROR, "Required switch is not specified in bidir switchblock\n");
-						exit(1);
-					}
-				} else {
-					/* Unidir case doesn't have all 12 functions specified */
-					vpr_printf(TIO_MESSAGE_ERROR, "Not all 12 permutation functions specified for unidirectional switchblock.\n");
+	/* Check for errors in the switchblock descriptions */
+	if (UNI_DIRECTIONAL == directionality){
+		check_unidir_switchblock( &(*sb).permutation_map );
+	} else {
+		assert(BI_DIRECTIONAL == directionality);
+		check_bidir_switchblock( &(*sb).permutation_map );
+	}
+
+
+	return;
+} /* read_sb_switchfuncs */
+
+/* checks for correctness of a unidir switchblock. hard exit if error found (to be changed to throw later) */
+static void check_unidir_switchblock( INP t_permutation_map *permutation_map ){
+	//nothing much to do here, everything is legal...
+}
+
+/* checks for correctness of a bidir switchblock. hard exit if error found (to be changed to throw later) */
+static void check_bidir_switchblock( INP t_permutation_map *permutation_map ){
+	/* check that if side1->side2 is specified, then side2->side1 is not, as it is implicit */
+
+	/* variable used to index into the permutation map */
+	Connect_SB_Sides conn;
+
+	/* iterate over all combinations of from_side -> to side */
+	for ( e_side from_side = (e_side) 0; from_side < 4; from_side = (e_side)(from_side + 1) ){
+		for ( e_side to_side = (e_side) 0; to_side < 4; to_side = (e_side)(to_side + 1) ){
+			/* can't connect a switchblock side to itself */
+			if (from_side == to_side){
+				continue;
+			}
+
+			/* index into permutation map with this variable */			
+			conn.set_sides(from_side, to_side);
+
+			/* check if a connection between these sides exists */
+			t_permutation_map::const_iterator it = (*permutation_map).find(conn);
+			if (it != (*permutation_map).end()){
+				/* the two sides are connected */
+				/* check if the opposite connection has been specified */
+				conn.set_sides(to_side, from_side);
+				it = (*permutation_map).find(conn);
+				if (it != (*permutation_map).end()){
+					vpr_printf(TIO_MESSAGE_ERROR, "check_bidir_switchblock: if a connection from side1->side2 was specified, no connection should have been specified from side2->side1 as it is implicit. But such a specification was found.\n");
 					exit(1);
 				}
 			}
@@ -306,12 +319,7 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	}
 
 	return;
-} /* read_sb_switchfuncs */
-
-
-
-
-
+}
 
 
 
