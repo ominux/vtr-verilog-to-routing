@@ -467,6 +467,10 @@ void free_arch(t_arch* Arch) {
 		}
 	}
 	free(Arch->Segments);
+	
+	/* switchblocks were allocated with new in read_xml_arch_file.c */
+	delete [] Arch->switchblocks;	
+
 	model = Arch->models;
 	while (model) {
 		port = model->inputs;

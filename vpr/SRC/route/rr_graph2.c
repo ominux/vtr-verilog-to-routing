@@ -601,8 +601,10 @@ void free_seg_details(
 	for (int i = 0; i < nodes_per_chan; ++i) {
 		free(seg_details[i].cb);
 		free(seg_details[i].sb);
+		free(seg_details[i].type_name);
 	}
 	free(seg_details);
+	seg_details = NULL;
 }
 
 void free_chan_details(
@@ -629,6 +631,8 @@ void free_chan_details(
 
 	free_matrix(pa_chan_details_x,0, L_nx, 0, sizeof(t_chan_details));
 	free_matrix(pa_chan_details_y,0, L_nx, 0, sizeof(t_chan_details));
+	pa_chan_details_x = NULL;
+	pa_chan_details_y = NULL;
 }
 
 /* Returns the segment number at which the segment this track lies on        *
@@ -702,7 +706,7 @@ int get_bidir_opin_connections(
 		INP t_ivec *** L_rr_node_indices,
 		INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y) {
 
-	int iside, num_conn, tr_i, tr_j, seg; //OP: , chan;
+	int iside, num_conn, tr_i, tr_j, seg;
 	int to_track, to_switch, to_node, iconn;
 	int is_connected_track;
 	t_type_ptr type;
@@ -723,7 +727,6 @@ int get_bidir_opin_connections(
 
 		to_type = ((iside == LEFT) || (iside == RIGHT)) ? CHANY : CHANX;
 
-		//OP: chan = ((to_type == CHANX) ? tr_j : tr_i);
 		seg = ((to_type == CHANX) ? tr_i : tr_j);
 
 		/* Don't connect where no tracks on fringes */

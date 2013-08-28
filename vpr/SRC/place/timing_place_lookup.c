@@ -430,7 +430,7 @@ static void alloc_routing_structs(struct s_router_opts router_opts,
 		struct s_det_routing_arch det_routing_arch, t_segment_inf * segment_inf,
 		t_timing_inf timing_inf, INP t_direct_inf *directs, 
 		INP int num_directs) {
-
+	
 	int bb_factor;
 	int warnings;
 	t_graph_type graph_type;
@@ -455,7 +455,8 @@ static void alloc_routing_structs(struct s_router_opts router_opts,
 
 	build_rr_graph(graph_type, num_types, dummy_type_descriptors, nx, ny, grid,
 			chan_width_max, NULL, det_routing_arch.switch_block_type,
-			det_routing_arch.Fs, det_routing_arch.num_segment,
+			det_routing_arch.Fs, det_routing_arch.num_switchblocks,
+			det_routing_arch.switchblocks, det_routing_arch.num_segment,
 			det_routing_arch.num_switch, segment_inf,
 			det_routing_arch.global_route_switch,
 			det_routing_arch.delayless_switch, timing_inf,

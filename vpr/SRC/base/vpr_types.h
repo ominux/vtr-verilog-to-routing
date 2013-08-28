@@ -805,11 +805,12 @@ struct s_router_opts {
  *                  criticality_exp (then clip to max_criticality).         
  * doRouting: True if routing is supposed to be done, FALSE otherwise */
 
-typedef struct s_det_routing_arch t_det_routing_arch;
-struct s_det_routing_arch {
+typedef struct s_det_routing_arch {
 	enum e_directionality directionality; /* UDSD by AY */
 	int Fs;
 	enum e_switch_block_type switch_block_type;
+	int num_switchblocks;
+	t_switchblock_inf * switchblocks;
 	int num_segment;
 	short num_switch;
 	short global_route_switch;
@@ -817,7 +818,14 @@ struct s_det_routing_arch {
 	short wire_to_ipin_switch;
 	float R_minW_nmos;
 	float R_minW_pmos;
-};
+
+	/* free any allocated variables */
+	~s_det_routing_arch(){
+		/* was allocated with new, as it uses variables with constructors */
+		delete [] switchblocks;
+		switchblocks = NULL;
+	}
+} t_det_routing_arch;
 
 /* Defines the detailed routing architecture of the FPGA.  Only important   *
  * if the route_type is DETAILED.                                           *
@@ -831,6 +839,9 @@ struct s_det_routing_arch {
  *           to track i in other channels.  See Steve Wilton, Phd Thesis,   *
  *           University of Toronto, 1996.  The UNIVERSAL switch block is    *
  *           from Y. W. Chang et al, TODAES, Jan. 1996, pp. 80 - 101.       *
+ * num_switchblocks: number of switchblocks defined in the architecture     *
+ * switchblocks: An array of switchblock definitions of length 		    *
+ *               num_switchblocks					    *
  * num_segment:  Number of distinct segment types in the FPGA.              *
  * num_switch:  Number of distinct switch types (pass transistors or        *
  *              buffers) in the FPGA.                                       *
@@ -871,6 +882,7 @@ typedef struct s_seg_details {
 	int seg_end;
 	int index;
 	float Cmetal_per_m; /* Used for power */
+	char *type_name;
 } t_seg_details;
 
 /* Lists detailed information about segmentation.  [0 .. W-1].              *
@@ -890,7 +902,8 @@ typedef struct s_seg_details {
  * (UDSD by AY) direction: The direction of a routing track.                *
  * (UDSD by AY) drivers: How do signals driving a routing track connect to  *
  *                       the track?                                         *
- * index: index of the segment type used for this track.                    */
+ * index: index of the segment type used for this track.                    *
+ * type_name: name of the segment type this track belongs to 		    */
 
 typedef struct s_seg_details** t_chan_details;
 

@@ -241,7 +241,7 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 	 * that minimum width_fac.                                                  */
 
 	/* OP -- Test */
-	test_metrics = manage_trackmap = TRUE;
+	test_metrics = manage_trackmap = FALSE;
 
 	struct s_trace **best_routing; /* Saves the best routing found so far. */
 	int current, low, high, final;
@@ -505,7 +505,8 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 	build_rr_graph(graph_type, num_types, type_descriptors, nx, ny, grid,
 			chan_width_max, NULL, det_routing_arch.switch_block_type,
-			det_routing_arch.Fs, det_routing_arch.num_segment,
+			det_routing_arch.Fs, det_routing_arch.num_switchblocks,
+			det_routing_arch.switchblocks, det_routing_arch.num_segment,
 			det_routing_arch.num_switch, segment_inf,
 			det_routing_arch.global_route_switch,
 			det_routing_arch.delayless_switch, timing_inf,

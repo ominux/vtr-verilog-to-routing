@@ -29,6 +29,8 @@ void build_rr_graph(
 		INP struct s_chan_width_dist *chan_capacity_inf,
 		INP enum e_switch_block_type sb_type, 
 		INP int Fs, 
+		INP int num_switchblocks,
+		INP t_switchblock_inf *switchblocks,
 		INP int num_seg_types,
 		INP int num_switches, 
 		INP t_segment_inf * segment_inf,

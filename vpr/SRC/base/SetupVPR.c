@@ -318,15 +318,16 @@ static void SetupSwitches(INP t_arch Arch,
 /* Sets up routing structures. Since checks are already done, this
  * just copies values across */
 static void SetupRoutingArch(INP t_arch Arch,
-		OUTP struct s_det_routing_arch *RoutingArch) {
+		OUTP t_det_routing_arch *RoutingArch) {
 
 	RoutingArch->switch_block_type = Arch.SBType;
 	RoutingArch->R_minW_nmos = Arch.R_minW_nmos;
 	RoutingArch->R_minW_pmos = Arch.R_minW_pmos;
 	RoutingArch->Fs = Arch.Fs;
 	RoutingArch->directionality = BI_DIRECTIONAL;
-	if (Arch.Segments)
+	if (Arch.Segments){
 		RoutingArch->directionality = Arch.Segments[0].directionality;
+	}
 }
 
 static void SetupRouterOpts(INP t_options Options, INP boolean TimingEnabled,

@@ -17,6 +17,7 @@
 #include "ReadOptions.h"
 #include "switchblock_metrics.h"
 #include <ctime>
+#include "build_switchblocks.h"
 
 using namespace std;
 
@@ -231,7 +232,8 @@ void build_rr_graph(
 		INP t_type_ptr types, INP int L_nx, INP int L_ny,
 		INP struct s_grid_tile **L_grid, INP int chan_width,
 		INP struct s_chan_width_dist *chan_capacity_inf,
-		INP enum e_switch_block_type sb_type, INP int Fs, 
+		INP enum e_switch_block_type sb_type, INP int Fs,
+		INP int num_switchblocks, INP t_switchblock_inf *switchblocks,
 		INP int num_seg_types, INP int num_switches, 
 		INP t_segment_inf * segment_inf,
 		INP int global_route_switch, INP int delayless_switch,
@@ -271,6 +273,8 @@ void build_rr_graph(
 	rr_node_indices = NULL;
 	rr_node = NULL;
 	num_rr_nodes = 0;
+
+	t_sb_permutation_map *sb_conns;
 
 	/* Reset warning flag */
 	*Warnings = RR_GRAPH_NO_WARN;
@@ -412,11 +416,16 @@ void build_rr_graph(
 	} else if (BI_DIRECTIONAL == directionality) {
 		switch_block_conn = alloc_and_load_switch_block_conn(nodes_per_chan,
 				sb_type, Fs);
+		
+		//OP: test new switchblock permutation funcs for the bidir case
+		sb_conns = alloc_and_load_switchblock_permutations(chan_details_x,
+				chan_details_y, L_nx, L_ny, num_switchblocks, switchblocks, 
+				nodes_per_chan, directionality);
 	} else {
 		assert(UNI_DIRECTIONAL == directionality);
 
-		unidir_sb_pattern = alloc_sblock_pattern_lookup(L_nx, L_ny,
-				nodes_per_chan);
+		unidir_sb_pattern = alloc_sblock_pattern_lookup(L_nx, L_ny, nodes_per_chan);
+
 		for (i = 0; i <= L_nx; i++) {
 			for (j = 0; j <= L_ny; j++) {
 				load_sblock_pattern_lookup(i, j, nodes_per_chan, 
@@ -604,6 +613,10 @@ void build_rr_graph(
 	if (switch_block_conn) {
 		free_switch_block_conn(switch_block_conn, nodes_per_chan);
 		switch_block_conn = NULL;
+	}
+	if (sb_conns){
+		free_switchblock_permutations( sb_conns );
+		sb_conns = NULL;
 	}
 	if (L_rr_edge_done) {
 		free(L_rr_edge_done);
