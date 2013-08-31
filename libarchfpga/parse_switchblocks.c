@@ -26,9 +26,8 @@ specified by the switchblock permutation functions into their numeric counterpar
 
 using namespace std;
 
-/**** Defines ****/
-
 /**** Enums ****/
+/* Used to identify the type of symbolic formula object */
 typedef enum e_formula_obj{
 	E_FML_UNDEFINED = 0,
 	E_FML_NUMBER,
@@ -37,6 +36,7 @@ typedef enum e_formula_obj{
 	E_FML_NUM_FORMULA_OBJS
 } t_formula_obj;
 
+/* Used to identify an operator in a formula */ 
 typedef enum e_operator{
 	E_OP_UNDEFINED = 0,
 	E_OP_ADD,
@@ -121,6 +121,8 @@ static bool is_char_number( INP const char &ch );
 
 /**** Function Definitions ****/
 
+/*---- Functions for Parsing Switchblocks from Architecture ----*/
+
 /* Reads-in the wire connections specified for the switchblock in the xml arch file */
 void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	
@@ -134,34 +136,34 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 
 	/* count the number of specified wire connections for this SB */
 	num_wireconns = CountChildren(Node, "wireconn", 1);
-	
-	/* allocate the wireconn list for the SB */
-	sb->num_wireconns = num_wireconns;
-	sb->wireconns = (t_wireconn_inf *) my_malloc( num_wireconns * sizeof(t_wireconn_inf) );
+	sb->wireconns.reserve(num_wireconns);
 
 	for (int i = 0; i < num_wireconns; i++){
+		t_wireconn_inf wc;		
+
 		SubElem = ezxml_child(Node, "wireconn");
 
 		/* get from type */
 		char_prop = FindProperty(SubElem, "FT", TRUE);
-		sb->wireconns[i].from_type = my_strdup(char_prop);
+		wc.from_type = char_prop;
 		ezxml_set_attr(SubElem, "FT", NULL);
 
 		/* get to type */
 		char_prop = FindProperty(SubElem, "TT", TRUE);
-		sb->wireconns[i].to_type = my_strdup(char_prop);
+		wc.to_type = char_prop;
 		ezxml_set_attr(SubElem, "TT", NULL);
 
 		/* get from wire group */
 		int_prop = GetIntProperty(SubElem, "FG", TRUE, -1);
-		sb->wireconns[i].from_group = int_prop;
+		wc.from_group = int_prop;
 		ezxml_set_attr(SubElem, "FG", NULL);
 
 		/* get to wire group */
 		int_prop = GetIntProperty(SubElem, "TG", TRUE, -1);
-		sb->wireconns[i].to_group = int_prop;
+		wc.to_group = int_prop;
 		ezxml_set_attr(SubElem, "TG", NULL);
 
+		sb->wireconns.push_back(wc);
 		FreeNode(SubElem);
 	}
 
@@ -182,7 +184,7 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	bool predefined_sb_found = false;
 
 	/* get directionality */
-	enum e_directionality directionality = (*sb).directionality;
+	enum e_directionality directionality = sb->directionality;
 	
 	/* get the number of specified permutation functions */
 	int num_funcs = CountChildren(Node, "func", 1);
@@ -254,7 +256,7 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 			vpr_printf(TIO_MESSAGE_ERROR, "Unknown permutation function specified: %s\n", func_type);
 			exit(1);
 		}
-		func_ptr = &(*sb).permutation_map[conn];
+		func_ptr = &(sb->permutation_map[conn]);
 
 		/* Here we load the specified switch function(s) */
 		if (predefined_sb_found){
@@ -270,10 +272,10 @@ void read_sb_switchfuncs( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	
 	/* Check for errors in the switchblock descriptions */
 	if (UNI_DIRECTIONAL == directionality){
-		check_unidir_switchblock( &(*sb).permutation_map );
+		check_unidir_switchblock( &(sb->permutation_map) );
 	} else {
 		assert(BI_DIRECTIONAL == directionality);
-		check_bidir_switchblock( &(*sb).permutation_map );
+		check_bidir_switchblock( &(sb->permutation_map) );
 	}
 
 
@@ -325,7 +327,7 @@ static void check_bidir_switchblock( INP t_permutation_map *permutation_map ){
 
 
 
-
+/*---- Functions for Parsing the Symbolic Switchblock Formulas ----*/
 
 /* returns integer result according to the specified formula and data */
 int get_sb_formula_result( INP const char* formula, INP const s_formula_data &mydata ){

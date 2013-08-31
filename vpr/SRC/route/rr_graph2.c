@@ -230,7 +230,7 @@ t_seg_details *alloc_and_load_seg_details(
 		for (itrack = 0; itrack < ntracks; itrack++) {
 
 			/* Set the name of the segment type this track belongs to */
-			seg_details[cur_track].type_name = my_strdup( segment_inf[i].name );
+			seg_details[cur_track].type_name_ptr = segment_inf[i].name;
 
 			/* Remember the start track of the current wire group */
 			if ((itrack / fac) % length == 0 && (itrack % fac) == 0) {
@@ -434,6 +434,7 @@ t_chan_details* init_chan_details(
 				p_seg_details[i].drivers = seg_details[i].drivers;
 
 				p_seg_details[i].index = seg_details[i].index;
+				p_seg_details[i].type_name_ptr = seg_details[i].type_name_ptr;
 			}
 			pa_chan_details[x][y] = p_seg_details;
 		}
@@ -601,7 +602,6 @@ void free_seg_details(
 	for (int i = 0; i < nodes_per_chan; ++i) {
 		free(seg_details[i].cb);
 		free(seg_details[i].sb);
-		free(seg_details[i].type_name);
 	}
 	free(seg_details);
 	seg_details = NULL;

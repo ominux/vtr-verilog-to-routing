@@ -41,9 +41,9 @@ void ShowSetup(INP t_options options, INP t_vpr_setup vpr_setup) {
 	if (vpr_setup.RouterOpts.doRouting) {
 		ShowRouterOpts(vpr_setup.RouterOpts);
 	}
-
-	if (DETAILED == vpr_setup.RouterOpts.route_type)
+	if (DETAILED == vpr_setup.RouterOpts.route_type){
 		ShowRoutingArch(vpr_setup.RoutingArch);
+	}
 
 }
 

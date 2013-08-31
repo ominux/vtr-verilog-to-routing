@@ -6,7 +6,7 @@
 #include "util.h"
 #include "vpr_types.h"
 
-/**** Class Definitions ****/
+/**** Classes ****/
 class Switchblock_Lookup{
 public:
 	int x_coord;
@@ -15,9 +15,18 @@ public:
 	int to_side;
 	int track_num;
 
-	/* Constructor initializes everything to 0 */
+	/* Empty constructor initializes everything to 0 */
 	Switchblock_Lookup(){
 		x_coord = y_coord = from_side = to_side = track_num = 0;
+	}
+
+	/* Constructor for initializing member variables */
+	Switchblock_Lookup(int set_x, int set_y, int set_from, int set_to, int set_track){
+		x_coord = set_x;
+		y_coord = set_y;
+		from_side = set_from;
+		to_side = set_to;
+		track_num = set_track;
 	}
 
 	/* Function for setting the segment coordinates */
@@ -85,15 +94,15 @@ public:
    vector to represent this possibility.
    A matrix specifying connections for all switchblocks in an FPGA would be very large, and probably sparse,
    so we use a map to take advantage of the sparsity. */
-typedef std::map< Switchblock_Lookup, std::vector<int> > t_sb_permutation_map;
+typedef std::map< Switchblock_Lookup, std::vector<int> > t_sb_connection_map;
 
 
 /**** Function Declarations ****/
-t_sb_permutation_map * alloc_and_load_switchblock_permutations( INP t_chan_details * chan_details_x, 
+t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_details * chan_details_x, 
 				INP t_chan_details * chan_details_y, INP int nx, INP int ny, 
-				INP int num_switchblocks, INP t_switchblock_inf *switchblocks, 
+				INP std::vector<t_switchblock_inf> switchblocks, 
 				INP int nodes_per_chan, INP enum e_directionality directionality);
 
-void free_switchblock_permutations(INOUTP t_sb_permutation_map *sb_conns);
+void free_switchblock_permutations(INOUTP t_sb_connection_map *sb_conns);
 
 #endif

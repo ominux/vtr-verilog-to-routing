@@ -171,8 +171,10 @@ void vpr_init(INP int argc, INP char **argv, OUTP t_options *options,
 	}
 
 	memset(options, 0, sizeof(t_options));
-	memset(vpr_setup, 0, sizeof(t_vpr_setup));
-	memset(arch, 0, sizeof(t_arch));
+	//memset(vpr_setup, 0, sizeof(t_vpr_setup));	
+	//memset(arch, 0, sizeof(t_arch));		//OP: is this dangerous if we have vectors as member variables?
+							//    check with valgrind later
+							
 
 	/* Read in user options */
 	ReadOptions(argc, argv, options);
@@ -467,9 +469,6 @@ void free_arch(t_arch* Arch) {
 		}
 	}
 	free(Arch->Segments);
-	
-	/* switchblocks were allocated with new in read_xml_arch_file.c */
-	delete [] Arch->switchblocks;	
 
 	model = Arch->models;
 	while (model) {

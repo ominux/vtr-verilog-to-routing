@@ -102,7 +102,7 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 		INP boolean timing_enabled);
 
 /* Processes the switchblocklist section from the xml architecture file. */
-static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *switchblocks, OUTP int *num_switchblocks, 
+static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP std::vector<t_switchblock_inf> *switchblocks, 
 				INP t_switch_inf *switches, INP int num_switches, 
 				INP t_segment_inf *segments, INP int num_segments,
 				INP boolean timing_enabled);
@@ -2740,7 +2740,7 @@ void XmlReadArch(INP const char *ArchFile, INP boolean timing_enabled,
 	
 	/* Process switchblock. This depends on segments and switches */
 	Next = FindElement(Cur, "switchblocklist", TRUE);
-	ProcessSwitchblocks(Next, arch->switchblocks, &(arch->num_switchblocks), arch->Switches, arch->num_switches,
+	ProcessSwitchblocks(Next, &(arch->switchblocks), arch->Switches, arch->num_switches,
 					arch->Segments, arch->num_segments, timing_enabled);
 	FreeNode(Next);
 
@@ -2986,7 +2986,7 @@ static void ProcessSegments(INOUTP ezxml_t Parent,
 }
 
 /* Processes the switchblocklist section from the xml architecture file. */
-static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *switchblocks, OUTP int *num_switchblocks, 
+static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP vector<t_switchblock_inf> *switchblocks,
 				INP t_switch_inf *switches, INP int num_switches, 
 				INP t_segment_inf *segments, INP int num_segments,
 				INP boolean timing_enabled){
@@ -2994,27 +2994,22 @@ static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *s
 	ezxml_t Node;
 	ezxml_t SubElem;
 	const char *tmp;
-	
+
 	/* get the number of switchblocks */
-	*num_switchblocks = CountChildren(Parent, "switchblock", 1);
-
-	/* allocate switchblock list */
-	switchblocks = NULL;
-
-	/* we must use new to allocate because this structure uses variables that call constructors
-	   (STL's map, vector, string); memset doesn't do this. Alternatively, we could use my_malloc with
-	   placement new, but then we'll run into problems with deletion as 'free' doesn't call destructors.
-	   Better to just use 'new' and 'delete' to begin with. */
-	switchblocks = new t_switchblock_inf[(*num_switchblocks)];
+	int num_switchblocks = CountChildren(Parent, "switchblock", 1);
+	switchblocks->reserve(num_switchblocks);
 
 	/* read-in all switchblock data */
-	for (int i_sb = 0; i_sb < (*num_switchblocks); i_sb++){
+	for (int i_sb = 0; i_sb < num_switchblocks; i_sb++){
+		/* use a temp variable which will be assigned to switchblocks later */
+		t_switchblock_inf sb;
+
 		Node = ezxml_child(Parent, "switchblock");
 
 		/* get name */
 		tmp = FindProperty(Node, "name", TRUE);
 		if (tmp){
-			switchblocks[i_sb].name = my_strdup(tmp);
+			sb.name = tmp;
 		}
 		ezxml_set_attr(Node, "name", NULL);
 
@@ -3022,9 +3017,9 @@ static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *s
 		tmp = FindProperty(Node, "type", TRUE);
 		if (tmp){
 			if (0 == strcmp(tmp, "bidir")){
-				switchblocks[i_sb].directionality = BI_DIRECTIONAL;
+				sb.directionality = BI_DIRECTIONAL;
 			} else if (0 == strcmp(tmp, "unidir")){
-				switchblocks[i_sb].directionality = UNI_DIRECTIONAL;
+				sb.directionality = UNI_DIRECTIONAL;
 			} else {
 				vpr_printf(TIO_MESSAGE_ERROR, "unsupported switchblock type: %s\n", tmp);
 				exit(1);
@@ -3036,18 +3031,21 @@ static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP t_switchblock_inf *s
 		SubElem = ezxml_child(Node, "switch_type");
 		tmp = FindProperty(SubElem, "name", TRUE);
 		if (tmp){
-			switchblocks[i_sb].switch_name = my_strdup(tmp);
+			sb.switch_name = tmp;
 		}
 		ezxml_set_attr(SubElem, "name", NULL);
 		FreeNode(SubElem);
 
 		/* get switchblock permutation functions */
 		SubElem = ezxml_child(Node, "switchfuncs");
-		read_sb_switchfuncs(SubElem, &switchblocks[i_sb]);
+		read_sb_switchfuncs(SubElem, &(sb));
 		FreeNode(SubElem);
 		
-		read_sb_wireconns(Node, &switchblocks[i_sb]);
-		
+		read_sb_wireconns(Node, &(sb));
+
+		/* assign the sb to the switchblocks vector */		
+		switchblocks->push_back(sb);
+
 		FreeNode(Node);
 	}
 

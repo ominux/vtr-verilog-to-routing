@@ -13,7 +13,7 @@ ENABLE_GRAPHICS = true
 setenv ENABLE_TORO = false
 # can be true or false
 
-export BUILD_TYPE = release
+export BUILD_TYPE = debug
 # can be debug or release - this option gets inherited by the library libarchfpga 
 # by default, though libarchfpga's build type can be set independently in libarchfpga's Makefile.
 
@@ -34,7 +34,7 @@ OTHER_DIR = -ISRC/util -ISRC/timing -ISRC/pack -ISRC/place -ISRC/base -ISRC/rout
 
 WARN_FLAGS = -Wall -Wpointer-arith -Wcast-qual -D__USE_FIXED_PROTOTYPES__ -ansi -pedantic -Wshadow -Wcast-align -D_POSIX_SOURCE -Wno-write-strings
 
-DEBUG_FLAGS = -g 
+DEBUG_FLAGS = -g
 OPT_FLAGS = $(OPTIMIZATION_LEVEL_FOR_RELEASE_BUILD)
 INC_FLAGS = -I../libarchfpga/include
 
@@ -131,7 +131,7 @@ libvpr.a: $(OBJ) Makefile libarchfpga
 # without this, all but the last file written to a directory would appear
 # to be out of date.
 $(OBJ): OBJ/%.o:$(SRC_DIR)/%.c | $$(dir $$@D)
-	$(CC) $(FLAGS) -MD -MP -I$(OTHER_DIR) -ISRC/util -c $< -o $@
+	$(CC) $(FLAGS) -MD -MP $(OTHER_DIR)  -c $< -o $@
 
 # Silently create target directories as need
 $(OBJ_DIRS):

@@ -34,6 +34,7 @@
 
 #include "arch_types.h"
 #include <map>
+#include <vector>
 
 #ifdef TORO_REGION_PLACEMENT_ENABLE
 //===========================================================================//
@@ -809,8 +810,7 @@ typedef struct s_det_routing_arch {
 	enum e_directionality directionality; /* UDSD by AY */
 	int Fs;
 	enum e_switch_block_type switch_block_type;
-	int num_switchblocks;
-	t_switchblock_inf * switchblocks;
+	std::vector<t_switchblock_inf> switchblocks;
 	int num_segment;
 	short num_switch;
 	short global_route_switch;
@@ -818,13 +818,6 @@ typedef struct s_det_routing_arch {
 	short wire_to_ipin_switch;
 	float R_minW_nmos;
 	float R_minW_pmos;
-
-	/* free any allocated variables */
-	~s_det_routing_arch(){
-		/* was allocated with new, as it uses variables with constructors */
-		delete [] switchblocks;
-		switchblocks = NULL;
-	}
 } t_det_routing_arch;
 
 /* Defines the detailed routing architecture of the FPGA.  Only important   *
@@ -882,7 +875,7 @@ typedef struct s_seg_details {
 	int seg_end;
 	int index;
 	float Cmetal_per_m; /* Used for power */
-	char *type_name;
+	char *type_name_ptr;
 } t_seg_details;
 
 /* Lists detailed information about segmentation.  [0 .. W-1].              *
@@ -903,7 +896,8 @@ typedef struct s_seg_details {
  * (UDSD by AY) drivers: How do signals driving a routing track connect to  *
  *                       the track?                                         *
  * index: index of the segment type used for this track.                    *
- * type_name: name of the segment type this track belongs to 		    */
+ * type_name_ptr: pointer to name of the segment type this track belongs    *
+ *                to. Should not be freed. 		 		    */
 
 typedef struct s_seg_details** t_chan_details;
 

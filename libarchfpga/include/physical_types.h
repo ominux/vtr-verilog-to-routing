@@ -698,7 +698,8 @@ enum e_Fc_type {
 
 /* Lists all the important information about a certain segment type.  Only   *
  * used if the route_type is DETAILED.  [0 .. det_routing_arch.num_segment]  *
- * frequency:  ratio of tracks which are of this segment type.            *
+ * name: The name of this segment					     *
+ * frequency:  ratio of tracks which are of this segment type.               *
  * length:     Length (in clbs) of the segment.                              *
  * wire_switch:  Index of the switch type that connects other wires *to*     *
  *               this segment.                                               *
@@ -710,7 +711,12 @@ enum e_Fc_type {
  *           to which the segment can connect.  Segments that aren't long    *
  *           lines must connect to at least two switch boxes.                *
  * Cmetal: Capacitance of a routing track, per unit logic block length.      *
- * Rmetal: Resistance of a routing track, per unit logic block length.       
+ * Rmetal: Resistance of a routing track, per unit logic block length.       *
+ * directionality: Directionality of this segment (bidir/unidir)	     *
+ * cb: Specifies which positions along this segment's length contain	     *
+ *     connection blocks						     *
+ * sb: Specifies which positions along this segment's length contain	     *
+ *     switchblocks							     *
  * (UDSD by AY) drivers: How do signals driving a routing track connect to   *
  *                       the track?                                          */
 typedef struct s_segment_inf {
@@ -781,18 +787,10 @@ typedef struct s_direct_inf {
 
 /* Used to list information about two segment types that connect together through a switchblock */
 typedef struct s_wireconn_inf{
-	char *from_type;		/* connect from this wire type */
-	char *to_type;			/* to this wire type */
+	std::string from_type;		/* connect from this wire type */
+	std::string to_type;		/* to this wire type */
 	int from_group;			/* index of wire group belonging to from_type */	
 	int to_group;			/* index of wire group belong to to_type */
-
-	/* free any allocated variables */
-	~s_wireconn_inf(){
-		free(this->from_type);
-		free(this->to_type);
-		this->from_type = NULL;
-		this->to_type = NULL;
-	}
 } t_wireconn_inf;
 
 /* represents a connection between two sides of a switchblock */
@@ -803,6 +801,15 @@ public:
 	enum e_side to_side;
 
 	void set_sides( enum e_side from, enum e_side to ){
+		from_side = from;
+		to_side = to;
+	}
+
+	Connect_SB_Sides(){
+		/* do nothing */
+	}
+
+	Connect_SB_Sides(enum e_side from, enum e_side to){
 		from_side = from;
 		to_side = to;
 	}
@@ -830,32 +837,20 @@ typedef std::map< Connect_SB_Sides, std::vector<std::string> > t_permutation_map
 
 /* Lists all information about switchblocks */
 typedef struct s_switchblock_inf{
-	char *name;
+	std::string name;
 	enum e_directionality directionality;
-	char *switch_name;	/* name of switch this switchblock uses -- must match entry in s_switch_inf */
+	std::string switch_name;		/* name of switch this switchblock uses -- must match entry in s_switch_inf */
 
 	t_permutation_map permutation_map;
 
-	t_wireconn_inf *wireconns;		/* list of wire types/groups this SB will connect */
-	int num_wireconns;			/* number of entries in the above list */
-
-	/* free any allocated variables */
-	~s_switchblock_inf(){
-		free(this->wireconns);
-		free(this->name);
-		free(this->switch_name);
-		this->wireconns = NULL;
-		this->name = NULL;
-		this->switch_name = NULL;
-	}
+	std::vector<t_wireconn_inf> wireconns;	/* list of wire types/groups this SB will connect */
 } t_switchblock_inf;
 
 /*   Detailed routing architecture */
 typedef struct s_arch {
 	t_chan_width_dist Chans;
 	enum e_switch_block_type SBType;
-	int num_switchblocks;
-	t_switchblock_inf * switchblocks;
+	std::vector<t_switchblock_inf> switchblocks;
 	float R_minW_nmos;
 	float R_minW_pmos;
 	int Fs;

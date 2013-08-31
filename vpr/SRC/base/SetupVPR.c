@@ -328,6 +328,9 @@ static void SetupRoutingArch(INP t_arch Arch,
 	if (Arch.Segments){
 		RoutingArch->directionality = Arch.Segments[0].directionality;
 	}
+
+	/* copy over the switchblock information */
+	RoutingArch->switchblocks = Arch.switchblocks;
 }
 
 static void SetupRouterOpts(INP t_options Options, INP boolean TimingEnabled,

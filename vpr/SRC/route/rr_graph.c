@@ -233,7 +233,7 @@ void build_rr_graph(
 		INP struct s_grid_tile **L_grid, INP int chan_width,
 		INP struct s_chan_width_dist *chan_capacity_inf,
 		INP enum e_switch_block_type sb_type, INP int Fs,
-		INP int num_switchblocks, INP t_switchblock_inf *switchblocks,
+		INP vector<t_switchblock_inf> switchblocks,
 		INP int num_seg_types, INP int num_switches, 
 		INP t_segment_inf * segment_inf,
 		INP int global_route_switch, INP int delayless_switch,
@@ -274,7 +274,7 @@ void build_rr_graph(
 	rr_node = NULL;
 	num_rr_nodes = 0;
 
-	t_sb_permutation_map *sb_conns;
+	t_sb_connection_map *sb_conns = NULL;
 
 	/* Reset warning flag */
 	*Warnings = RR_GRAPH_NO_WARN;
@@ -419,7 +419,7 @@ void build_rr_graph(
 		
 		//OP: test new switchblock permutation funcs for the bidir case
 		sb_conns = alloc_and_load_switchblock_permutations(chan_details_x,
-				chan_details_y, L_nx, L_ny, num_switchblocks, switchblocks, 
+				chan_details_y, L_nx, L_ny, switchblocks, 
 				nodes_per_chan, directionality);
 	} else {
 		assert(UNI_DIRECTIONAL == directionality);
