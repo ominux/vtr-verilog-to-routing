@@ -56,16 +56,17 @@ static int find_start_of_track_type(INP t_seg_details *track_details, INP const 
 			INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes);
 
 /* returns the track index in the channel specified by 'track_details' that corresponds to the 
-   first occurence of the specified track group (belonging to type referred to by track_type_start and 
-   track_type_size) */
+   first occurence of the specified track group (belonging to type referred to by track_type_start, 
+   track_type_size, and track_direction) */
 static int find_start_of_track_group(INP t_seg_details *track_details, INP const char *type, 
-			INP int track_group, INP int track_seg_coord, INP int track_type_start,
-			INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes);
+			INP int track_group, INP int track_seg_coord, INP e_direction track_direction, 
+			INP int track_type_start, INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes);
 
-/* returns the size of the track group specified by 'track_type' and 'track_group' in the channel specified by
-   'track_details' */
+/* returns the size of the track group specified by 'track_type' and 'track_group' going in 
+   'track_direction' direction and in the channel specified by 'track_details' */
 static int get_group_size(INP t_seg_details *track_details, INP const char *track_type, INP int track_group,
-			INP int track_seg_coord, INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes);
+			INP int track_seg_coord, INP e_direction track_direction, INP int nodes_per_chan, 
+			INP t_track_type_sizes track_type_sizes);
 
 ///* checks whether the entry specified by coord exists in the switchblock map sb_conns */
 //static bool sb_connection_exists( INP Switchblock_Lookup coord, INP t_sb_connection_map *sb_conns);
@@ -165,6 +166,7 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 	int from_x, from_y;				/* index into source channel */
 	int to_x, to_y;					/* index into destination channel */
 	t_rr_type from_chan_type, to_chan_type;		/* the type of channel - i.e. CHANX or CHANY */
+	e_direction dest_direction;			/* the direction in which the destination track heads */
 
 	Connect_SB_Sides side_conn(from_side, to_side);		/* for indexing into this switchblock's permutation funcs */
 	Switchblock_Lookup coord(x_coord, y_coord, from_side, to_side, from_track);	/* for indexing into FPGA's switchblock map */
@@ -187,6 +189,8 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 	to_chan_type = index_into_correct_chan(x_coord, y_coord, to_side, chan_details_x, chan_details_y, 
 				&to_x, &to_y, &to_chan_details);
 
+	dest_direction = get_dest_direction(to_side, directionality);
+	
 	/* make sure from_x/y and to_x/y aren't out of bounds */
 	if (coords_out_of_bounds(nx, ny, to_x, to_y, to_chan_type) ||
 	    coords_out_of_bounds(nx, ny, from_x, from_y, from_chan_type)){
@@ -224,14 +228,11 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		   type and group specified by this wireconn. MUST also be of appropriate 
 		   directionality (from e_direction) */
 	
-		//first we have to get the directionality of the destination track. ie, incoming, outgoing, etc
-		get_dest_direction(to_side, directionality);
 		/* figure out the size of the destination type->group. This is essentially the effective
 		   channel width to which we are connecting */
 		destination_W = get_group_size(to_chan_details[to_x][to_y], to_type, to_group, to_seg, 
-						nodes_per_chan, track_type_sizes);
+						dest_direction, nodes_per_chan, track_type_sizes);
 
-		
 
 	}
 	track_name = NULL;
@@ -419,18 +420,20 @@ static int find_start_of_track_type(INP t_seg_details *track_details, INP const 
 } 
 
 /* returns the track index in the channel specified by 'track_details' that corresponds to the 
-   first occurence of the specified track group (belonging to type referred to by track_type_start and 
-   track_type_size) */
+   first occurence of the specified track group (belonging to type referred to by track_type_start, 
+   track_type_size, and track_direction) */
 static int find_start_of_track_group(INP t_seg_details *track_details, INP const char *type, 
-			INP int track_group, INP int track_seg_coord, INP int track_type_start,
-			INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes){
-	int track_type_size = track_details[track_type_start].group_size;
+			INP int track_group, INP int track_seg_coord, INP e_direction track_direction, 
+			INP int track_type_start, INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes){
+	string map_accessor = type;
+	int track_type_size = track_type_sizes[map_accessor];
 	int track_type_end = track_type_start + track_type_size - 1;	
 
 	int track;
 	for (track = track_type_start; track <= track_type_end; track++){
+		e_direction direction = track_details[track].direction;
 		int group = get_track_group(track_details[track], track_seg_coord);
-		if (group == track_group){
+		if (group == track_group && direction == track_direction){
 			/* found the requested track group */
 			break;
 		}
@@ -445,16 +448,29 @@ static int find_start_of_track_group(INP t_seg_details *track_details, INP const
 	return track;
 }
 
-/* returns the size of the track group specified by 'track_type' and 'track_group' in the channel specified by
-   'track_details' */
+/* returns the size of the track group specified by 'track_type' and 'track_group' going in 
+   'track_direction' direction and in the channel specified by 'track_details' */
 static int get_group_size(INP t_seg_details *track_details, INP const char *track_type, INP int track_group,
-			INP int track_seg_coord, INP int nodes_per_chan, INP t_track_type_sizes track_type_sizes){
+			INP int track_seg_coord, INP e_direction track_direction, INP int nodes_per_chan, 
+			INP t_track_type_sizes track_type_sizes){
 	int group_size = -1;
+
+	/* multiplier to account for unidir vs bidir differences */
+	int dir_mult;
+	if (BI_DIRECTION == track_direction){
+		dir_mult = 1;
+	} else if (INC_DIRECTION == track_direction || DEC_DIRECTION == track_direction){
+		dir_mult = 2;
+	} else {
+		vpr_printf(TIO_MESSAGE_ERROR, "get_group_size(): unknown track direction %d\n", track_direction);
+		exit(1);
+	}
 
 	/* get index of track in channel at which the specified type->group starts */
 	int type_start = find_start_of_track_type(track_details, track_type, nodes_per_chan, track_type_sizes);
 	int group_start = find_start_of_track_group(track_details, track_type, track_group, 
-					track_seg_coord, type_start, nodes_per_chan, track_type_sizes);
+					track_seg_coord, track_direction, type_start, nodes_per_chan, 
+					track_type_sizes);
 	
 	string map_accessor = track_type;
 	int track_type_end = type_start + track_type_sizes[map_accessor] - 1;
@@ -463,7 +479,7 @@ static int get_group_size(INP t_seg_details *track_details, INP const char *trac
 	/* and finally get the group size; consecutive tracks of the same group
 	   are separated by 'track_length' tracks */
 	group_size = track_type_end - group_start;
-	group_size = floor(group_size / track_length) + 1;
+	group_size = floor(group_size / (track_length * dir_mult)) + 1;
 
 	return group_size;
 }

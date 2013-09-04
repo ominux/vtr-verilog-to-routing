@@ -423,6 +423,11 @@ void build_rr_graph(
 				nodes_per_chan, directionality);
 	} else {
 		assert(UNI_DIRECTIONAL == directionality);
+		
+		//OP: test new switchblock permutation funcs for the unidir case
+		sb_conns = alloc_and_load_switchblock_permutations(chan_details_x,
+				chan_details_y, L_nx, L_ny, switchblocks, 
+				nodes_per_chan, directionality);
 
 		unidir_sb_pattern = alloc_sblock_pattern_lookup(L_nx, L_ny, nodes_per_chan);
 
