@@ -96,7 +96,6 @@ public:
    so we use a map to take advantage of the sparsity. */
 typedef std::map< Switchblock_Lookup, std::vector<int> > t_sb_connection_map;
 
-
 /**** Function Declarations ****/
 t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_details * chan_details_x, 
 				INP t_chan_details * chan_details_y, INP int nx, INP int ny, 
