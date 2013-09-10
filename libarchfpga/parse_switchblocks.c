@@ -350,8 +350,6 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 	
 	/* then we run an RPN parser to get the final result */
 	result = parse_rpn_vector(rpn_output);
-
-	printf("result: %d\n\n", result);
 	
 	return result;
 }
@@ -591,7 +589,7 @@ static void handle_bracket( INP const Formula_Object &fobj, INOUTP vector<Formul
 
 			if ( op_stack.empty() ){
 				/* didn't find an opening bracket - mismatched brackets */
-				vpr_printf(TIO_MESSAGE_ERROR, "Ran out of stack while parsing brackets -- bracket mismatch\n");
+				vpr_printf(TIO_MESSAGE_ERROR, "Ran out of stack while parsing brackets -- bracket mismatch in user-specified formula\n");
 				exit(1); 
 				keep_going = false;
 			}
@@ -636,29 +634,39 @@ static int parse_rpn_vector( INOUTP vector<Formula_Object> &rpn_vec ){
 		exit(1);
 	}
 
-	Formula_Object fobj;
-	int ivec = 0;
-	/* keep going until we have gone through the whole vector */
-	while ( !rpn_vec.empty() ){
-		
-		/* keep going until we have hit an operator */
-		do{
-			ivec++;		/* first item should never be operator anyway */
-		} while ( E_FML_OPERATOR != rpn_vec.at(ivec).type );
+	if (rpn_vec.size() == 1){
+		/* if the vector size is 1 then we just have a number (which was verified above) */
+		result = rpn_vec.at(0).data.num;
+	} else {
+		/* have numbers and operators */
+		Formula_Object fobj;
+		int ivec = 0;
+		/* keep going until we have gone through the whole vector */
+		while ( !rpn_vec.empty() ){
+			
+			/* keep going until we have hit an operator */
+			do{
+				ivec++;		/* first item should never be operator anyway */
+				if (ivec == rpn_vec.size()){
+					vpr_printf(TIO_MESSAGE_ERROR, "parse_rpn_vector(): found multiple numbers in switchblock formula, but no operator\n");
+					exit(1);
+				}
+			} while ( E_FML_OPERATOR != rpn_vec.at(ivec).type );
 
-		/* now we apply the selected operation to the two previous entries */
-		/* the result is stored in the object that used to be the operation */
-		rpn_vec.at(ivec).data.num = apply_rpn_op( rpn_vec.at(ivec-2), rpn_vec.at(ivec-1), rpn_vec.at(ivec) );
-		rpn_vec.at(ivec).type = E_FML_NUMBER;
+			/* now we apply the selected operation to the two previous entries */
+			/* the result is stored in the object that used to be the operation */
+			rpn_vec.at(ivec).data.num = apply_rpn_op( rpn_vec.at(ivec-2), rpn_vec.at(ivec-1), rpn_vec.at(ivec) );
+			rpn_vec.at(ivec).type = E_FML_NUMBER;
 
-		/* remove the previous two entries from the vector */
-		rpn_vec.erase(rpn_vec.begin() + ivec - 2, rpn_vec.begin() + ivec - 0);
-		ivec -= 2;
+			/* remove the previous two entries from the vector */
+			rpn_vec.erase(rpn_vec.begin() + ivec - 2, rpn_vec.begin() + ivec - 0);
+			ivec -= 2;
 
-		/* if we're down to one element, we are done */
-		if (1 == rpn_vec.size()){
-			result = rpn_vec.at(ivec).data.num;
-			rpn_vec.erase(rpn_vec.begin() + ivec);
+			/* if we're down to one element, we are done */
+			if (1 == rpn_vec.size()){
+				result = rpn_vec.at(ivec).data.num;
+				rpn_vec.erase(rpn_vec.begin() + ivec);
+			}
 		}
 	}
 

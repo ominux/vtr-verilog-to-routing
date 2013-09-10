@@ -7,6 +7,9 @@
 /**** Defines ****/
 
 /**** Structs ****/
+//TODO: an alternative that maybe worth pursuing is to use a 
+//	string->number map which is filled by the parent 
+//	function and passed in to get_sb_Formula_result
 struct s_formula_data{
 	int dest_W; 	/* W in destination channel */
 	int track;	/* incoming track index */
