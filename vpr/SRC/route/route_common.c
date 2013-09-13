@@ -705,7 +705,7 @@ alloc_and_load_clb_opins_used_locally(void) {
 			}
 		
 			if ((block[iblk].nets[clb_pin] != OPEN
-					&& g_clbs_nlist.net[block[iblk].nets[clb_pin]].num_sinks() == 0) || block[iblk].nets[clb_pin] == OPEN
+					&& clb_net[block[iblk].nets[clb_pin]].num_sinks == 0) || block[iblk].nets[clb_pin] == OPEN
 				) {
 				iclass = type->pin_class[clb_pin];
 				if(type->class_inf[iclass].type == DRIVER) {
