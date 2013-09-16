@@ -179,7 +179,7 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 	e_direction src_direction, dest_direction;	/* the direction in which the source and destination tracks head */
 
 	Connect_SB_Sides side_conn(from_side, to_side);		/* for indexing into this switchblock's permutation funcs */
-	Switchblock_Lookup sb_coord(x_coord, y_coord, from_side, to_side, from_track);	/* for indexing into FPGA's switchblock map */
+	Switchblock_Lookup sb_conn(x_coord, y_coord, from_side, to_side, from_track);	/* for indexing into FPGA's switchblock map */
 
 	/* can't connect a switchblock side to itself */
 	if (from_side == to_side){
@@ -193,12 +193,14 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 	}
 
 	/* find the correct channel, and the coordinates to index into it for both the source and
-	   destination channels */
+	   destination channels. also return the channel type (ie chanx/chany) into which we are 
+	   indexing */
 	from_chan_type = index_into_correct_chan(x_coord, y_coord, from_side, chan_details_x, chan_details_y, 
 				&from_x, &from_y, &from_chan_details);
 	to_chan_type = index_into_correct_chan(x_coord, y_coord, to_side, chan_details_x, chan_details_y, 
 				&to_x, &to_y, &to_chan_details);
 
+	/* get the direction in which the source/destination tracks are headed */
 	src_direction = get_src_direction(from_side, directionality);
 	dest_direction = get_dest_direction(to_side, directionality);
 	
@@ -208,9 +210,11 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		return;
 	}
 
-	/* iterate over all the wire connections specified by this switchblock */
+	/* pointer to a connection specification between two wire types/groups */
 	t_wireconn_inf *wireconn_ptr = NULL;
+	/* name of the source track */
 	const char *track_name = from_chan_details[from_x][from_y][from_track].type_name_ptr;
+	/* iterate over all the wire connections specified by the passed-in switchblock */
 	for (int iconn = 0; iconn < (int)sb->wireconns.size(); iconn++){
 		wireconn_ptr = &(sb->wireconns[iconn]);
 		
@@ -223,20 +227,19 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		/* the group of the source and destination tracks */
 		int from_group = get_track_group(from_chan_details[from_x][from_y][from_track], from_seg);
 		int to_group = wireconn_ptr->to_group;
-		/* vectors that will contain indices of the source/destination tracks in the source/destination channel */
+		/* vectors that will contain indices of the source/destination tracks in the source/destination group */
 		vector<int> src_tracks_group;
 		vector<int> dest_tracks_group;
 		/* the index of the source/destination tracks within their own group */
 		int src_track_in_group, dest_track_in_group;
-		/* the effective channel width is the size of the destination track type->group */
+		/* the effective destination channel width is the size of the destination track group */
 		int dest_W;
 
-		/* check that the current track is a source of this wire connection */
-		/* check the type */
+		/* check that the current track has the type specified by the wire connection */
 		if ( strcmp(track_name, from_type) != 0 ){	
 			continue;
 		}
-		/* check the group */
+		/* check that the current track has the group specified by the wire connection */
 		if ( from_group != wireconn_ptr->from_group ){
 			continue;
 		}
@@ -245,8 +248,8 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		   type and group specified by this wireconn. Must also go in appropriate 
 		   direction (from e_direction) */
 
-		/* get the indices of the destination tracks, as well as the effective destination 
-		   channel width (which is the number of destination tracks */
+		/* get the indices of tracks in the destination group, as well as the effective destination 
+		   channel width (which is the number of tracks in destination group) */
 		get_group_tracks(to_chan_details[to_x][to_y], to_type, to_group, to_seg, dest_direction,
 						nodes_per_chan, track_type_sizes, &dest_tracks_group);
 		dest_W = dest_tracks_group.size();
@@ -257,43 +260,43 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		vector<int>::iterator it = find(src_tracks_group.begin(), src_tracks_group.end(), from_track);
 		src_track_in_group = it - src_tracks_group.begin();
 		
-		/* get a reference to the vector containing desired side1->side2 permutations */
-		vector<string> &permutations = sb->permutation_map[side_conn];
+		/* get a reference to the string vector containing desired side1->side2 permutations */
+		vector<string> &permutations_ref = sb->permutation_map[side_conn];
 
-		/* iterate over the permutation functions. */
+		/* iterate over the permutation functions specified in the string vector */
 		int to_track;
 		s_formula_data formula_data;
-		for (int iperm = 0; iperm < (int)permutations.size(); iperm++){
+		for (int iperm = 0; iperm < (int)permutations_ref.size(); iperm++){
 			/* Convert the symbolic permutation formula to a number */
 			formula_data.dest_W = dest_W;
 			formula_data.track = src_track_in_group;
-			dest_track_in_group = get_sb_formula_result(permutations[iperm].c_str(), formula_data);
+			dest_track_in_group = get_sb_formula_result(permutations_ref.at(iperm).c_str(), formula_data);
 			dest_track_in_group %= dest_W;
 			/* the resulting track number is the *index* of the destination track in it's own
-			   group, so convert that back to the absolute index of the track in the channel */
+			   group, so we need to convert that back to the absolute index of the track in the channel */
 			to_track = dest_tracks_group.at(dest_track_in_group);
 			
 			//Everything seems to be working OK here...
 			//printf("W: %d  from_s: %d  to_s: %d  tile_x: %d  tile_y: %d  from_x: %d  from_y: %d  to_x: %d  to_y: %d  from_trk: %d  src: %d  dest: %d  dest_W: %d  to_trk: %d\n", nodes_per_chan, from_side, to_side, x_coord, y_coord, from_x, from_y, to_x, to_y, from_track, src_track_in_group, dest_track_in_group, dest_W, to_track);
-		
+
+			/* create the struct containing the to_track and switch name, which will be added to the 
+			   sb connections map */	
+			t_to_track_inf to_track_inf;
+			to_track_inf.to_track = to_track;
+			to_track_inf.switch_name = sb->switch_name;
 			/* and now, finally, add this switchblock connection to the switchblock connections map */
-			(*sb_conns)[sb_coord].push_back(to_track);
+			(*sb_conns)[sb_conn].push_back(to_track_inf);
+			/* If bidir architecture, implement the reverse connection as well */
 			if (BI_DIRECTIONAL == directionality){
-				/* in a bidirectional architecture, the destination track will also connect to
-				   to the source track via a reverse connection */
-				Switchblock_Lookup sb_coord_reverse(x_coord, y_coord, to_side, from_side, to_track);
-				(*sb_conns)[sb_coord_reverse].push_back(from_track);
+				to_track_inf.to_track = from_track;
+				Switchblock_Lookup sb_conn_reverse(x_coord, y_coord, to_side, from_side, to_track);
+				(*sb_conns)[sb_conn_reverse].push_back(to_track_inf);
 			}
 		}
 	}
 
 	track_name = NULL;
 	wireconn_ptr = NULL;
-	//iterate over all wireconns
-		//confirm wires with specified names exist
-		//find specified source and target tracks
-		//connect them according to the specific permutation function
-		//if bidirectional, this is where we set the reverse connection
 	
 	from_chan_details = NULL;
 	to_chan_details = NULL;

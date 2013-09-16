@@ -88,13 +88,18 @@ public:
 
 
 /**** Typedefs ****/
+typedef struct s_to_track_inf{
+	int to_track;
+	std::string switch_name;
+} t_to_track_inf;
+
 /* Switchblock connections are made as [0..nx][0..ny][from_side][to_side][from_track (0..W-1)].
    We use the Switchblock_Lookup class to specify these five dimensions.
    Furthermore, a source_track at a given 5-d coordinate *may* connect to multiple destination tracks. We use a 
    vector to represent this possibility.
    A matrix specifying connections for all switchblocks in an FPGA would be very large, and probably sparse,
    so we use a map to take advantage of the sparsity. */
-typedef std::map< Switchblock_Lookup, std::vector<int> > t_sb_connection_map;
+typedef std::map< Switchblock_Lookup, std::vector< t_to_track_inf > > t_sb_connection_map;
 
 /**** Function Declarations ****/
 t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_details * chan_details_x, 

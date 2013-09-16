@@ -1557,7 +1557,8 @@ int get_track_to_tracks(
 		INP t_chan_details * to_chan_details,
 		INP enum e_directionality directionality,
 		INP t_ivec *** L_rr_node_indices, INOUTP boolean * L_rr_edge_done,
-		INP struct s_ivec ***switch_block_conn) {
+		INP struct s_ivec ***switch_block_conn,
+		INP t_sb_connection_map *sb_conn_map) {
 
 	int num_conn;
 	int from_switch, from_end, from_sb, from_first_sb;
@@ -1585,9 +1586,9 @@ int get_track_to_tracks(
 		from_side_b = BOTTOM;
 	}
 
-	/* OP: Figure out whether the destination segment will connect to an SB
+	/* Figure out whether the destination segment will connect to an SB
 	   that is behind it. Here, 'behind' is w.r.t. VPR's coordinate system,
-	   for which (0,0) is at the bottom-left (?? verify...) corner of the FPGA */
+	   for which (0,0) is at the bottom-left corner of the FPGA */
 	is_behind = FALSE;
 	if (to_type == from_type) {
 		/* If source and destination segments share the same channel, check
@@ -1597,8 +1598,7 @@ int get_track_to_tracks(
 			is_behind = TRUE;
 		}
 	} else {
-		/* If bending, check that they are adjacent to
-		 * our channel. */
+		/* If bending, check that they are adjacent to our channel. */
 		assert((to_seg == from_chan) || (to_seg == (from_chan + 1)));
 		if (to_seg > from_chan) {
 			is_behind = TRUE;
@@ -1626,7 +1626,7 @@ int get_track_to_tracks(
 	}
 
 	/* Here we iterate over 'seg' coordinates which could contain switchblocks that will connect us from the current
-	   segment to the desired segment/channel */
+	   segment to the desired seg coordinate and channel (chanx/chany) */
 	num_conn = 0;
 	for (from_sb = start_sb; from_sb <= end_sb; ++from_sb) {
 		/* Figure out if we are at a sblock */
@@ -1641,6 +1641,8 @@ int get_track_to_tracks(
 		   i.e. for segments laid in the x-direction, from_sb corresponds to the x coordinate and from_chan to the y,
 		   but for segments in the y-direction, from_chan is the x coordinate and from_sb is the y. So here we reverse
 		   the coordinates if necessary */
+		//TODO: move this kind of thing to the top of the file where we will simply have to_x and to_y
+		//	as well as from_x and from_y
 		to_chan = from_sb;
 		to_sb = from_chan;
 		if (from_type == to_type) {
@@ -1669,6 +1671,8 @@ int get_track_to_tracks(
 			if (BI_DIRECTIONAL == directionality) {
 				/* For bidir, the target segment might have an unbuffered (bidir pass transistor)
 				   switchbox, so we follow through regardless of whether the current segment has an SB */
+				//TODO: the question is whether conn_tracks.nelem will ever be non-zero if we don't have
+				//	an SB. Yes. Currently nelem is always 1 for all connections, as per alloc_and_load_switchblock_conn 
 				conn_tracks = switch_block_conn[from_side_a][to_side][from_track];
 				num_conn += get_bidir_track_to_chan_seg(conn_tracks,
 						L_rr_node_indices, to_chan, to_seg, to_sb, to_type,
@@ -1692,7 +1696,7 @@ int get_track_to_tracks(
 		}
 
 
-		/* Do the edges going to the right SB side (if we're in CHANX) or bottom (if we're in CHANY)
+		/* Do the edges going to the left SB side (if we're in CHANX) or bottom (if we're in CHANY)
 		   However, can't connect to left (bottom) if already at leftmost (bottommost) track end */
 		if (from_sb > from_first_sb) {
 			if (BI_DIRECTIONAL == directionality) {
@@ -1784,6 +1788,41 @@ static int get_bidir_track_to_chan_seg(
 	}
 
 	return num_conn;
+}
+
+
+static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
+		INP int from_track, INP int to_chan, INP int to_seg,
+		INP t_rr_type to_chan_type,
+		INP e_side from_side, INP e_side to_side,
+		INP int dest_sb_index, 
+		INP t_ivec ***L_rr_node_indices, 
+		INP t_seg_details *dest_seg_details,
+		INP int nodes_per_chan, 
+		INP e_directionality directionality,
+		INP t_sb_connection_map *sb_conn_map,
+		INOUTP boolean * L_rr_edge_done, 
+		INOUTP s_linked_edge **edge_list){
+
+	int edge_count = 0;
+	int to_x, to_y;
+
+	/* get x/y coordinates from seg/chan coordinates */
+	if (CHANX == to_chan_type) {
+		to_x = to_seg;
+		to_y = to_chan;
+	} else {
+		assert(CHANY == to_chan_type);
+		to_x = to_chan;
+		to_y = to_seg;
+	}
+	//I have no need to do fringe/core stuff because that was 
+	// taken care of during switchblock parsing
+
+	/* go through the connections... */
+
+	return edge_count;
+
 }
 
 static int get_unidir_track_to_chan_seg(

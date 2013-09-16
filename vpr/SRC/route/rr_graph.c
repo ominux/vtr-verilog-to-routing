@@ -101,6 +101,7 @@ static void alloc_and_load_rr_graph(
 		INP boolean * L_rr_edge_done,
 		INP struct s_ivec *****track_to_pin_lookup,
 		INP int ******opin_to_track_map, INP struct s_ivec ***switch_block_conn,
+		INP t_sb_connection_map *sb_conn_map,
 		INP struct s_grid_tile **L_grid, INP int L_nx, INP int L_ny, INP int Fs,
 		INP short ******sblock_pattern, INP int **Fc_out, INP int **Fc_xofs,
 		INP int **Fc_yofs, INP t_ivec *** L_rr_node_indices,
@@ -145,8 +146,8 @@ static void build_rr_sinks_sources(
 
 static void build_rr_xchan(
 		INP int i, INP int j,
-		INP struct s_ivec *****track_to_pin_lookup,
-		INP struct s_ivec ***switch_block_conn, INP int cost_index_offset,
+		INP struct s_ivec *****track_to_pin_lookup, INP struct s_ivec ***switch_block_conn, 
+		INP t_sb_connection_map *sb_conn_map, INP int cost_index_offset,
 		INP int nodes_per_chan, INP int tracks_per_chan, INP int *opin_mux_size,
 		INP short ******sblock_pattern, INP int Fs_per_side,
 		INP t_chan_details * chan_details_x, INP t_chan_details * chan_details_y, 
@@ -156,8 +157,8 @@ static void build_rr_xchan(
 
 static void build_rr_ychan(
 		INP int i, INP int j,
-		INP struct s_ivec *****track_to_pin_lookup,
-		INP struct s_ivec ***switch_block_conn, INP int cost_index_offset,
+		INP struct s_ivec *****track_to_pin_lookup, INP struct s_ivec ***switch_block_conn, 
+		INP t_sb_connection_map *sb_conn_map, INP int cost_index_offset,
 		INP int nodes_per_chan, INP int tracks_per_chan, INP int *opin_mux_size,
 		INP short ******sblock_pattern, INP int Fs_per_side,
 		INP t_chan_details * chan_details_y, INP t_chan_details * chan_details_x, 
@@ -274,7 +275,7 @@ void build_rr_graph(
 	rr_node = NULL;
 	num_rr_nodes = 0;
 
-	t_sb_connection_map *sb_conns = NULL;
+	t_sb_connection_map *sb_conn_map = NULL;
 
 	/* Reset warning flag */
 	*Warnings = RR_GRAPH_NO_WARN;
@@ -418,14 +419,14 @@ void build_rr_graph(
 				sb_type, Fs);
 		
 		//OP: test new switchblock permutation funcs for the bidir case
-		sb_conns = alloc_and_load_switchblock_permutations(chan_details_x,
+		sb_conn_map = alloc_and_load_switchblock_permutations(chan_details_x,
 				chan_details_y, L_nx, L_ny, switchblocks, 
 				nodes_per_chan, directionality);
 	} else {
 		assert(UNI_DIRECTIONAL == directionality);
 		
 		//OP: test new switchblock permutation funcs for the unidir case
-		sb_conns = alloc_and_load_switchblock_permutations(chan_details_x,
+		sb_conn_map = alloc_and_load_switchblock_permutations(chan_details_x,
 				chan_details_y, L_nx, L_ny, switchblocks, 
 				nodes_per_chan, directionality);
 
@@ -563,7 +564,7 @@ void build_rr_graph(
 	alloc_and_load_rr_graph(num_rr_nodes, rr_node, num_seg_types, 
 			seg_details, chan_details_x, chan_details_y,
 			L_rr_edge_done, track_to_pin_lookup, opin_to_track_map,
-			switch_block_conn, L_grid, L_nx, L_ny, Fs, unidir_sb_pattern,
+			switch_block_conn, sb_conn_map, L_grid, L_nx, L_ny, Fs, unidir_sb_pattern,
 			Fc_out, Fc_xofs, Fc_yofs, rr_node_indices, nodes_per_chan, sb_type,
 			delayless_switch, directionality, wire_to_ipin_switch, &Fc_clipped, 
 			directs, num_directs, clb_to_clb_directs);
@@ -619,9 +620,9 @@ void build_rr_graph(
 		free_switch_block_conn(switch_block_conn, nodes_per_chan);
 		switch_block_conn = NULL;
 	}
-	if (sb_conns){
-		free_switchblock_permutations( sb_conns );
-		sb_conns = NULL;
+	if (sb_conn_map){
+		free_switchblock_permutations( sb_conn_map );
+		sb_conn_map = NULL;
 	}
 	if (L_rr_edge_done) {
 		free(L_rr_edge_done);
@@ -846,6 +847,7 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 		INP boolean * L_rr_edge_done,
 		INP struct s_ivec *****track_to_pin_lookup,
 		INP int ******opin_to_track_map, INP struct s_ivec ***switch_block_conn,
+		INP t_sb_connection_map *sb_conn_map,
 		INP struct s_grid_tile **L_grid, INP int L_nx, INP int L_ny, INP int Fs,
 		INP short ******sblock_pattern, INP int **Fc_out, INP int **Fc_xofs,
 		INP int **Fc_yofs, INP t_ivec *** L_rr_node_indices,
@@ -901,7 +903,7 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 	for (int i = 0; i <= L_nx; ++i) {
 		for (int j = 0; j <= L_ny; ++j) {
 			if (i > 0) {
-				build_rr_xchan(i, j, track_to_pin_lookup, switch_block_conn,
+				build_rr_xchan(i, j, track_to_pin_lookup, switch_block_conn, sb_conn_map,
 						CHANX_COST_INDEX_START, 
 						nodes_per_chan, chan_width_x[j], opin_mux_size,
 						sblock_pattern, Fs / 3, chan_details_x, chan_details_y,
@@ -909,7 +911,7 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 						wire_to_ipin_switch, directionality);
 			}
 			if (j > 0) {
-				build_rr_ychan(i, j, track_to_pin_lookup, switch_block_conn,
+				build_rr_ychan(i, j, track_to_pin_lookup, switch_block_conn, sb_conn_map,
 						CHANX_COST_INDEX_START + num_seg_types, 
 						nodes_per_chan, chan_width_y[i], opin_mux_size,
 						sblock_pattern, Fs / 3, chan_details_y, chan_details_x,
@@ -1278,8 +1280,8 @@ static void build_rr_sinks_sources(INP int i, INP int j,
 }
 
 static void build_rr_xchan(INP int i, INP int j,
-		INP struct s_ivec *****track_to_pin_lookup,
-		INP struct s_ivec ***switch_block_conn, INP int cost_index_offset,
+		INP struct s_ivec *****track_to_pin_lookup, INP struct s_ivec ***switch_block_conn, 
+		INP t_sb_connection_map *sb_conn_map, INP int cost_index_offset,
 		INP int nodes_per_chan, INP int tracks_per_chan, INP int *opin_mux_size,
 		INP short ******sblock_pattern, INP int Fs_per_side,
 		INP t_chan_details * chan_details_x, INP t_chan_details * chan_details_y,
@@ -1318,7 +1320,7 @@ static void build_rr_xchan(INP int i, INP int j,
 						sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_y, 
 						directionality,	L_rr_node_indices, L_rr_edge_done,
-						 switch_block_conn);
+						 switch_block_conn, sb_conn_map);
 			}
 		}
 		if (j < ny) {
@@ -1330,7 +1332,7 @@ static void build_rr_xchan(INP int i, INP int j,
 						sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_y, 
 						directionality,	L_rr_node_indices, L_rr_edge_done, 
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 		if (start > 1) {
@@ -1342,7 +1344,7 @@ static void build_rr_xchan(INP int i, INP int j,
 						Fs_per_side, sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_x,
 						directionality, L_rr_node_indices, L_rr_edge_done,
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 		if (end < nx) {
@@ -1354,7 +1356,7 @@ static void build_rr_xchan(INP int i, INP int j,
 						sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_x, 
 						directionality,	L_rr_node_indices, L_rr_edge_done, 
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 
@@ -1390,8 +1392,8 @@ static void build_rr_xchan(INP int i, INP int j,
 }
 
 static void build_rr_ychan(INP int i, INP int j,
-		INP struct s_ivec *****track_to_pin_lookup,
-		INP struct s_ivec ***switch_block_conn, INP int cost_index_offset,
+		INP struct s_ivec *****track_to_pin_lookup, INP struct s_ivec ***switch_block_conn, 
+		INP t_sb_connection_map *sb_conn_map, INP int cost_index_offset,
 		INP int nodes_per_chan, INP int tracks_per_chan, INP int *opin_mux_size,
 		INP short ******sblock_pattern, INP int Fs_per_side,
 		INP t_chan_details * chan_details_y, INP t_chan_details * chan_details_x,
@@ -1430,7 +1432,7 @@ static void build_rr_ychan(INP int i, INP int j,
 						sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_x, 
 						directionality, L_rr_node_indices, L_rr_edge_done,
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 		if (i < nx) {
@@ -1442,7 +1444,7 @@ static void build_rr_ychan(INP int i, INP int j,
 						sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_x, 
 						directionality, L_rr_node_indices, L_rr_edge_done,
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 		if (start > 1) {
@@ -1454,7 +1456,7 @@ static void build_rr_ychan(INP int i, INP int j,
 						Fs_per_side, sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_y,
 						directionality, L_rr_node_indices, L_rr_edge_done,
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 		if (end < ny) {
@@ -1466,7 +1468,7 @@ static void build_rr_ychan(INP int i, INP int j,
 						sblock_pattern, &edge_list, 
 						from_seg_details, to_seg_details, chan_details_y, 
 						directionality, L_rr_node_indices, L_rr_edge_done,
-						switch_block_conn);
+						switch_block_conn, sb_conn_map);
 			}
 		}
 
