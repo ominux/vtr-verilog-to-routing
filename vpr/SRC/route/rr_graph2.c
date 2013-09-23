@@ -7,6 +7,9 @@
 #include "rr_graph2.h"
 #include "rr_graph_sbox.h"
 #include "read_xml_arch_file.h"
+#include "build_switchblocks.h"
+
+using namespace std;
 
 #define UN_SET -1
 
@@ -30,6 +33,19 @@ static int get_bidir_track_to_chan_seg(
 		INOUTP boolean * L_rr_edge_done,
 		INP enum e_directionality directionality,
 		INOUTP struct s_linked_edge **edge_list);
+
+//TODO: comment
+static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
+		INP int from_track, INP int to_chan, INP int to_seg,
+		INP t_rr_type to_chan_type,
+		INP e_side from_side, INP e_side to_side,
+		INP t_ivec ***L_rr_node_indices, 
+		INP t_seg_details *dest_seg_details,
+		INP int nodes_per_chan, 
+		INP e_directionality directionality,
+		INP t_sb_connection_map *sb_conn_map,
+		INOUTP boolean * L_rr_edge_done, 
+		INOUTP s_linked_edge **edge_list);
 
 static int get_unidir_track_to_chan_seg(
 		INP boolean is_end_sb,
@@ -252,7 +268,7 @@ t_seg_details *alloc_and_load_seg_details(
 			 * twisting of wires. */
 			seg_details[cur_track].group_start = group_start;
 			seg_details[cur_track].group_size = 
-					std::min(ntracks + first_track - group_start, length * fac);
+					min(ntracks + first_track - group_start, length * fac);
 			assert(0 == seg_details[cur_track].group_size % fac);
 			if (0 == seg_details[cur_track].group_size) {
 				seg_details[cur_track].group_size = length * fac;
@@ -820,7 +836,7 @@ int get_unidir_opin_connections(
 	/* Clip Fc to the number of muxes. */
 	if (((Fc / 2) > num_inc_muxes) || ((Fc / 2) > num_dec_muxes)) {
 		*Fc_clipped = TRUE;
-		Fc = 2 * std::min(num_inc_muxes, num_dec_muxes);
+		Fc = 2 * min(num_inc_muxes, num_dec_muxes);
 	}
 
 	/* Assign tracks to meet Fc demand */
@@ -1668,6 +1684,16 @@ int get_track_to_tracks(
 		/* Do edges going to the right SB side (if we're in CHANX) or top (if we're in CHANY). 
 		   However, can't connect to right (top) if already at rightmost (topmost) track end */
 		if (from_sb < from_end) {
+#define MY_SWITCHBLOCKS
+#ifdef MY_SWITCHBLOCKS
+		if (DEC_DIRECTION == from_seg_details[from_track].direction || 
+		    BI_DIRECTIONAL == directionality){
+			num_conn += get_track_to_chan_seg(nx, ny, from_track, to_chan, to_seg,
+							to_type, from_side_a, to_side, L_rr_node_indices, 
+							to_seg_details, nodes_per_chan, directionality,
+							sb_conn_map, L_rr_edge_done, edge_list);
+		}
+#else
 			if (BI_DIRECTIONAL == directionality) {
 				/* For bidir, the target segment might have an unbuffered (bidir pass transistor)
 				   switchbox, so we follow through regardless of whether the current segment has an SB */
@@ -1693,12 +1719,22 @@ int get_track_to_tracks(
 							L_rr_edge_done, &Fs_clipped, edge_list);
 				}
 			}
+#endif
 		}
 
 
 		/* Do the edges going to the left SB side (if we're in CHANX) or bottom (if we're in CHANY)
 		   However, can't connect to left (bottom) if already at leftmost (bottommost) track end */
 		if (from_sb > from_first_sb) {
+#ifdef MY_SWITCHBLOCKS
+		if (INC_DIRECTION == from_seg_details[from_track].direction || 
+		    BI_DIRECTIONAL == directionality){
+			num_conn += get_track_to_chan_seg(nx, ny, from_track, to_chan, to_seg,
+							to_type, from_side_b, to_side, L_rr_node_indices, 
+							to_seg_details, nodes_per_chan, directionality,
+							sb_conn_map, L_rr_edge_done, edge_list);
+		}
+#else
 			if (BI_DIRECTIONAL == directionality) {
 				/* For bidir, the target segment might have an unbuffered (bidir pass transistor)
 				   switchbox, so we follow through regardless of whether the current segment has an SB */
@@ -1722,6 +1758,7 @@ int get_track_to_tracks(
 							&Fs_clipped, edge_list);
 				}
 			}
+#endif
 		}
 	}
 
@@ -1790,12 +1827,11 @@ static int get_bidir_track_to_chan_seg(
 	return num_conn;
 }
 
-
+//TODO: comment
 static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
 		INP int from_track, INP int to_chan, INP int to_seg,
 		INP t_rr_type to_chan_type,
 		INP e_side from_side, INP e_side to_side,
-		INP int dest_sb_index, 
 		INP t_ivec ***L_rr_node_indices, 
 		INP t_seg_details *dest_seg_details,
 		INP int nodes_per_chan, 
@@ -1806,23 +1842,91 @@ static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
 
 	int edge_count = 0;
 	int to_x, to_y;
+	int tile_x, tile_y;
 
 	/* get x/y coordinates from seg/chan coordinates */
 	if (CHANX == to_chan_type) {
-		to_x = to_seg;
-		to_y = to_chan;
+		to_x = tile_x = to_seg;
+		to_y = tile_y = to_chan;
+		if (RIGHT == to_side){
+			tile_x--;
+		}
 	} else {
 		assert(CHANY == to_chan_type);
-		to_x = to_chan;
-		to_y = to_seg;
+		to_x = tile_x = to_chan;
+		to_y = tile_y = to_seg;
+		if (TOP == to_side){
+			tile_y--;
+		}
 	}
-	//I have no need to do fringe/core stuff because that was 
+	//OP: I have no need to do fringe/core stuff because that was 
 	// taken care of during switchblock parsing
 
-	/* go through the connections... */
+	/* get coordinate to index into the SB map */
+	Switchblock_Lookup sb_coord(tile_x, tile_y, from_side, to_side, from_track);
+	//Switchblock_Lookup sb_coord_dest(tile_x, tile_y, to_side, from_side, to_track); //to_track depends on iconn below
+	if (sb_connection_exists(sb_coord, sb_conn_map)){
+		/* get reference to the connections vector */
+		vector<t_to_track_inf> &conn_vector = (*sb_conn_map).at(sb_coord);
 
+		//TODO: we are no longer dealing with just bidir, so need to account for unidir too
+		//TODO: the get_bidir_track_to_chan_seg f'n defaults to the larger switch if buffered switch in bidir arch used
+		//	for our description, both the to and from switch connections use the same switch by virtue of this being
+		//	set in compute_track_connections. For AY, switches were set in s_seg_details, so they could have a 
+		//	different to/from switch for a bidir connection (which they would then upgrade to the larger one?? or was that
+		//	for buffered?). So we need to ask ourselves how we can add this capability to current descriptions, and
+		//	whether we need to do it at all? Discuss with Vaughn?
+
+		/* go through the connections... */
+		for (int iconn = 0; iconn < (int)conn_vector.size(); ++iconn) {
+			
+			int to_track = conn_vector.at(iconn).to_track;
+			int to_node = get_rr_node_index(to_x, to_y, to_chan_type, to_track,
+					L_rr_node_indices);
+
+		//assert(false);
+		if (tile_x == 3 && tile_y == 1){
+			//assert(false);
+			printf("x: %d  y: %d  from_side: %d  to_side: %d  from_track: %d  to_track: %d\n", tile_x, tile_y, from_side, to_side, from_track, to_track); 
+		}
+			/* Get the switches for any edges between the two tracks */
+			int src_switch = my_atoi( conn_vector.at(iconn).switch_name.c_str() );
+			//int dest_switch = my_atoi( conn_vector_reverse.at(iconn).switch_name.c_str() );
+			//was seg_details[to_track].wire_switch;
+
+			/* Skip edge if already done */
+			if (L_rr_edge_done[to_node]) {
+				continue;
+			}
+
+			//boolean to_is_sblock = is_sblock(to_sb, to_track, seg_details,
+			//		directionality);
+			//get_switch_type(from_is_sblock, to_is_sblock, from_switch, to_switch,
+			//		switch_types);
+
+			*edge_list = insert_in_edge_list(*edge_list, to_node, src_switch);
+			L_rr_edge_done[to_node] = TRUE;
+			++edge_count;
+
+			///* There are up to two switch edges allowed from track to track */
+			//for (int i = 0; i < 2; ++i) {
+			//	/* If the switch_type entry is empty, skip it */
+			//	if (OPEN == switch_types[i]) {
+			//		continue;
+			//	}
+
+			//	/* Add the edge to the list */
+			//	*edge_list = insert_in_edge_list(*edge_list, to_node,
+			//			switch_types[i]);
+			//	/* Mark the edge as now done */
+			//	L_rr_edge_done[to_node] = TRUE;
+			//	++edge_count;
+			//}
+		}
+	} else {
+		/* specified sb map connection does not exist -- do nothing */
+	}
 	return edge_count;
-
 }
 
 static int get_unidir_track_to_chan_seg(
@@ -2012,8 +2116,8 @@ static void get_switch_type(
 
 	/* Take the larger pass trans if there are two */
 	if (forward_pass_trans && backward_pass_trans) {
-		min_switch = std::min(to_node_switch, from_node_switch);
-		max_switch = std::max(to_node_switch, from_node_switch);
+		min_switch = min(to_node_switch, from_node_switch);
+		max_switch = max(to_node_switch, from_node_switch);
 
 		/* Take the smaller index unless the other 
 		 * pass_trans is bigger (smaller R). */
