@@ -417,18 +417,21 @@ void build_rr_graph(
 	} else if (BI_DIRECTIONAL == directionality) {
 		switch_block_conn = alloc_and_load_switch_block_conn(nodes_per_chan,
 				sb_type, Fs);
-		
+#define MY_SWITCHBLOCKS		
+#ifdef MY_SWITCHBLOCKS
 		//OP: test new switchblock permutation funcs for the bidir case
 		sb_conn_map = alloc_and_load_switchblock_permutations(chan_details_x,
 				chan_details_y, L_nx, L_ny, switchblocks, 
 				nodes_per_chan, directionality);
+#endif
 	} else {
 		assert(UNI_DIRECTIONAL == directionality);
-		
+#ifdef MY_SWITCHBLOCKS		
 		//OP: test new switchblock permutation funcs for the unidir case
 		sb_conn_map = alloc_and_load_switchblock_permutations(chan_details_x,
 				chan_details_y, L_nx, L_ny, switchblocks, 
 				nodes_per_chan, directionality);
+#endif
 
 		unidir_sb_pattern = alloc_sblock_pattern_lookup(L_nx, L_ny, nodes_per_chan);
 
@@ -523,8 +526,8 @@ void build_rr_graph(
 								&types[i], Fc);
 					} else {
 						/* generate */
-						//adjust_pin_metric(target_metric, 0.0001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-						adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						adjust_pin_metric(target_metric, 0.0001, 0.001, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						//adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 						
 						//generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
 						if (manage_trackmap && (!w_done[nodes_per_chan])){

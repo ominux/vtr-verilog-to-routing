@@ -1885,10 +1885,10 @@ static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
 					L_rr_node_indices);
 
 		//assert(false);
-		if (tile_x == 3 && tile_y == 1){
-			//assert(false);
-			printf("x: %d  y: %d  from_side: %d  to_side: %d  from_track: %d  to_track: %d\n", tile_x, tile_y, from_side, to_side, from_track, to_track); 
-		}
+		//if (tile_x == 3 && tile_y == 1){
+		//	//assert(false);
+		//	printf("x: %d  y: %d  from_side: %d  to_side: %d  from_track: %d  to_track: %d\n", tile_x, tile_y, from_side, to_side, from_track, to_track); 
+		//}
 			/* Get the switches for any edges between the two tracks */
 			int src_switch = my_atoi( conn_vector.at(iconn).switch_name.c_str() );
 			//int dest_switch = my_atoi( conn_vector_reverse.at(iconn).switch_name.c_str() );

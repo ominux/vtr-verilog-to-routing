@@ -189,7 +189,7 @@
       <opin_switch name="0"/>
       <sb type="pattern">1 1 1 1 1</sb>
       <cb type="pattern">1 1 1 1</cb>
-    </segment>
+    </segment> 
   </segmentlist>
 
   <switchblocklist>
@@ -211,17 +211,17 @@
     <switchblock name="myBidirWiltonSwitch" type="bidir">
       <switch_type name="0"/>
       <switchfuncs>
-        <func type="lr" formula="t"/>
+        <func type="lr" formula="t+1"/>
         <func type="lt" formula="W-t"/>
         <func type="lb" formula="W+t-1"/>
         <func type="rt" formula="W+t-1"/>
         <func type="br" formula="2*W-t-2"/>
-        <func type="bt" formula="t"/>
+        <func type="bt" formula="t+1"/>
       </switchfuncs>
-      <wireconn FT="l4_seg" TT="l4_seg" FG="0" TG="0"/>
-      <wireconn FT="l4_seg" TT="l4_seg" FG="1" TG="1"/>
-      <wireconn FT="l4_seg" TT="l4_seg" FG="2" TG="2"/>
-      <wireconn FT="l4_seg" TT="l4_seg" FG="3" TG="3"/>
+      <wireconn FT="l4_seg" TT="l4_seg" FP="0" TP="0"/>
+      <wireconn FT="l4_seg" TT="l4_seg" FP="1" TP="1"/>
+      <wireconn FT="l4_seg" TT="l4_seg" FP="2" TP="2"/>
+      <wireconn FT="l4_seg" TT="l4_seg" FP="3" TP="3"/>
     </switchblock>
   </switchblocklist>
 
@@ -459,7 +459,7 @@
       </interconnect>
 
       <!-- Every input pin is driven by 15% of the tracks in a channel, every output pin is driven by 10% of the tracks in a channel -->
-      <fc default_in_type="frac" default_in_val="0.5" default_out_type="frac" default_out_val="0.3"/>
+      <fc default_in_type="frac" default_in_val="0.15" default_out_type="frac" default_out_val="0.3"/>
 
       <pinlocations pattern="spread"/>
 

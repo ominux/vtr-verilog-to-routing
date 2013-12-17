@@ -139,7 +139,6 @@ t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_detail
 			}
 		}
 	}
-	//assert(false);
 	return sb_conns;
 }
 
@@ -243,7 +242,7 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		/* get the from/to switchpoints at which the connection is made */
 		int from_switchpoint = get_switchpoint_of_track(nx, ny, from_chan_type,
 				from_chan_details[from_x][from_y][from_track], from_seg, from_side);
-		int to_switchpoint = wireconn_ptr->to_group;
+		int to_switchpoint = wireconn_ptr->to_point;
 		///* vectors that will contain indices of the source/destination tracks in the source/destination group */
 		//vector<int> src_tracks_group;
 		//vector<int> dest_tracks_group;
@@ -262,7 +261,7 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 			continue;
 		}
 		/* check that the current track has the group specified by the wire connection */
-		if ( from_switchpoint != wireconn_ptr->from_group ){
+		if ( from_switchpoint != wireconn_ptr->from_point ){
 			continue;
 		}
 
@@ -298,11 +297,14 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 			}
 			formula_data.track = src_track_in_sp;
 			dest_track_in_sp = get_sb_formula_result(permutations_ref.at(iperm).c_str(), formula_data);
-			dest_track_in_sp %= dest_W;
+			dest_track_in_sp = (dest_track_in_sp + dest_W) % (dest_W);
 			/* the resulting track number is the *index* of the destination track in it's own
 			   group, so we need to convert that back to the absolute index of the track in the channel */
 			//printf("formula: %s  track: %d  W: %d  dest_track: %d\n", permutations_ref.at(iperm).c_str(), src_track_in_sp, dest_W, dest_track_in_sp); 
-			assert(dest_track_in_sp >= 0);
+			if(dest_track_in_sp < 0){
+				vpr_printf(TIO_MESSAGE_ERROR, "compute_track_connections: got a negative track, %d\n", dest_track_in_sp);
+				exit(1);
+			}
 			to_track = tracks_in_dest_switchpoint.at(dest_track_in_sp);
 			
 			//debugging
@@ -768,6 +770,10 @@ static void get_switchpoint_tracks(INP int nx, INP int ny, INP t_seg_details *tr
 /* checks whether the entry specified by coord exists in the switchblock map sb_conns */
 bool sb_connection_exists( INP Switchblock_Lookup coord, INP t_sb_connection_map *sb_conns){
 	bool result;
+	if (NULL == sb_conns){
+		vpr_printf(TIO_MESSAGE_ERROR, "sb_connection_exists: sb_conns pointer is NULL\n");
+		exit(1);
+	}
 
 	t_sb_connection_map::const_iterator it = (*sb_conns).find(coord);
 	if ((*sb_conns).end() != it){

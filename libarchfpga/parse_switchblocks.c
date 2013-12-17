@@ -153,15 +153,15 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 		wc.to_type = char_prop;
 		ezxml_set_attr(SubElem, "TT", NULL);
 
-		/* get from wire group */
-		int_prop = GetIntProperty(SubElem, "FG", TRUE, -1);
-		wc.from_group = int_prop;
-		ezxml_set_attr(SubElem, "FG", NULL);
+		/* get from wire point */
+		int_prop = GetIntProperty(SubElem, "FP", TRUE, -1);
+		wc.from_point = int_prop;
+		ezxml_set_attr(SubElem, "FP", NULL);
 
-		/* get to wire group */
-		int_prop = GetIntProperty(SubElem, "TG", TRUE, -1);
-		wc.to_group = int_prop;
-		ezxml_set_attr(SubElem, "TG", NULL);
+		/* get to wire point */
+		int_prop = GetIntProperty(SubElem, "TP", TRUE, -1);
+		wc.to_point = int_prop;
+		ezxml_set_attr(SubElem, "TP", NULL);
 
 		sb->wireconns.push_back(wc);
 		FreeNode(SubElem);
