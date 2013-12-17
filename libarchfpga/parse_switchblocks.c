@@ -84,6 +84,11 @@ static void check_bidir_switchblock( INP t_permutation_map *permutation_map );
 
 
 /*---- Functions for Parsing the Symbolic Switchblock Formulas ----*/
+/* returns integer result according to specified formula and data */
+static int parse_formula( INP const char *formula, INP const s_formula_data &mydata );
+
+/* returns integer result according to specified piece-wise formula and data */
+static int parse_piecewise_formula( INP const char *formula, INP const s_formula_data &mydata );
 
 /* converts specified formula to a vector in reverse-polish notation */
 static void formula_to_rpn( INP const char* formula, INP const s_formula_data &mydata, 
@@ -117,6 +122,11 @@ static int apply_rpn_op( INP const Formula_Object &arg1, INP const Formula_Objec
 /* checks if specified character represents an ASCII number */
 static bool is_char_number( INP const char &ch );
 
+/* checks if the specified formula is piece-wise defined */
+static bool is_piecewise_formula( INP const char *formula );
+
+/* increments str_ind until it reaches specified char is formula */
+static void goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, char ch);
 
 
 /**** Function Definitions ****/
@@ -329,7 +339,7 @@ static void check_bidir_switchblock( INP t_permutation_map *permutation_map ){
 
 /*---- Functions for Parsing the Symbolic Switchblock Formulas ----*/
 
-/* returns integer result according to the specified formula and data */
+/* returns integer result according to the specified switchblock formula and data. formula may be piece-wise */
 int get_sb_formula_result( INP const char* formula, INP const s_formula_data &mydata ){
 	/* the result of the formula will be an integer */
 	int result = -1;
@@ -342,8 +352,29 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 		vpr_printf(TIO_MESSAGE_ERROR, "in get_sb_formula_result: SB formula empty\n");
 		exit(1);
 	}
+
+	/*
+	What do?
+	Here we have a piece-wise formula. 
+	- First check if it is piecewise. 
+		- If not, parse and return result
+		- Else, parse piecewise formula
+	*/
+	if ( is_piecewise_formula(formula) ){
+		result = parse_piecewise_formula( formula, mydata );
+	} else {
+		result = parse_formula( formula, mydata );
+	}
 	
-	vector<Formula_Object> rpn_output;	/* output in reverse-polish notation */
+	return result;
+}
+
+/* returns integer result according to specified non-piece-wise formula and data */
+static int parse_formula( INP const char *formula, INP const s_formula_data &mydata ){
+	int result = -1;
+
+	/* output in reverse-polish notation */
+	vector<Formula_Object> rpn_output;	
 
 	/* now we have to run the shunting-yard algorithm to convert formula to reverse polish notation */
 	formula_to_rpn( formula, mydata, OUTP rpn_output );
@@ -354,6 +385,106 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 	return result;
 }
 
+/* returns integer result according to specified piece-wise formula and data */
+static int parse_piecewise_formula( INP const char *formula, INP const s_formula_data &mydata ){
+	int result = -1;
+	int str_ind = 0;
+	int str_size = 0;
+	int t = mydata.track;
+	int tmp_ind_start = -1;
+	int tmp_ind_count = -1;
+	string substr;
+	
+	/* convert formula to string format */
+	string pw_formula(formula);
+	str_size = pw_formula.size();
+
+	if (pw_formula.at(str_ind) != '{'){
+		vpr_printf(TIO_MESSAGE_ERROR, "parse_piecewise_formula: the first character in piece-wise formula should always be '{'\n");
+		exit(1);
+	}
+	
+	/* find the range to which t corresponds */
+	/* the first character must be '{' as verified above */
+	while (str_ind != str_size - 1){
+		/* set to true when range to which track number corresponds has been found */
+		bool found_range = false;
+		int range_start = -1;
+		int range_end = -1;
+		tmp_ind_start = -1;
+		tmp_ind_count = -1;
+
+		/* get the start of the range */
+		tmp_ind_start = str_ind + 1;
+		goto_next_char(&str_ind, pw_formula, ':');
+		tmp_ind_count = str_ind - tmp_ind_start;			/* range start is between { and : */
+		substr = pw_formula.substr(tmp_ind_start, tmp_ind_count);
+		range_start = parse_formula(substr.c_str(), mydata);
+	
+		/* get the end of the range */
+		tmp_ind_start = str_ind + 1;
+		goto_next_char(&str_ind, pw_formula, '}');
+		tmp_ind_count = str_ind - tmp_ind_start;			/* range end is between : and } */
+		substr = pw_formula.substr(tmp_ind_start, tmp_ind_count);
+		range_end = parse_formula(substr.c_str(), mydata);
+
+		if (range_start > range_end){
+			vpr_printf(TIO_MESSAGE_ERROR, "parse_piecewise_formula: range_start, %d, is bigger than range end, %d\n", range_start, range_end);
+			exit(1);
+		}
+
+		/* is the incoming track within this range? (inclusive) */
+		if ( range_start <= t && range_end >= t ){
+			found_range = true;
+		} else {
+			found_range = false;
+		}
+			
+		/* we're done if found correct range */
+		if (found_range){
+			break;
+		}
+		goto_next_char(&str_ind, pw_formula, '{');
+	}
+	/* the string index should never actually get to the end of the string because we should have found the range to which the 
+	   current track number corresponds */
+	if (str_ind == str_size-1){
+		vpr_printf(TIO_MESSAGE_ERROR, "parse_piecewise_formula: could not find a closing '}'?\n");
+		exit(1);
+	}
+
+	/* at this point str_ind should point to '}' right before the formula we're interested in starts */
+	/* get the value corresponding to this formula */
+	tmp_ind_start = str_ind + 1;
+	goto_next_char(&str_ind, pw_formula, ';');
+	tmp_ind_count = str_ind - tmp_ind_start;			/* formula is between } and ; */
+	substr = pw_formula.substr(tmp_ind_start, tmp_ind_count);
+	result = parse_formula(substr.c_str(), mydata);
+
+	return result;
+}
+
+/* increments str_ind until it reaches specified char is formula */
+static void goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, char ch){
+	int str_size = pw_formula.size();	
+	if ((*str_ind) == str_size-1){
+		vpr_printf(TIO_MESSAGE_ERROR, "goto_next_char: passed-in str_ind is already at the end of string\n");
+		exit(1);
+	}
+
+	do{
+		(*str_ind)++;
+		if ( pw_formula.at(*str_ind) == ch ){
+			/* found the next requested character */
+			break;
+		}
+
+	} while ((*str_ind) != str_size-1);
+	if ((*str_ind) == str_size-1 && pw_formula.at(*str_ind) != ch){
+		vpr_printf(TIO_MESSAGE_ERROR, "goto_next_char: could not find specified char: %s\n", ch);
+		exit(1);
+	}
+}
 
 /* Parses the specified formula using a shunting yard algorithm (see wikipedia). The function's result 
    is stored in the rpn_output vector in reverse-polish notation */
@@ -647,7 +778,7 @@ static int parse_rpn_vector( INOUTP vector<Formula_Object> &rpn_vec ){
 			/* keep going until we have hit an operator */
 			do{
 				ivec++;		/* first item should never be operator anyway */
-				if (ivec == rpn_vec.size()){
+				if (ivec == (int)rpn_vec.size()){
 					vpr_printf(TIO_MESSAGE_ERROR, "parse_rpn_vector(): found multiple numbers in switchblock formula, but no operator\n");
 					exit(1);
 				}
@@ -725,5 +856,17 @@ static bool is_char_number ( INP const char &ch ){
 		result = false;
 	}
 
+	return result;
+}
+
+/* checks if the specified formula is piece-wise defined */
+static bool is_piecewise_formula( INP const char *formula ){
+	bool result = false;
+	/* if formula is piecewise, we expect '{' to be the very first character */
+	if ('{' == formula[0]){
+		result = true;
+	} else {
+		result = false;
+	}
 	return result;
 }
