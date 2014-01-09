@@ -235,22 +235,13 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		/* the 'seg' coordinates of the from/to channels */
 		int from_seg = get_seg_coordinate( from_chan_type, from_x, from_y );
 		int to_seg = get_seg_coordinate( to_chan_type, to_x, to_y );
-		///* the group of the source and destination tracks */
-		//int from_group = get_track_group(nx, ny, from_chan_type, 
-		//		  from_chan_details[from_x][from_y][from_track], from_seg);
-		//int to_group = wireconn_ptr->to_group;
 		/* get the from/to switchpoints at which the connection is made */
 		int from_switchpoint = get_switchpoint_of_track(nx, ny, from_chan_type,
 				from_chan_details[from_x][from_y][from_track], from_seg, from_side);
 		int to_switchpoint = wireconn_ptr->to_point;
-		///* vectors that will contain indices of the source/destination tracks in the source/destination group */
-		//vector<int> src_tracks_group;
-		//vector<int> dest_tracks_group;
 		/* vectors that will contain indices of the source/dest tracks in belonging to source/dest switchpoints */
 		vector<int> tracks_in_src_switchpoint;
 		vector<int> tracks_in_dest_switchpoint;
-		///* the index of the source/destination tracks within their own group */
-		//int src_track_in_group, dest_track_in_group;
 		/* the index of the source/destination track within their own switchpoint group */
 		int src_track_in_sp, dest_track_in_sp;
 		/* the effective destination channel width is the size of the destination track group */

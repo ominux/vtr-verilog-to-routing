@@ -353,13 +353,7 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 		exit(1);
 	}
 
-	/*
-	What do?
-	Here we have a piece-wise formula. 
-	- First check if it is piecewise. 
-		- If not, parse and return result
-		- Else, parse piecewise formula
-	*/
+	/* parse based on whether formula is piece-wise or not */
 	if ( is_piecewise_formula(formula) ){
 		result = parse_piecewise_formula( formula, mydata );
 	} else {

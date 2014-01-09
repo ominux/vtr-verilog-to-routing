@@ -44,7 +44,7 @@ static float get_pin_homogeneity(INP int **pin_averages, INP t_type_ptr block_ty
 		INP int num_pin_type_pins, INP int exponent);
 
 static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,
 		INP int num_pin_type_pins, INP int exponent, INP int *counted_pins_per_side, 
 		INP boolean both_sides);
@@ -225,7 +225,7 @@ void get_conn_block_homogeneity(OUTP t_conn_block_homogeneity &cbm, INP t_type_p
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2);
 
-		cbm.wire_homogeneity = get_wire_homogeneity(cbm.wh_wire_conns.ptr, block_type, tracks_connected_to_pin,
+		cbm.wire_homogeneity = get_wire_homogeneity(cbm.wh_wire_conns.ptr, block_type, 
 								pin_type, Fc, nodes_per_chan, num_wire_types,
 								num_pin_type_pins, 2, cbm.counted_pins_per_side, both_sides); 
 		
@@ -253,7 +253,7 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP int num_segments, INP t_segment_inf *segment_inf){
 //TODO: move this up top so all functions han see what's being optimized.
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
-#define HAMMING_PROXIMITY
+#define WIRE_HOMOGENEITY
 #define PRESERVE_TRACKS
 //#define USE_ANNEALER
 
@@ -495,6 +495,8 @@ track_ptr[rand_con] = new_track;
 			metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = old_track;
 #elif defined WIRE_HOMOGENEITY
 
+			metrics.wh_wire_conns.ptr[rand_side][old_track]++;
+			metrics.wh_wire_conns.ptr[rand_side][new_track]--;
 #endif
 			metrics.ph_pin_averages.ptr[rand_pin][ old_track % metrics.num_wire_types]++;
 			metrics.ph_pin_averages.ptr[rand_pin][ new_track % metrics.num_wire_types]--;
@@ -538,7 +540,7 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 #elif defined PIN_HOMOGENEITY
 	pin_metric = initialMetrics.pin_homogeneity;
 #endif
-	init_hamming = initialMetrics.hamming_distance;
+	init_hamming = initialMetrics.wire_homogeneity;
 	old_diff = fabs(pin_metric - pin_target);
 
 	if (old_diff <= pin_tolerance){
@@ -550,47 +552,143 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 	Fc = get_max_Fc(Fc_array, block_type, pin_type);
 
 	srand(time(0));
-	
+
+//	int no_luck = 0;	
+//	for (int tries = 0; tries < 100000; tries++){
+//		t_conn_block_homogeneity newMetrics;
+//		int rand_side, rand_pin, rand_con;
+//		int *track_ptr, old_track, new_track;
+// 		boolean invalid_conn = TRUE;
+//		
+//		/* find a random side, random pin, random switch */
+//		rand_side = rand() % 4;
+//		rand_pin = rand() % num_pins_per_side;
+//		rand_pin += (num_pins_per_side * rand_side);
+//		rand_pin = pin_map[rand_pin];		
+//		rand_con = rand() % Fc;	
+//		
+//		/* now we get a new track connection */
+//		track_ptr = &tracks_connected_to_pin[rand_pin][0][0][rand_side][0];
+//		old_track = track_ptr[rand_con];
+//		do {
+//			new_track = rand() % nodes_per_chan;
+//			invalid_conn = FALSE;
+//			/* check if new_track is equal to an existing track */
+//			for( int i = 0; i < Fc; i++ ){
+//				if( new_track == track_ptr[i] ){
+//					invalid_conn = TRUE;
+//					break;
+//				}
+//			}
+//		} while (invalid_conn);
+//
+//		/* assign new track, and test metrics */
+//		track_ptr[rand_con] = new_track;
+//		get_conn_block_homogeneity(newMetrics, block_type, tracks_connected_to_pin, 
+//					pin_type, Fc_array, nodes_per_chan, num_segments, 
+//					segment_inf);
+//		/* test if new metrics meet demand */
+//		hamming_metric = newMetrics.hamming_proximity;
+//	#ifdef PIN_DIVERSITY
+//		pin_metric = newMetrics.pin_diversity;
+//	#elif defined PIN_HOMOGENEITY
+//		pin_metric = newMetrics.pin_homogeneity;
+//	#endif
+//		new_diff = fabs(pin_metric - pin_target);
+//
+//		/* check if we are closer to target */
+//		if( new_diff < old_diff &&
+//		    fabs(hamming_metric - init_hamming) <= hamming_tolerance){
+//			printf("Pin Metric: %f   new_diff: %f   old_diff: %f\n", pin_metric, new_diff, old_diff);
+//			/* check if we satisfy desired pin constraint */
+//			if( new_diff <= pin_tolerance){
+//				/* we are done */
+//				success = TRUE;
+//				break;
+//			} else {
+//				/* we keep going */
+//				old_diff = new_diff;
+//			}
+//			no_luck = 0;
+//		} else {
+//			/* revert changes */
+//			track_ptr[rand_con] = old_track;
+//
+//			/* detect if we get stuck */
+//			no_luck++;
+//			if (no_luck == 10000){
+//				success = FALSE;
+//				break;
+//			}
+//		}
+//		track_ptr = NULL;
+//	}
+//	if (FALSE == success)
+//		printf("failed to adjust metric!\n");
+
+	/* this commented code swaps connections instead of moving a single connection to a new location */
 	for (int tries = 0; tries < 100000; tries++){
 		t_conn_block_homogeneity newMetrics;
-		int rand_side, rand_pin, rand_con;
-		int *track_ptr, old_track, new_track;
- 		boolean invalid_conn = TRUE;
-		
-		/* find a random side, random pin, random switch */
-		rand_side = rand() % 4;
-		rand_pin = rand() % num_pins_per_side;
-		rand_pin += (num_pins_per_side * rand_side);
-		rand_pin = pin_map[rand_pin];		
-		rand_con = rand() % Fc;	
-		
-		/* now we get a new track connection */
-		track_ptr = &tracks_connected_to_pin[rand_pin][0][0][rand_side][0];
-		old_track = track_ptr[rand_con];
-		do {
-			new_track = rand() % nodes_per_chan;
-			invalid_conn = FALSE;
-			/* check if new_track is equal to an existing track */
-			for( int i = 0; i < Fc; i++ ){
-				if( new_track == track_ptr[i] ){
-					invalid_conn = TRUE;
+		boolean valid_conns;
+		int *track1, *track2;
+		int rand_pin1, rand_pin2, rand_con1, rand_con2, rand_side;	
+	
+		do{
+			/* random side */
+			rand_side = rand() % 4;
+			/* random pins */
+			rand_pin1 = rand() % num_pins_per_side;
+			rand_pin2 = 0;
+			do{
+				/* pin2 must be different from pin 1 */
+				rand_pin2 = rand() % num_pins_per_side;
+			} while (rand_pin1 == rand_pin2);
+			/* make pins 0..20 */
+			rand_pin1 += (num_pins_per_side * rand_side);
+			rand_pin2 += (num_pins_per_side * rand_side);
+			rand_pin1 = pin_map[rand_pin1];
+			rand_pin2 = pin_map[rand_pin2];
+			/* get random connections*/
+			rand_con1 = rand() % Fc;
+			rand_con2 = rand() % Fc;
+
+			/* swap these two conns and test */
+			track1 = &tracks_connected_to_pin[rand_pin1][0][0][rand_side][rand_con1];
+			track2 = &tracks_connected_to_pin[rand_pin2][0][0][rand_side][rand_con2];
+			/* need to check that one pin does not already make the same connection as the other */
+			valid_conns = TRUE;
+			for (int i = 0; i < Fc; i++){
+				int *temp_track1 = &tracks_connected_to_pin[rand_pin1][0][0][rand_side][i];
+				int *temp_track2 = &tracks_connected_to_pin[rand_pin2][0][0][rand_side][i];
+				//printf("i %d   tmpt1 %d   tmpt2 %d\n", i, *temp_track1, *temp_track2);
+				if (*track2 == *temp_track1 ||
+				    *track1 == *temp_track2){
+					valid_conns = FALSE;
 					break;
 				}
 			}
-		} while (invalid_conn);
+		} while (FALSE == valid_conns);
 
-		/* assign new track, and test metrics */
-		track_ptr[rand_con] = new_track;
+		/* can check if pin metric won't change for sure */
+		if (*track1 % 4 == *track2 % 4){
+			continue;
+		}
+
+		int temp_track = *track1;
+		*track1 = *track2;
+		*track2 = temp_track;
 		get_conn_block_homogeneity(newMetrics, block_type, tracks_connected_to_pin, 
 					pin_type, Fc_array, nodes_per_chan, num_segments, 
 					segment_inf);
+
+
 		/* test if new metrics meet demand */
-		hamming_metric = newMetrics.hamming_distance;
-#ifdef PIN_DIVERSITY
+		hamming_metric = newMetrics.wire_homogeneity;
+		#ifdef PIN_DIVERSITY
 		pin_metric = newMetrics.pin_diversity;
-#elif defined PIN_HOMOGENEITY
+		#elif defined PIN_HOMOGENEITY
 		pin_metric = newMetrics.pin_homogeneity;
-#endif
+		#endif
 		new_diff = fabs(pin_metric - pin_target);
 
 		/* check if we are closer to target */
@@ -607,105 +705,18 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 				old_diff = new_diff;
 			}
 		} else {
-			/* revert changes */
-			track_ptr[rand_con] = old_track;
+			/* undo the connection swap */
+			temp_track = *track1;
+			*track1 = *track2;
+			*track2 = temp_track;
 		}
-		track_ptr = NULL;
+
+		track1 = NULL;
+		track2 = NULL;
 	}
-	if (FALSE == success)
-		printf("failed to adjust metric!\n");
-
-	/* this commented code swaps connections instead of moving a single connection to a new location */
-	//for (int tries = 0; tries < 100000; tries++){
-	//	t_conn_block_homogeneity newMetrics;
-	//	boolean valid_conns;
-	//	int *track1, *track2;
-	//	int rand_pin1, rand_pin2, rand_con1, rand_con2, rand_side;	
-	//
-	//	do{
-	//		/* random side */
-	//		rand_side = rand() % 4;
-	//		/* random pins */
-	//		rand_pin1 = rand() % num_pins_per_side;
-	//		rand_pin2 = 0;
-	//		do{
-	//			/* pin2 must be different from pin 1 */
-	//			rand_pin2 = rand() % num_pins_per_side;
-	//		} while (rand_pin1 == rand_pin2);
-	//		/* make pins 0..20 */
-	//		rand_pin1 += (num_pins_per_side * rand_side);
-	//		rand_pin2 += (num_pins_per_side * rand_side);
-	//		rand_pin1 = pin_map[rand_pin1];
-	//		rand_pin2 = pin_map[rand_pin2];
-	//		/* get random connections*/
-	//		rand_con1 = rand() % Fc;
-	//		rand_con2 = rand() % Fc;
-
-	//		/* swap these two conns and test */
-	//		track1 = &tracks_connected_to_pin[rand_pin1][0][0][rand_side][rand_con1];
-	//		track2 = &tracks_connected_to_pin[rand_pin2][0][0][rand_side][rand_con2];
-	//		/* need to check that one pin does not already make the same connection as the other */
-	//		valid_conns = TRUE;
-	//		for (int i = 0; i < Fc; i++){
-	//			int *temp_track1 = &tracks_connected_to_pin[rand_pin1][0][0][rand_side][i];
-	//			int *temp_track2 = &tracks_connected_to_pin[rand_pin2][0][0][rand_side][i];
-	//			//printf("i %d   tmpt1 %d   tmpt2 %d\n", i, *temp_track1, *temp_track2);
-	//			if (*track2 == *temp_track1 ||
-	//			    *track1 == *temp_track2){
-	//				valid_conns = FALSE;
-	//				break;
-	//			}
-	//		}
-	//	} while (FALSE == valid_conns);
-
-	//	/* can check if pin metric won't change for sure */
-	//	if (*track1 % 4 == *track2 % 4){
-	//		continue;
-	//	}
-
-	//	int temp_track = *track1;
-	//	*track1 = *track2;
-	//	*track2 = temp_track;
-	//	newMetrics = get_conn_block_homogeneity(block_type, tracks_connected_to_pin, 
-	//				pin_type, Fc_array, nodes_per_chan, num_segments, 
-	//				segment_inf);
-
-
-	//	/* test if new metrics meet demand */
-	//	hamming_metric = newMetrics.hamming_distance;
-//#ifdef P//IN_DIVERSITY
-	//	pin_metric = newMetrics.pin_diversity;
-//#elif de//fined PIN_HOMOGENEITY
-	//	pin_metric = newMetrics.pin_homogeneity;
-//#endif
-	//	new_diff = fabs(pin_metric - pin_target);
-
-	//	/* check if we are closer to target */
-	//	if( new_diff <= old_diff &&
-	//	    fabs(hamming_metric - init_hamming) <= hamming_tolerance){
-	//		printf("Pin Metric: %f   new_diff: %f   old_diff: %f\n", pin_metric, new_diff, old_diff);
-	//		/* check if we satisfy desired pin constraint */
-	//		if( new_diff <= pin_tolerance){
-	//			/* we are done */
-	//			success = TRUE;
-	//			break;
-	//		} else {
-	//			/* we keep going */
-	//			old_diff = new_diff;
-	//		}
-	//	} else {
-	//		/* undo the connection swap */
-	//		temp_track = *track1;
-	//		*track1 = *track2;
-	//		*track2 = temp_track;
-	//	}
-
-	//	track1 = NULL;
-	//	track2 = NULL;
-	//}
-	//if (FALSE == success){
-	//	printf("Failed to adjust PD\n");
-	//}
+	if (FALSE == success){
+		printf("Failed to adjust PD\n");
+	}
 
 	return;
 }
@@ -938,7 +949,7 @@ static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_typ
 
 /* Returns the wire homogeneity of a block's connection to tracks */
 static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_type, 
-		INP int *****tracks_connected_to_pin, INP e_pin_type pin_type, 
+		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,
 		INP int num_pin_type_pins, INP int exponent, INP int *counted_pins_per_side, 
 		INP boolean both_sides){

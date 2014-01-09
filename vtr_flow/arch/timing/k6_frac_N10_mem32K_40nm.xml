@@ -208,7 +208,7 @@
         <func type="bt" formula="t"/>
         <func type="br" formula="t"/>
       </switchfuncs>
-      <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FG="0" TG="0"/>
+      <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0" TP="0"/>
     </switchblock>
   </switchblocklist>
 
