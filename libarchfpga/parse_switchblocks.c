@@ -120,7 +120,7 @@ static int apply_rpn_op( INP const Formula_Object &arg1, INP const Formula_Objec
 					INP const Formula_Object &op );
 
 /* checks if specified character represents an ASCII number */
-static bool is_char_number( INP const char &ch );
+static bool is_char_number( INP const char ch );
 
 /* checks if the specified formula is piece-wise defined */
 static bool is_piecewise_formula( INP const char *formula );
@@ -142,7 +142,6 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	int num_wireconns;
 	ezxml_t SubElem;
 	const char *char_prop;
-	int int_prop;	
 
 	/* count the number of specified wire connections for this SB */
 	num_wireconns = CountChildren(Node, "wireconn", 1);
@@ -163,14 +162,30 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 		wc.to_type = char_prop;
 		ezxml_set_attr(SubElem, "TT", NULL);
 
-		/* get from wire point */
-		int_prop = GetIntProperty(SubElem, "FP", TRUE, -1);
-		wc.from_point = int_prop;
+		/* get the source wire point */
+		char_prop = FindProperty(SubElem, "FP", TRUE);
+		/* 'T' indicates all tracks belonging to the given track type */
+		if (strcmp(char_prop, "T") == 0){
+			wc.from_point = -1;
+		} else if (is_char_number(char_prop[0]) && '\0' == char_prop[1]){
+			wc.from_point = atoi(char_prop);
+		} else {
+			vpr_printf(TIO_MESSAGE_ERROR, "read_sb_wireconns: illegal switchblock wireconn FP field: %s\n", char_prop);
+			exit(1);
+		}
 		ezxml_set_attr(SubElem, "FP", NULL);
 
-		/* get to wire point */
-		int_prop = GetIntProperty(SubElem, "TP", TRUE, -1);
-		wc.to_point = int_prop;
+		/* get the destination wire point */
+		char_prop = FindProperty(SubElem, "TP", TRUE);
+		/* 'T' indicates all tracks belonging to the given track type */
+		if (strcmp(char_prop, "T") == 0){
+			wc.to_point = -1;
+		} else if (is_char_number(char_prop[0]) && '\0' == char_prop[1]){
+			wc.to_point = atoi(char_prop);
+		} else {
+			vpr_printf(TIO_MESSAGE_ERROR, "read_sb_wireconns: illegal switchblock wireconn TP field: %s\n", char_prop);
+			exit(1);
+		}
 		ezxml_set_attr(SubElem, "TP", NULL);
 
 		sb->wireconns.push_back(wc);
@@ -323,7 +338,7 @@ static void check_bidir_switchblock( INP t_permutation_map *permutation_map ){
 				conn.set_sides(to_side, from_side);
 				it = (*permutation_map).find(conn);
 				if (it != (*permutation_map).end()){
-					vpr_printf(TIO_MESSAGE_ERROR, "check_bidir_switchblock: if a connection from side1->side2 was specified, no connection should have been specified from side2->side1 as it is implicit. But such a specification was found.\n");
+					vpr_printf(TIO_MESSAGE_ERROR, "in check_bidir_switchblock: if a connection from side1->side2 was specified, no connection should have been specified from side2->side1 as it is implicit. But such a specification was found.\n");
 					exit(1);
 				}
 			}
@@ -841,7 +856,7 @@ static int apply_rpn_op( INP const Formula_Object &arg1, INP const Formula_Objec
 
 
 /* checks if specified character represents an ASCII number */
-static bool is_char_number ( INP const char &ch ){
+static bool is_char_number ( INP const char ch ){
 	bool result = false;
 	
 	if ( ch >= '0' && ch <= '9' ){

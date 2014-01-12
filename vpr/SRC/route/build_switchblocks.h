@@ -13,7 +13,7 @@ public:
 	int y_coord;
 	int from_side;
 	int to_side;
-	int track_num;
+	int track_num;	/* from track */
 
 	/* Empty constructor initializes everything to 0 */
 	Switchblock_Lookup(){

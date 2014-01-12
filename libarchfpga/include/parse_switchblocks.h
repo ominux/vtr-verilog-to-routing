@@ -4,12 +4,10 @@
 /**** Includes ****/
 #include "ezxml.h"
 
-/**** Defines ****/
+/**** Enums ****/
 
 /**** Structs ****/
-//TODO: an alternative that maybe worth pursuing is to use a 
-//	string->number map which is filled by the parent 
-//	function and passed in to get_sb_Formula_result
+/* contains data passed in to the switchblock parser */
 struct s_formula_data{
 	int dest_W; 	/* W in destination channel */
 	int track;	/* incoming track index */
@@ -19,7 +17,6 @@ struct s_formula_data{
 };
 
 
-/**** Classes ****/
 
 /**** Function Declarations ****/
 /* Loads permutation funcs specified under Node into t_switchblock_inf */

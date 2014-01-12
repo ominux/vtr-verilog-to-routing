@@ -29,7 +29,9 @@ typedef std::map< std::string, int > t_track_type_sizes;
 /* Counts the number of tracks in each track type in the specified channel */
 static void count_track_type_sizes(INP t_seg_details *channel, INP int nodes_per_chan, 
 			INOUTP t_track_type_sizes *track_type_sizes);
-//TODO: comment
+
+/* Compute the track that the track at (x, y, from_side, to_side, from_track) should connect to.
+   sb_conns is updated with the result */
 static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum e_side from_side,
 			INP enum e_side to_side, INP int from_track, INP t_chan_details * chan_details_x,
 			INP t_chan_details * chan_details_y, INP t_switchblock_inf *sb,
@@ -77,8 +79,9 @@ static int find_start_of_track_group(INP int nx, INP int ny, INP t_rr_type chan_
    which have the specified 'track_type', 'track_group', and are going in 'track_direction' */
 static void get_group_tracks(INP int nx, INP int ny, INP t_seg_details *track_details, INP t_rr_type chan_type,
 			INP const char *track_type, INP int track_group, INP int track_seg_coord, 
-			INP e_direction track_direction, INP int nodes_per_chan, INP t_track_type_sizes &track_type_sizes, 
-			INOUTP vector<int> *tracks_in_group);
+			INP e_direction track_direction, INP int nodes_per_chan, INP int type_start, 
+			INP bool all_tracks_of_type, INP t_track_type_sizes &track_type_sizes, 
+			INOUTP vector<int> *tracks);
 
 /* Returns the switchpoint of the track specified by track_details at a segment coordinate
    of seg_coord, and connection to the sb_side of the switchblock */
@@ -88,15 +91,13 @@ static int get_switchpoint_of_track(INP int nx, INP int ny, INP e_rr_type chan_t
 static void get_switchpoint_tracks(INP int nx, INP int ny, INP t_seg_details *track_details, INP t_rr_type chan_type,
 			INP const char *track_type, INP int track_switchpoint, INP int track_seg_coord, 
 			INP e_direction track_direction, INP int nodes_per_chan, INP t_track_type_sizes &track_type_sizes, 
-			INP e_side sb_side, INOUTP vector<int> *tracks_in_group);
+			INP e_side sb_side, INP bool all_tracks_of_type, INOUTP vector<int> *tracks);
 
 /**** Function Definitions ****/
 t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_details * chan_details_x, 
 				INP t_chan_details * chan_details_y, INP int nx, INP int ny, 
 				INP vector<t_switchblock_inf> switchblocks, 
 				INP int nodes_per_chan, INP e_directionality directionality){
-
-	Switchblock_Lookup coord;
 
 	/* the switchblock permutations pointer */
 	t_sb_connection_map *sb_conns = new t_sb_connection_map;
@@ -116,12 +117,13 @@ t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_detail
 			exit(1);
 		}
 
+		//TODO: it's better to build each switchblock once then stamp it out across the FPGA
 		/* Iterate over the x,y coordinates spanning the FPGA. Currently, the FPGA size is set as
 		   (0..nx+1) by (0..ny+1), so we iterate over 0..nx and 0..ny. */
 		for (int x_coord = 0; x_coord <= nx+1; x_coord++){
 			for (int y_coord = 0; y_coord <= ny+1; y_coord++){
 				/* Iterate over each track in channel */
-				for (int itrack = 0; itrack < nodes_per_chan; itrack++){
+				for (int from_track = 0; from_track < nodes_per_chan; from_track++){
 
 					/* now we iterate over all the potential side1->side2 connections */
 					for ( e_side from_side = (e_side) 0; from_side < 4; from_side = (e_side)(from_side + 1) ){
@@ -129,7 +131,7 @@ t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_detail
 							
 							/* Fill appropriate entry of the sb_conns map with vector specifying the tracks 
 							   the current track will connect to */
-							compute_track_connections(x_coord, y_coord, from_side, to_side, itrack,
+							compute_track_connections(x_coord, y_coord, from_side, to_side, from_track,
 									chan_details_x, chan_details_y, &sb, nx, ny, nodes_per_chan,
 									track_type_sizes, directionality, sb_conns);
 							
@@ -171,7 +173,8 @@ static void count_track_type_sizes(INP t_seg_details *channel, INP int nodes_per
 	return;
 } 
 
-//TODO: comment
+/* Compute the track that the track at (x, y, from_side, to_side, from_track) should connect to.
+   sb_conns is updated with the result */
 static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum e_side from_side,
 			INP enum e_side to_side, INP int from_track, INP t_chan_details * chan_details_x,
 			INP t_chan_details * chan_details_y, INP t_switchblock_inf *sb,
@@ -207,28 +210,23 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 	to_chan_type = index_into_correct_chan(x_coord, y_coord, to_side, chan_details_x, chan_details_y, 
 				&to_x, &to_y, &to_chan_details);
 
-	/* get the direction in which the source/destination tracks are headed */
-	src_direction = get_src_direction(from_side, directionality);
-	dest_direction = get_dest_direction(to_side, directionality);
-	
 	/* make sure from_x/y and to_x/y aren't out of bounds */
 	if (coords_out_of_bounds(nx, ny, to_x, to_y, to_chan_type) ||
 	    coords_out_of_bounds(nx, ny, from_x, from_y, from_chan_type)){
 		return;
 	}
 
-	/* pointer to a connection specification between two wire types/groups */
-	t_wireconn_inf *wireconn_ptr = NULL;
+	/* get the direction in which the source/destination tracks are headed */
+	src_direction = get_src_direction(from_side, directionality);
+	dest_direction = get_dest_direction(to_side, directionality);	
+
 	/* name of the source track */
 	const char *track_name = from_chan_details[from_x][from_y][from_track].type_name_ptr;
 	/* iterate over all the wire connections specified by the passed-in switchblock */
 	for (int iconn = 0; iconn < (int)sb->wireconns.size(); iconn++){
-		wireconn_ptr = &(sb->wireconns[iconn]);
-		
-		if (x_coord == 3 && y_coord == 1){
-		//	printf("here\n");
-		}
-		
+		/* pointer to a connection specification between two wire types/groups */
+		t_wireconn_inf *wireconn_ptr = &(sb->wireconns.at(iconn));
+
 		/* name of track type we're connecting from/to */
 		const char *from_track_type = wireconn_ptr->from_type.c_str();
 		const char *to_track_type = wireconn_ptr->to_type.c_str();
@@ -239,43 +237,50 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		int from_switchpoint = get_switchpoint_of_track(nx, ny, from_chan_type,
 				from_chan_details[from_x][from_y][from_track], from_seg, from_side);
 		int to_switchpoint = wireconn_ptr->to_point;
-		/* vectors that will contain indices of the source/dest tracks in belonging to source/dest switchpoints */
+		/* vectors that will contain indices of the source/dest tracks belonging to the source/dest switchpoints */
 		vector<int> tracks_in_src_switchpoint;
 		vector<int> tracks_in_dest_switchpoint;
 		/* the index of the source/destination track within their own switchpoint group */
 		int src_track_in_sp, dest_track_in_sp;
 		/* the effective destination channel width is the size of the destination track group */
 		int dest_W;
+		/* indicates whether all source/destination tracks belonging to the given track type are to be considered */
+		bool all_source_type_tracks = false, all_dest_type_tracks = false;
+		if (-1 == wireconn_ptr->from_point){
+			all_source_type_tracks = true;
+		}
+		if (-1 == wireconn_ptr->to_point){
+			all_dest_type_tracks = true;
+		}
 
 		/* check that the current track has the type specified by the wire connection */
 		if ( strcmp(track_name, from_track_type) != 0 ){	
 			continue;
 		}
-		/* check that the current track has the group specified by the wire connection */
-		if ( from_switchpoint != wireconn_ptr->from_point ){
+		/* check that the current track has the switch point specified by the wire connection */
+		if ( from_switchpoint != wireconn_ptr->from_point && !all_source_type_tracks ){
 			continue;
 		}
 
 		/* now we need to find all tracks in the destination channel that correspond to the 
-		   type and group specified by this wireconn. Must also go in appropriate 
+		   type and group specified by the current wireconn_ptr. Must also go in appropriate 
 		   direction (from e_direction) */
 		
 		/* get the indices of tracks in the destination group, as well as the effective destination 
 		   channel width (which is the number of tracks in destination group) */
 		get_switchpoint_tracks(nx, ny, to_chan_details[to_x][to_y], to_chan_type, to_track_type, to_switchpoint, to_seg, 
-						dest_direction, nodes_per_chan, track_type_sizes, to_side, &tracks_in_dest_switchpoint);
+						dest_direction, nodes_per_chan, track_type_sizes, to_side, all_dest_type_tracks, &tracks_in_dest_switchpoint);
 		dest_W = tracks_in_dest_switchpoint.size();
 
-		/* get the index of the source track within it's own group */
-		//TODO: need to pass in type of channel we're dealing with
+		/* get the index of the source track relative to all the tracks with the same switchpoint */
 		get_switchpoint_tracks(nx, ny, from_chan_details[from_x][from_y], from_chan_type, from_track_type, from_switchpoint, 
-						from_seg, src_direction, nodes_per_chan, track_type_sizes, from_side, 
+						from_seg, src_direction, nodes_per_chan, track_type_sizes, from_side, all_source_type_tracks,
 						&tracks_in_src_switchpoint);
 		vector<int>::iterator it = find(tracks_in_src_switchpoint.begin(), tracks_in_src_switchpoint.end(), from_track);
 		src_track_in_sp = it - tracks_in_src_switchpoint.begin();
 		
 		/* get a reference to the string vector containing desired side1->side2 permutations */
-		vector<string> &permutations_ref = sb->permutation_map[side_conn];
+		vector<string> &permutations_ref = sb->permutation_map.at(side_conn);
 
 		/* iterate over the permutation functions specified in the string vector */
 		int to_track;
@@ -319,7 +324,6 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 	}
 
 	track_name = NULL;
-	wireconn_ptr = NULL;
 	
 	from_chan_details = NULL;
 	to_chan_details = NULL;
@@ -341,12 +345,14 @@ static t_rr_type index_into_correct_chan(INP int tile_x, INP int tile_y, INP enu
 	   and above it */
 	switch (side){
 		case TOP:
+			/* this is y-channel belonging to tile above */
 			*set_chan_details = chan_details_y;
 			*set_x = tile_x;
 			*set_y = tile_y+1;
 			chan_type = CHANY;
 			break;
 		case RIGHT:
+			/* this is x-channel belonging to tile to the right */
 			*set_chan_details = chan_details_x;
 			*set_x = tile_x+1;
 			*set_y = tile_y;
@@ -416,7 +422,7 @@ static int get_seg_coordinate(INP t_rr_type chan_type, INP int x_coord, INP int 
 			seg = y_coord;
 			break;
 		default:
-			vpr_printf(TIO_MESSAGE_ERROR, "get_seg_coordinate: 'chan_type' is not a channel\n");
+			vpr_printf(TIO_MESSAGE_ERROR, "get_seg_coordinate: 'chan_type' %d is not a channel\n", chan_type);
 			exit(1);
 			break;
 	}
@@ -558,7 +564,6 @@ static int find_start_of_track_type(INP t_seg_details *track_details, INP const 
 	}
 
 	return track;
-
 } 
 
 /* returns the track index in the channel specified by 'track_details' that corresponds to the 
@@ -595,15 +600,17 @@ static int find_start_of_track_group(INP int nx, INP int ny, INP t_rr_type chan_
    which have the specified 'track_type', 'track_group', and are going in 'track_direction' */
 static void get_group_tracks(INP int nx, INP int ny, INP t_seg_details *track_details, INP t_rr_type chan_type,
 			INP const char *track_type, INP int track_group, INP int track_seg_coord, 
-			INP e_direction track_direction, INP int nodes_per_chan, INP t_track_type_sizes &track_type_sizes, 
-			INOUTP vector<int> *tracks_in_group){
+			INP e_direction track_direction, INP int nodes_per_chan, INP int type_start, 
+			INP bool all_tracks_of_type, INP t_track_type_sizes &track_type_sizes, 
+			INOUTP vector<int> *tracks){
 	int group_size;			/* the number of tracks in the channel belonging to specified type->group */
-	int type_start, group_start;	/* track indices of where given 'type' and 'group' start respectively */
+	int group_start;		/* track index at which the given 'group' starts */
 	int track_type_end;		/* track index where the track type ends */
 	int track_length;		/* length of track */
 	int dir_mult;			/* multiplier to account for unidir/bidir differences */
 	int step_size;			/* spacing between two consecutive tracks of the same group/type */
-	int max_seg_coord;		/* the maximum possible value of the seg coord for the current channel type */
+	int num_tracks;			/* the total number of tracks which will be put int 'tracks' */
+	int track_start;		/* the index of the first track */
 	
 	/* multiplier to account for unidir vs bidir differences */
 	if (BI_DIRECTION == track_direction){
@@ -614,79 +621,39 @@ static void get_group_tracks(INP int nx, INP int ny, INP t_seg_details *track_de
 		vpr_printf(TIO_MESSAGE_ERROR, "get_group_size(): unknown track direction %d\n", track_direction);
 		exit(1);
 	}
-
-	/* get index of track in channel at which the specified type->group starts */
-	type_start = find_start_of_track_type(track_details, track_type, nodes_per_chan, track_type_sizes);
-	group_start = find_start_of_track_group(nx, ny, chan_type, track_details, track_type, track_group, 
-					track_seg_coord, track_direction, type_start, nodes_per_chan, 
-					track_type_sizes);
 	
 	string map_accessor = track_type;
-	track_type_end = type_start + track_type_sizes[map_accessor] - 1;
-	track_length = track_details[group_start].length;
-
-	/* get the maximum segment coord of the current channel type */
-	if (CHANX == chan_type){
-		max_seg_coord = nx;
+	if (all_tracks_of_type){
+		/* considering all tracks of the given type */
+		num_tracks = track_type_sizes.at(map_accessor);
+		step_size = 1;
+		track_start = type_start;
 	} else {
-		assert( CHANY == chan_type);
-		max_seg_coord = ny;
-	}
+		/* considering tracks which are currently at a certain switchpoint */
+		/* get index of track in channel at which the specified type->group starts */
+		group_start = find_start_of_track_group(nx, ny, chan_type, track_details, track_type, track_group, 
+						track_seg_coord, track_direction, type_start, nodes_per_chan, 
+						track_type_sizes);
+		
+		track_type_end = type_start + track_type_sizes.at(map_accessor) - 1;
+		track_length = track_details[group_start].length;
 
-	/* get the group size. Consecutive tracks of the same group
-	   are separated by 'track_length' tracks for the bidirectional case,
-	   and by 2*track_length tracks for the unidirectional case, because for 
-	   unidir tracks are grouped in pairs. */
-
-	/* account for FPGA fringes.
-	   At x=0 switchblock, all connectable XCHAN tracks are of group 0
-	   At x=nx+1 switchblock, all connectable XCHAN tracks are of group L-1
-	   At y=0 switchblock, all connectable YCHAN tracks are of group 0
-	   At y =ny+1 switchblock, all connectable YCHAN tracks are of group L-1 */
-	//TODO: this needs to be fixed. consider x=0 y=1 where a track may be both of 
-	//	group 0 and 3!!
-	//if (1 == track_seg_coord){
-	//	if (0 == track_group){
-	//		group_start = type_start;
-	//		step_size = 1 * dir_mult;
-	//		group_size = track_type_end - group_start;
-	//		group_size = floor(group_size / step_size) + 1;
-	//	} else {
-	//		group_size = 0;
-	//	}
-	//} else if (max_seg_coord == track_seg_coord){
-	//	if (track_length-1 == track_group){
-	//		group_start = type_start;
-	//		step_size = 1 * dir_mult;
-	//		group_size = track_type_end - group_start;
-	//		group_size = floor(group_size / step_size) + 1;
-	//	} else {
-	//		group_size = 0;
-	//	}
-	//} else {
+		/* get the group size. Consecutive tracks of the same group
+		   are separated by 'track_length' tracks for the bidirectional case,
+		   and by 2*track_length tracks for the unidirectional case, because for 
+		   unidir tracks are grouped in pairs (the dir_mult factor accounts for this). */
 		step_size = track_length * dir_mult;
 		group_size = track_type_end - group_start;
 		group_size = floor(group_size / step_size) + 1;
-	//}
-
-	/* TODO: want full W to only be accessible at the corners?
-		Well, Ideally what we would do is have access to full W on both
-		corners and fringes. Corners are all the same group of wires,
-		so it's a 1:1 mapping between the available groups there (only one group, actually).
-		Fringes, on the other hand, have multiple groups; but the wires going away from the 
-		fringe are all only one group. We'd like to be able to connect to the full W on the 
-		outoing wires; this requires that consecutive groups mapping to the outgoing wire group
-		don't all map to the same wires -- that is, some balancing would be preferred.
-		This is the ideal scenario which we would like to implement.
-
-		First though, need to figure out the mapping problems with the core blocks...	
-	*/
+		num_tracks = group_size;
+		track_start = group_start;
+	}
 
 	/* and now we set which track indices in the channel correspond to the 
 	   desired type, group, and directionality */
-	tracks_in_group->reserve(group_size);
-	for (int i = 0; i < group_size; i++){
-		tracks_in_group->push_back( group_start + i*step_size );
+	tracks->reserve(num_tracks);
+	for (int i = 0; i < num_tracks; i++){
+		tracks->push_back( track_start + i*step_size );
 	}
 
 	return;
@@ -722,27 +689,25 @@ static int get_switchpoint_of_track(INP int nx, INP int ny, INP e_rr_type chan_t
 	return switchpoint;
 }
 
+/* in this function we'd like to find all the tracks belonging to the specified switchpoint.
+   since the switchpoint is related to the track group as:
 
+	switchpoint:	0-------1-------2-------3-------0
+	      group:	    0       1       2       3
+
+   we can find the tracks belonging to the switchpoint by finding the tracks belonging to
+   the appropriate group.
+   The result is stored in the 'tracks' vector */
 static void get_switchpoint_tracks(INP int nx, INP int ny, INP t_seg_details *track_details, INP t_rr_type chan_type,
 			INP const char *track_type, INP int track_switchpoint, INP int track_seg_coord, 
 			INP e_direction track_direction, INP int nodes_per_chan, INP t_track_type_sizes &track_type_sizes, 
-			INP e_side sb_side, INOUTP vector<int> *tracks_in_group){
-
-	/* in this function we'd like to find all the tracks belonging to the specified switchpoint.
-	   since the switchpoint is related to the track group as:
-
-		switchpoint:	0-------1-------2-------3-------0
-		      group:	    0       1       2       3
-	
-	   we can find the tracks belonging to the switchpoint by finding the tracks belonging to
-	   the appropriate group */
+			INP e_side sb_side, INP bool all_tracks_of_type, INOUTP vector<int> *tracks){
 
 	int track_group;
-	//TODO: finding the track length this way is not very clean...
 	int type_start = find_start_of_track_type(track_details, track_type, nodes_per_chan, track_type_sizes);
 	int track_length = track_details[type_start].length;
-	//need to somehow get the length of the target track...
-	/* here the trick is to modify the group s.t. we get the desired switchpoint. */
+
+	/* get the track group based on the desired switchpoint */
 	if (LEFT == sb_side || BOTTOM == sb_side){
 		track_group = (track_switchpoint - 1 + track_length) % track_length ;
 	} else {
@@ -750,16 +715,16 @@ static void get_switchpoint_tracks(INP int nx, INP int ny, INP t_seg_details *tr
 		track_group = track_switchpoint;
 	}
 
-	get_group_tracks(nx, ny, track_details, chan_type, track_type, track_group,
-		track_seg_coord, track_direction, nodes_per_chan, track_type_sizes, tracks_in_group);
+	/* fill 'tracks' with the indices of the track corresponding to the desired group/switchpoint */
+	get_group_tracks(nx, ny, track_details, chan_type, track_type, track_group, track_seg_coord, track_direction, 
+		nodes_per_chan, type_start, all_tracks_of_type, track_type_sizes, tracks);
 
 	return;
-
 }
 
 
 /* checks whether the entry specified by coord exists in the switchblock map sb_conns */
-bool sb_connection_exists( INP Switchblock_Lookup coord, INP t_sb_connection_map *sb_conns){
+bool sb_connection_exists( INP Switchblock_Lookup coord, INP t_sb_connection_map *sb_conns ){
 	bool result;
 	if (NULL == sb_conns){
 		vpr_printf(TIO_MESSAGE_ERROR, "sb_connection_exists: sb_conns pointer is NULL\n");
