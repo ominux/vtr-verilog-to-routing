@@ -75,6 +75,9 @@ public:
 
 /*---- Functions for Parsing Switchblocks from Architecture ----*/
 
+/* parses the wirepoints specified in ch into the vector wire_points_vec */
+static void parse_comma_separated_wire_points(INP const char *ch, INOUTP vector<int> *wire_points_vec);
+
 /* checks for correctness of a unidir switchblock. hard exit if error found (to be changed to throw later) */
 static void check_unidir_switchblock( INP t_permutation_map *permutation_map );
 
@@ -125,8 +128,8 @@ static bool is_char_number( INP const char ch );
 /* checks if the specified formula is piece-wise defined */
 static bool is_piecewise_formula( INP const char *formula );
 
-/* increments str_ind until it reaches specified char is formula */
-static void goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, char ch);
+/* increments str_ind until it reaches specified char is formula. returns true if character was found, false otherwise */
+static bool goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, char ch);
 
 
 /**** Function Definitions ****/
@@ -164,32 +167,59 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 
 		/* get the source wire point */
 		char_prop = FindProperty(SubElem, "FP", TRUE);
-		/* 'T' indicates all tracks belonging to the given track type */
-		if (strcmp(char_prop, "T") == 0){
-			wc.from_point = -1;
-		} else if (is_char_number(char_prop[0]) && '\0' == char_prop[1]){
-			wc.from_point = atoi(char_prop);
-		} else {
-			vpr_printf(TIO_MESSAGE_ERROR, "read_sb_wireconns: illegal switchblock wireconn FP field: %s\n", char_prop);
-			exit(1);
-		}
+		parse_comma_separated_wire_points(char_prop, &(wc.from_point));
 		ezxml_set_attr(SubElem, "FP", NULL);
 
 		/* get the destination wire point */
 		char_prop = FindProperty(SubElem, "TP", TRUE);
-		/* 'T' indicates all tracks belonging to the given track type */
-		if (strcmp(char_prop, "T") == 0){
-			wc.to_point = -1;
-		} else if (is_char_number(char_prop[0]) && '\0' == char_prop[1]){
-			wc.to_point = atoi(char_prop);
-		} else {
-			vpr_printf(TIO_MESSAGE_ERROR, "read_sb_wireconns: illegal switchblock wireconn TP field: %s\n", char_prop);
-			exit(1);
-		}
+		parse_comma_separated_wire_points(char_prop, &(wc.to_point));
 		ezxml_set_attr(SubElem, "TP", NULL);
 
 		sb->wireconns.push_back(wc);
 		FreeNode(SubElem);
+	}
+
+	return;
+}
+
+/* parses the wirepoints specified in the comma-separated 'ch' array into the vector wire_points_vec */
+static void parse_comma_separated_wire_points(INP const char *ch, INOUTP vector<int> *wire_points_vec){
+	int ind = 0;
+	wire_points_vec->clear();
+
+	/* walk through ch and check that all characters are legal */
+	while ('\0' != ch[ind]){
+		if (',' != ch[ind] && ' ' != ch[ind] && !is_char_number(ch[ind])){
+			vpr_printf(TIO_MESSAGE_ERROR, "parse_comma_separated_wire_points: found wireconn wire point entry with illegal character: %c\n", ch[ind]);
+			exit(1);
+		}
+		ind++;
+	}
+	if (0 == ind){
+		vpr_printf(TIO_MESSAGE_ERROR, "parse_comma_separated_wire_points: found empty wireconn wire point entry\n");
+		exit(1);
+	}
+
+	/* error checking done, move on to parsing */ 
+	string points(ch);
+	int str_size = points.size();
+	int ch_start = 0;
+	ind = 0;
+	while (ch_start <= str_size - 1){
+		string substr;
+		
+		/* get the next wirepoint */
+		if (ind != str_size - 1){
+			goto_next_char(&ind, points, ',');
+		}
+		if (ind == str_size - 1){
+			substr = points.substr(ch_start, ind - ch_start + 1);
+		} else {
+			substr = points.substr(ch_start, ind - ch_start);
+		}
+		wire_points_vec->push_back( atoi(substr.c_str()) );
+
+		ch_start = ind + 1;
 	}
 
 	return;
@@ -418,6 +448,7 @@ static int parse_piecewise_formula( INP const char *formula, INP const s_formula
 	while (str_ind != str_size - 1){
 		/* set to true when range to which track number corresponds has been found */
 		bool found_range = false;
+		bool char_found = false;
 		int range_start = -1;
 		int range_end = -1;
 		tmp_ind_start = -1;
@@ -425,14 +456,22 @@ static int parse_piecewise_formula( INP const char *formula, INP const s_formula
 
 		/* get the start of the range */
 		tmp_ind_start = str_ind + 1;
-		goto_next_char(&str_ind, pw_formula, ':');
+		char_found = goto_next_char(&str_ind, pw_formula, ':');
+		if (!char_found){
+			vpr_printf(TIO_MESSAGE_ERROR, "parse_piecewise_formula: could not find char %c\n", ':');
+			exit(1);
+		}
 		tmp_ind_count = str_ind - tmp_ind_start;			/* range start is between { and : */
 		substr = pw_formula.substr(tmp_ind_start, tmp_ind_count);
 		range_start = parse_formula(substr.c_str(), mydata);
 	
 		/* get the end of the range */
 		tmp_ind_start = str_ind + 1;
-		goto_next_char(&str_ind, pw_formula, '}');
+		char_found = goto_next_char(&str_ind, pw_formula, '}');
+		if (!char_found){
+			vpr_printf(TIO_MESSAGE_ERROR, "parse_piecewise_formula: could not find char %c\n", '}');
+			exit(1);
+		}
 		tmp_ind_count = str_ind - tmp_ind_start;			/* range end is between : and } */
 		substr = pw_formula.substr(tmp_ind_start, tmp_ind_count);
 		range_end = parse_formula(substr.c_str(), mydata);
@@ -453,7 +492,11 @@ static int parse_piecewise_formula( INP const char *formula, INP const s_formula
 		if (found_range){
 			break;
 		}
-		goto_next_char(&str_ind, pw_formula, '{');
+		char_found = goto_next_char(&str_ind, pw_formula, '{');
+		if (!char_found){
+			vpr_printf(TIO_MESSAGE_ERROR, "parse_piecewise_formula: could not find char %c\n", '{');
+			exit(1);
+		}
 	}
 	/* the string index should never actually get to the end of the string because we should have found the range to which the 
 	   current track number corresponds */
@@ -473,8 +516,9 @@ static int parse_piecewise_formula( INP const char *formula, INP const s_formula
 	return result;
 }
 
-/* increments str_ind until it reaches specified char is formula */
-static void goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, char ch){
+/* increments str_ind until it reaches specified char is formula. returns true if character was found, false otherwise */
+static bool goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, char ch){
+	bool result = true;
 	int str_size = pw_formula.size();	
 	if ((*str_ind) == str_size-1){
 		vpr_printf(TIO_MESSAGE_ERROR, "goto_next_char: passed-in str_ind is already at the end of string\n");
@@ -490,9 +534,9 @@ static void goto_next_char( INOUTP int *str_ind, INP const string &pw_formula, c
 
 	} while ((*str_ind) != str_size-1);
 	if ((*str_ind) == str_size-1 && pw_formula.at(*str_ind) != ch){
-		vpr_printf(TIO_MESSAGE_ERROR, "goto_next_char: could not find specified char: %s\n", ch);
-		exit(1);
+		result = false;
 	}
+	return result;
 }
 
 /* Parses the specified formula using a shunting yard algorithm (see wikipedia). The function's result 

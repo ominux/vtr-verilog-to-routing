@@ -789,8 +789,8 @@ typedef struct s_direct_inf {
 typedef struct s_wireconn_inf{
 	std::string from_type;		/* connect from this wire type */
 	std::string to_type;		/* to this wire type */
-	int from_point;			/* index of wire point belonging to from_type */
-	int to_point;			/* index of wire point belong to to_type */
+	std::vector<int> from_point;	/* indeces of wire points belonging to from_type */
+	std::vector<int> to_point;	/* indeces of wire points belong to to_type */
 } t_wireconn_inf;
 
 /* represents a connection between two sides of a switchblock */
