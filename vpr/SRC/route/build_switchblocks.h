@@ -109,7 +109,4 @@ t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_detail
 
 void free_switchblock_permutations(INOUTP t_sb_connection_map *sb_conns);
 
-/* checks whether the entry specified by coord exists in the switchblock map sb_conns */
-bool sb_connection_exists( INP Switchblock_Lookup coord, INP t_sb_connection_map *sb_conns);
-
 #endif

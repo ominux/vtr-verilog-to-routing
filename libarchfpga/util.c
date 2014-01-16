@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <map>
 #include "util.h"
 
 /* This file contains utility functions widely used in *
@@ -779,5 +780,23 @@ int ipow(int base, int exp) {
 		exp >>= 1;
 		base *= base;
 	}
+	return result;
+}
+
+/* compute greatest common denominator of x and y */
+int gcd(INP int x, INP int y){
+	int result;
+	if (y == 0){
+		result = x;
+	} else {
+		result = gcd(y, x % y);
+	}
+	return result;
+}
+
+/* compute least common multiple of x and y */
+int lcm(INP int x, INP int y){
+	int result;
+	result = x / gcd(x,y) * y;
 	return result;
 }

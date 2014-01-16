@@ -619,7 +619,7 @@ static void get_formula_object( INP const char *ch, INOUTP int &ichar, INP const
 		}
 		ichar --;
 		fobj->type = E_FML_NUMBER;
-		fobj->data.num = my_atoi(ss.str().c_str());	//TODO: convoluted. rework?
+		fobj->data.num = my_atoi(ss.str().c_str());
 	} else {
 		switch ((*ch)){
 			case 'W':

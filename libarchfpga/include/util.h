@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-
+#include <map>
 #include "TIO_PrintHandlerExtern.h"
 
 #ifndef TRUE                    /* Some compilers predefine TRUE, FALSE */
@@ -79,7 +79,7 @@ void *my_realloc(void *ptr, size_t size);
 void *my_chunk_malloc(size_t size, t_chunk *chunk_info);
 void free_chunk_memory(t_chunk *chunk_info);
 
-/******************* Linked list, matrix and vector utilities ****************/
+/******************* Linked list, matrix, and vector utilities ****************/
 
 void free_ivec_vector(struct s_ivec *ivec_vector, int nrmin, int nrmax);
 void free_ivec_matrix(struct s_ivec **ivec_matrix, int nrmin, int nrmax,
@@ -145,6 +145,32 @@ extern messagelogger vpr_printf;
 
 /*********************** Math operations *************************************/
 int ipow(int base, int exp);
+
+/* compute greatest common denominator of x and y */
+int gcd(INP int x, INP int y);
+
+/* compute least common multiple of x and y */
+int lcm(INP int x, INP int y);
+
+
+
+/* a generic function for determining if a given map key exists */
+template< typename F, typename T > bool map_key_exists( INP F key, INP std::map< F, T > *my_map ){
+	bool exists;
+	if (NULL == my_map){
+		vpr_printf(TIO_MESSAGE_ERROR, "map_key_exists: map pointer is NULL\n");
+		exit(1);
+	}
+	typename std::map< F, T >::const_iterator it = my_map->find(key);
+	if (my_map->end() != it){
+		exists = true;
+	} else {
+		exists = false;
+	}
+
+	return exists;
+} 
+
 
 #endif
 

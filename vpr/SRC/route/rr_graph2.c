@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <assert.h>
-#include "util.h"
 #include "vpr_types.h"
 #include "globals.h"
 #include "rr_graph_util.h"
@@ -8,6 +7,7 @@
 #include "rr_graph_sbox.h"
 #include "read_xml_arch_file.h"
 #include "build_switchblocks.h"
+#include "util.h"
 
 using namespace std;
 
@@ -1684,7 +1684,7 @@ int get_track_to_tracks(
 		/* Do edges going to the right SB side (if we're in CHANX) or top (if we're in CHANY). 
 		   However, can't connect to right (top) if already at rightmost (topmost) track end */
 		if (from_sb < from_end) {
-#define MY_SWITCHBLOCKS
+//#define MY_SWITCHBLOCKS
 #ifdef MY_SWITCHBLOCKS
 		if (DEC_DIRECTION == from_seg_details[from_track].direction || 
 		    BI_DIRECTIONAL == directionality){
@@ -1859,13 +1859,11 @@ static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
 			tile_y--;
 		}
 	}
-	//OP: I have no need to do fringe/core stuff because that was 
-	// taken care of during switchblock parsing
 
 	/* get coordinate to index into the SB map */
 	Switchblock_Lookup sb_coord(tile_x, tile_y, from_side, to_side, from_track);
 	//Switchblock_Lookup sb_coord_dest(tile_x, tile_y, to_side, from_side, to_track); //to_track depends on iconn below
-	if (sb_connection_exists(sb_coord, sb_conn_map)){
+	if (map_key_exists(sb_coord, sb_conn_map)){
 		/* get reference to the connections vector */
 		vector<t_to_track_inf> &conn_vector = (*sb_conn_map).at(sb_coord);
 
@@ -1884,11 +1882,6 @@ static int get_track_to_chan_seg(INP int L_nx, INP int L_ny,
 			int to_node = get_rr_node_index(to_x, to_y, to_chan_type, to_track,
 					L_rr_node_indices);
 
-		//assert(false);
-		//if (tile_x == 3 && tile_y == 1){
-		//	//assert(false);
-		//	printf("x: %d  y: %d  from_side: %d  to_side: %d  from_track: %d  to_track: %d\n", tile_x, tile_y, from_side, to_side, from_track, to_track); 
-		//}
 			/* Get the switches for any edges between the two tracks */
 			int src_switch = my_atoi( conn_vector.at(iconn).switch_name.c_str() );
 			//int dest_switch = my_atoi( conn_vector_reverse.at(iconn).switch_name.c_str() );
