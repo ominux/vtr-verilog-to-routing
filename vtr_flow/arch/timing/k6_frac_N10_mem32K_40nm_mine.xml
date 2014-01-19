@@ -208,22 +208,33 @@
       <wireconn FT="l4_seg" TT="l4_seg" FP="3" TP="3"/>
     </switchblock-->
     
-    <switchblock name="myBidirWiltonSwitch" type="bidir">
+    <!--switchblock name="myBidirWiltonSwitch" type="bidir">
       <switch_type name="0"/>
       <switchfuncs>
         <func type="lr" formula="{(W/2):(W/2)}0; {0:(W/2)}(2*W-t-1); {(W/2):(W)}(2*W-t);"/>
-	<!--func type="lr" formula="t"/-->
         <func type="lt" formula="W-t"/>
         <func type="lb" formula="W+t-1"/>
         <func type="rt" formula="W+t-1"/>
         <func type="br" formula="2*W-t-2"/>
-	<!--func type="bt" formula="t"/-->
         <func type="bt" formula="{(W/2):(W/2)}0; {0:(W/2)}(2*W-t-1); {(W/2):(W)}(2*W-t);"/>
       </switchfuncs>
       <wireconn FT="l4_seg" TT="l4_seg" FP="0" TP="0"/>
       <wireconn FT="l4_seg" TT="l4_seg" FP="1" TP="2"/>
       <wireconn FT="l4_seg" TT="l4_seg" FP="2" TP="3"/>
       <wireconn FT="l4_seg" TT="l4_seg" FP="3" TP="1"/>
+    </switchblock-->
+
+    <switchblock name="test" type="bidir">
+      <switch_type name="0"/>
+      <switchfuncs>
+	<func type="lr" formula="t"/>
+        <func type="lt" formula="W-t"/>
+        <func type="lb" formula="W+t-1"/>
+        <func type="rt" formula="W+t-1"/>
+        <func type="br" formula="2*W-t-2"/>
+	<func type="bt" formula="t"/>
+      </switchfuncs>
+      <wireconn FT="l4_seg" TT="l4_seg" FP="0,1,2,3" TP="0,1,2,3"/>
     </switchblock>
   </switchblocklist>
 

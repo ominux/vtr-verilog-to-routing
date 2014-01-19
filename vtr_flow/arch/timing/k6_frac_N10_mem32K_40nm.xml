@@ -192,23 +192,30 @@
   </segmentlist>
 
   <switchblocklist>
-    <switchblock name="MyUnidirSwitch" type="unidir">
+    <switchblock name="StraightThrough" type="unidir">
       <switch_type name="0"/>
       <switchfuncs>
-        <func type="lt" formula="t"/>
         <func type="lr" formula="t"/>
-        <func type="lb" formula="t"/>
-        <func type="tl" formula="t"/>
         <func type="tb" formula="t"/>
-        <func type="tr" formula="t"/>
-        <func type="rt" formula="t"/>
         <func type="rl" formula="t"/>
-        <func type="rb" formula="t"/>
-        <func type="bl" formula="t"/>
         <func type="bt" formula="t"/>
-        <func type="br" formula="t"/>
       </switchfuncs>
       <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0" TP="0"/>
+    </switchblock>
+
+    <switchblock name="Turn" type="unidir">
+      <switch_type name="0"/>
+      <switchfuncs>
+        <func type="lt" formula="W-t"/>
+        <func type="lb" formula="W+t-1"/>
+        <func type="tl" formula="W-t"/>
+        <func type="tr" formula="t+1"/>
+        <func type="rt" formula="W+t-1"/>
+        <func type="rb" formula="2*W-t-2"/>
+        <func type="bl" formula="t+1"/>
+        <func type="br" formula="2*W-t-2"/>
+      </switchfuncs>
+      <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0,1,2,3" TP="0"/>
     </switchblock>
   </switchblocklist>
 
