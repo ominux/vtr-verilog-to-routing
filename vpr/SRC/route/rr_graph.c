@@ -417,7 +417,7 @@ void build_rr_graph(
 	} else if (BI_DIRECTIONAL == directionality) {
 		switch_block_conn = alloc_and_load_switch_block_conn(nodes_per_chan,
 				sb_type, Fs);
-//#define MY_SWITCHBLOCKS		
+#define MY_SWITCHBLOCKS		
 #ifdef MY_SWITCHBLOCKS
 		//OP: test new switchblock permutation funcs for the bidir case
 		sb_conn_map = alloc_and_load_switchblock_permutations(chan_details_x,

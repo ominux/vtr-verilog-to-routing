@@ -107,13 +107,21 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 			INP t_track_type_sizes *track_type_sizes, INP e_directionality directionality, 
 			INOUTP t_sb_connection_map *sb_conns);
 
+/* returns the track indices belonging to the types in track_type_vec and wirepoint in point at the given 
+   coordinates/side */ 
 static void get_wirepoint_tracks( INP e_directionality directionality, INP int nx, INP int ny, INP int x, INP int y, 
-		INP e_side side, INP string track_type, INP vector<int> *points, INP t_track_type_sizes *track_type_sizes,
+		INP e_side side, INP vector<string> *track_type_vec, INP vector<int> *points, INP t_track_type_sizes *track_type_sizes,
 		INP t_wirepoint_start_map *wirepoint_starts, INP bool is_dest, INOUTP vector<int> *tracks);
 
+/* wirepoint_starts contains the track indices of each wire type and wire point at a reference switchblock. 
+   the wirepoint indices can be translated to another coordinate based on the distance between this and the
+   reference coordinates. Here the index of the first track at the specified wirepoint/side is returned
+   based on the specified distance between the desired and reference switchblocks. Returns -1 if 
+   specified type doesn't have the specified wirepoint */ 
 static int get_adjusted_wirepoint_start(INP e_directionality directionality, INP int wirepoint, INP e_side side, 
-		INP string track_type, INP int num_type_tracks, INP int type_track_length, INP int last_type_track,
-		INP int distance, INP int dir_adjust, INP bool is_dest, INP t_wirepoint_start_map *wirepoint_starts);
+		INP string track_type, INP int num_type_tracks, INP int type_track_length, INP int first_type_track, 
+		INP int last_type_track, INP int distance, INP int dir_adjust, INP bool is_dest, 
+		INP t_wirepoint_start_map *wirepoint_starts);
 
 static t_rr_type index_into_correct_chan(INP int tile_x, INP int tile_y, INP enum e_side side, 
 			INP t_chan_details *chan_details_x, INP t_chan_details *chan_details_y,
@@ -169,13 +177,23 @@ static void get_wirepoint_tracks(INP int nx, INP int ny, INP t_seg_details *trac
 			INP e_direction track_direction, INP int nodes_per_chan, INP t_track_type_sizes *track_type_sizes, 
 			INP e_side sb_side, INOUTP vector<int> *tracks);
 
+/* returns true if the coordinates x/y do not correspond to the location specified by 'location' */
+static bool sb_not_here(INP int nx, INP int ny, INP int x, INP int y, INP e_sb_location location);
+
 /* checks if the specified coordinates represent a corner of the FPGA */
 static bool is_corner(INP int nx, INP int ny, INP int x, INP int y);
 
+/* checks if the specified coordinates correspond to one of the perimeter switchblocks */
+static bool is_perimeter(INP int nx, INP int ny, INP int x, INP int y);
+
+/* checks if the specified coordinates correspond to the core of the FPGA (i.e. not perimeter) */
+static bool is_core(INP int nx, INP int ny, INP int x, INP int y);
+
 /* adjusts a negative destination track calculated from a permutation formula */
 static int adjust_formula_result(INP int dest_track, INP int dest_W);
-/**** Function Definitions ****/
 
+
+/**** Function Definitions ****/
 
 
 /* allocate and build the switchblock permutation map */
@@ -201,7 +219,9 @@ t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_detail
 	determine_wirepoint_starts(directionality, nx, ny, chan_details_x,
 			chan_details_y, &track_type_sizes, nodes_per_chan, &wirepoint_starts);
 
-	/* figure out max(lcm(L_i, L_j)) for all i & j */
+
+#if 1
+	/* figure out max(lcm(L_i, L_j)) for all wire lengths belonging to wire types i & j */
 	int max_lcm = get_max_lcm(&switchblocks, &track_type_sizes);
 	t_sb_connection_map sb_line;
 
@@ -218,40 +238,43 @@ t_sb_connection_map * alloc_and_load_switchblock_permutations( INP t_chan_detail
 	stampout_switchblock_line( max_lcm, &wirepoint_starts, nodes_per_chan,
 			nx, ny, &track_type_sizes, directionality, &sb_line, sb_conns );
 
+#else
+	/* iterate over all the switchblocks specified in the architecture */
+	for (int i_sb = 0; i_sb < (int)switchblocks.size(); i_sb++){
+		t_switchblock_inf sb = switchblocks[i_sb];
 
-	///* iterate over all the switchblocks specified in the architecture */
-	//for (int i_sb = 0; i_sb < (int)switchblocks.size(); i_sb++){
-	//	t_switchblock_inf sb = switchblocks[i_sb];
+		/* verify that switchblock type matches specified directionality -- currently we have to stay consistent */
+		if (directionality != sb.directionality){
+			vpr_printf(TIO_MESSAGE_ERROR, "alloc_and_load_switchblock_connections: Switchblock %s does not match directionality of architecture\n", sb.name.c_str());
+			exit(1);
+		}
+		/* Iterate over the x,y coordinates spanning the FPGA. Currently, the FPGA size is set as
+		   (0..nx+1) by (0..ny+1), so we iterate over 0..nx and 0..ny. */
+		for (int x_coord = 0; x_coord <= nx+1; x_coord++){
+			for (int y_coord = 0; y_coord <= ny+1; y_coord++){
+				if (sb_not_here(nx, ny, x_coord, y_coord, sb.location)){
+					continue;
+				}
+				/* Iterate over each track in channel */
+				for (int from_track = 0; from_track < nodes_per_chan; from_track++){
 
-	//	/* verify that switchblock type matches specified directionality -- currently we have to stay consistent */
-	//	if (directionality != sb.directionality){
-	//		vpr_printf(TIO_MESSAGE_ERROR, "alloc_and_load_switchblock_connections: Switchblock %s does not match directionality of architecture\n", sb.name.c_str());
-	//		exit(1);
-	//	}
-	//	/* Iterate over the x,y coordinates spanning the FPGA. Currently, the FPGA size is set as
-	//	   (0..nx+1) by (0..ny+1), so we iterate over 0..nx and 0..ny. */
-	//	for (int x_coord = 0; x_coord <= nx+1; x_coord++){
-	//		for (int y_coord = 0; y_coord <= ny+1; y_coord++){
-	//			/* Iterate over each track in channel */
-	//			for (int from_track = 0; from_track < nodes_per_chan; from_track++){
-
-	//				/* now we iterate over all the potential side1->side2 connections */
-	//				for ( e_side from_side = (e_side) 0; from_side < 4; from_side = (e_side)(from_side + 1) ){
-	//					for ( e_side to_side = (e_side) 0; to_side < 4; to_side = (e_side)(to_side + 1) ){
-	//						
-	//						/* Fill appropriate entry of the sb_conns map with vector specifying the tracks 
-	//						   the current track will connect to */
-	//						compute_track_connections(x_coord, y_coord, from_side, to_side, from_track,
-	//								chan_details_x, chan_details_y, &sb, nx, ny, nodes_per_chan,
-	//								&wirepoint_starts, &track_type_sizes, directionality, sb_conns);
-	//						
-	//					}
-	//				}
-	//			}
-	//		}
-	//	}
-	//}
-
+					/* now we iterate over all the potential side1->side2 connections */
+					for ( e_side from_side = (e_side) 0; from_side < 4; from_side = (e_side)(from_side + 1) ){
+						for ( e_side to_side = (e_side) 0; to_side < 4; to_side = (e_side)(to_side + 1) ){
+							
+							/* Fill appropriate entry of the sb_conns map with vector specifying the tracks 
+							   the current track will connect to */
+							compute_track_connections(x_coord, y_coord, from_side, to_side, from_track,
+									chan_details_x, chan_details_y, &sb, nx, ny, nodes_per_chan,
+									&wirepoint_starts, &track_type_sizes, directionality, sb_conns);
+							
+						}
+					}
+				}
+			}
+		}
+	}
+#endif
 	return sb_conns;
 }
 
@@ -268,16 +291,26 @@ static int get_max_lcm( INP vector<t_switchblock_inf> *switchblocks, INP t_track
 	int max_lcm = -1;
 	int num_sb = (int)switchblocks->size();
 
-	for (int i = 0; i < num_sb; i++){
-		t_switchblock_inf *sb = &(switchblocks->at(i));
-		int num_wireconns = sb->wireconns.size();
-		for (int j = 0; j < num_wireconns; j++){
-			t_wireconn_inf *wc = &(sb->wireconns.at(j));
-			int length1 = track_type_sizes->at(wc->from_type).length;
-			int length2 = track_type_sizes->at(wc->to_type).length;
-			int current_lcm = lcm(length1, length2);
-			if (current_lcm > max_lcm){
-				max_lcm = current_lcm;
+	/* over each switchblock */
+	for (int isb = 0; isb < num_sb; isb++){
+		t_switchblock_inf *sb = &(switchblocks->at(isb));
+		int num_wireconns = (int)sb->wireconns.size();
+		/* over each wireconn */
+		for (int iwc = 0; iwc < num_wireconns; iwc++){
+			t_wireconn_inf *wc = &(sb->wireconns.at(iwc));
+			int num_from_types = (int)wc->from_type.size();
+			int num_to_types = (int)wc->to_type.size();
+			/* over each from type */
+			for (int ifrom = 0; ifrom < num_from_types; ifrom++){
+				/* over each to type */
+				for (int ito = 0; ito < num_to_types; ito++){
+					int length1 = track_type_sizes->at(wc->from_type.at(ifrom)).length;
+					int length2 = track_type_sizes->at(wc->to_type.at(ito)).length;
+					int current_lcm = lcm(length1, length2);
+					if (current_lcm > max_lcm){
+						max_lcm = current_lcm;
+					}
+				}
 			}
 		}
 	}
@@ -296,6 +329,9 @@ static void compute_switchblock_line(INP int sb_line_size, INP t_chan_details *c
 	for (int isb = 0; isb < (int)switchblocks->size(); isb++){
 		t_switchblock_inf *sb = &(switchblocks->at(isb));
 		for (int x = 1; x < 1 + sb_line_size; x++){
+			if (sb_not_here(nx, ny, x, y, sb->location)){
+				continue;
+			}
 			/* Iterate over each track in channel */
 			for (int from_track = 0; from_track < nodes_per_chan; from_track++){
 				/* now we iterate over all the potential side1->side2 connections */
@@ -314,6 +350,41 @@ static void compute_switchblock_line(INP int sb_line_size, INP t_chan_details *c
 	}
 }
 
+/* returns true if the coordinates x/y do not correspond to the location specified by 'location' */
+static bool sb_not_here(INP int nx, INP int ny, INP int x, INP int y, INP e_sb_location location){
+	bool sb_not_here = true;
+
+	switch( location ){
+		case E_EVERYWHERE:
+			sb_not_here = false;
+			break;
+		case E_PERIMETER:
+			if (is_perimeter(nx, ny, x, y)){
+				sb_not_here = false;
+			}
+			break;
+		case E_CORNER:
+			if (is_corner(nx, ny, x, y)){
+				sb_not_here = false;
+			}
+			break;
+		case E_CORE:
+			if (is_core(nx, ny, x, y)){
+				sb_not_here = false;
+			}
+			break;
+		case E_FRINGE:
+			if (is_perimeter(nx, ny, x, y) && !is_corner(nx, ny, x, y)){
+				sb_not_here = false;
+			}
+			break;
+		default:
+			vpr_printf(TIO_MESSAGE_ERROR, "sb_not_here: unrecognized location enum: %d\n", location);
+			break;
+	}
+	return sb_not_here;
+}
+
 /* checks if the specified coordinates represent a corner of the FPGA */
 static bool is_corner(INP int nx, INP int ny, INP int x, INP int y){
 	bool is_corner = false;
@@ -324,6 +395,22 @@ static bool is_corner(INP int nx, INP int ny, INP int x, INP int y){
 		is_corner = true;
 	}
 	return is_corner;
+}
+
+/* checks if the specified coordinates correspond to one of the perimeter switchblocks */
+static bool is_perimeter(INP int nx, INP int ny, INP int x, INP int y){
+	bool is_perimeter = false;
+	if (x == 0 || x == nx ||
+	    y == 0 || y == ny){
+		is_perimeter = true;
+	}
+	return is_perimeter;
+}
+
+/* checks if the specified coordinates correspond to the core of the FPGA (i.e. not perimeter) */
+static bool is_core(INP int nx, INP int ny, INP int x, INP int y){
+	bool is_core = !is_perimeter(nx, ny, x, y);
+	return is_core;
 }
 	
 /* stamp out a line of horizontal switchblocks starting at coordinates (ref_x, ref_y) and
@@ -338,8 +425,8 @@ static void stampout_switchblock_line( INP int sb_line_size,
 	for (int x = 1; x < nx; x++){
 		/* over all y coordinates that may need stamping out */
 		for (int y = 1; y < ny; y++){
-			/* corners have been precomputed */
-			if ( is_corner(nx, ny, x, y) ){
+			/* perimeter has been precomputed */
+			if ( is_perimeter(nx, ny, x, y) ){
 				continue;
 			}
 			/* over each source side */
@@ -420,6 +507,9 @@ static void compute_perimeter_switchblocks(INP t_chan_details *chan_details_x, I
 		t_switchblock_inf *sb = &(switchblocks->at(isb));
 		for (int i = 0; i < 2; i++){
 			for (y = 0; y <= ny+1; y++){
+				if (sb_not_here(nx, ny, x, y, sb->location)){
+					continue;
+				}
 				/* Iterate over each track in channel */
 				for (int from_track = 0; from_track < nodes_per_chan; from_track++){
 					/* now we iterate over all the potential side1->side2 connections */
@@ -445,6 +535,9 @@ static void compute_perimeter_switchblocks(INP t_chan_details *chan_details_x, I
 		t_switchblock_inf *sb = &(switchblocks->at(isb));
 		for (int i = 0; i < 2; i++){
 			for (x = 0; x <= nx+1; x++){
+				if (sb_not_here(nx, ny, x, y, sb->location)){
+					continue;
+				}
 				/* Iterate over each track in channel */
 				for (int from_track = 0; from_track < nodes_per_chan; from_track++){
 					/* now we iterate over all the potential side1->side2 connections */
@@ -589,9 +682,15 @@ static void count_track_type_sizes(INP t_seg_details *channel, INP int nodes_per
 	return;
 } 
 
+/* wirepoint_starts contains the track indices of each wire type and wire point at a reference switchblock. 
+   the wirepoint indices can be translated to another coordinate based on the distance between this and the
+   reference coordinates. Here the index of the first track at the specified wirepoint/side is returned
+   based on the specified distance between the desired and reference switchblocks. Returns -1 if 
+   specified type doesn't have the specified wirepoint */ 
 static int get_adjusted_wirepoint_start(INP e_directionality directionality, INP int wirepoint, INP e_side side, 
-		INP string track_type, INP int num_type_tracks, INP int type_track_length, INP int last_type_track,
-		INP int distance, INP int dir_adjust, INP bool is_dest, INP t_wirepoint_start_map *wirepoint_starts){
+		INP string track_type, INP int num_type_tracks, INP int type_track_length, INP int first_type_track, 
+		INP int last_type_track, INP int distance, INP int dir_adjust, INP bool is_dest, 
+		INP t_wirepoint_start_map *wirepoint_starts){
 	int wirepoint_start = -1;
 
 	if (distance < 0){
@@ -599,80 +698,97 @@ static int get_adjusted_wirepoint_start(INP e_directionality directionality, INP
 	}
 	
 	pair<e_side, int> ind(side, wirepoint);
-	wirepoint_start = wirepoint_starts->at(track_type).at(ind);
-	wirepoint_start = (wirepoint_start + dir_adjust*distance) % (dir_adjust * type_track_length);
+	if (map_key_exists(ind, &(wirepoint_starts->at(track_type)))){
+		wirepoint_start = wirepoint_starts->at(track_type).at(ind);
+		wirepoint_start = (wirepoint_start - first_type_track + dir_adjust*distance) 
+				% (dir_adjust * type_track_length) + first_type_track;
 
-	/* the wirepoint_starts that were computed at the reference coordinate were computed as potential source
-	   tracks. so if we're looking for a track to serve as the destination of a connection in a unidir 
-	   architecture, we need to further adjust the wirepoint start */
-	if (UNI_DIRECTIONAL == directionality && is_dest){
-		if (TOP == side || RIGHT == side){
-			wirepoint_start--;
-		} else {
-			wirepoint_start++;
+		/* the wirepoint_starts that were computed at the reference coordinate were computed as potential source
+		   tracks. so if we're looking for a track to serve as the destination of a connection in a unidir 
+		   architecture, we need to further adjust the wirepoint start */
+		if (UNI_DIRECTIONAL == directionality && is_dest){
+			if (TOP == side || RIGHT == side){
+				wirepoint_start--;
+			} else {
+				wirepoint_start++;
+			}
 		}
+	} else {
+		wirepoint_start = -1;
 	}
 
 	return wirepoint_start;
 }
 
- 
+
+/* returns the track indices belonging to the types in track_type_vec and wirepoint in point at the given 
+   coordinates/side */ 
 static void get_wirepoint_tracks( INP e_directionality directionality, INP int nx, INP int ny, INP int x, INP int y, 
-		INP e_side side, INP string track_type, INP vector<int> *points, INP t_track_type_sizes *track_type_sizes,
+		INP e_side side, INP vector<string> *track_type_vec, INP vector<int> *points, INP t_track_type_sizes *track_type_sizes,
 		INP t_wirepoint_start_map *wirepoint_starts, INP bool is_dest, INOUTP vector<int> *tracks){
 
-	/* get the number of tracks of given type */
-	int num_type_tracks = track_type_sizes->at(track_type).num_tracks;
-	/* get the length of this type of track */
-	int type_track_length = track_type_sizes->at(track_type).length;
-	/* get the last track belonging to this type */
-	int first_type_track = track_type_sizes->at(track_type).start;
-	int last_type_track = first_type_track + num_type_tracks - 1;
-
-	/* distance between the reference switchblock that was used to calculate wirepoints
-	   and the current coordinate */
-	int distance = (x - REF_X) + (y - REF_Y);
-
-	/* a factor to adjust for different directionalities */
-	int dir_adjust;
-	if (BI_DIRECTIONAL == directionality){
-		dir_adjust = 1;
-	} else if (UNI_DIRECTIONAL == directionality){
-		dir_adjust = 2;
-	} else {
-		vpr_printf(TIO_MESSAGE_ERROR, "get_wirepoint_tracks(): unknown directionality %d\n", directionality);
-		exit(1);
-	}
-
 	tracks->clear();
-	tracks->reserve( num_type_tracks / type_track_length + 1 );
 
-	int increment;
-	/* for each wirepoint */
-	for (int iwp = 0; iwp < (int)points->size(); iwp++){
+	int num_types = (int)track_type_vec->size();
+	for (int itype = 0; itype < num_types; itype++){
+		string track_type = track_type_vec->at(itype);
 
-		int wirepoint = points->at(iwp);
-		int wirepoint_start = get_adjusted_wirepoint_start(directionality, wirepoint, side, track_type, 
-				num_type_tracks, type_track_length, last_type_track, distance, dir_adjust, 
-				is_dest, wirepoint_starts);
-		
-		/* in a unidirectional arch, connections may only be made to wirepoint 0. in the corners of
-		   the FPGA, and some sides of the perimeter tiles, all wires are of wirepoint 0 */
-		if (UNI_DIRECTIONAL == directionality && 
-		    is_dest && 
-		    0 == wirepoint &&
-		    ((TOP==side && y==0) ||
-		     (RIGHT==side && x==0) ||
-		     (LEFT==side && x==nx) ||
-		     (BOTTOM==side && y==ny))){
-			increment = dir_adjust;
-			wirepoint_start = wirepoint_start - increment*floor((wirepoint_start - first_type_track) / increment);
+		/* get the number of tracks of given type */
+		int num_type_tracks = track_type_sizes->at(track_type).num_tracks;
+		/* get the length of this type of track */
+		int type_track_length = track_type_sizes->at(track_type).length;
+		/* get the last track belonging to this type */
+		int first_type_track = track_type_sizes->at(track_type).start;
+		int last_type_track = first_type_track + num_type_tracks - 1;
+
+		/* distance between the reference switchblock that was used to calculate wirepoints
+		   and the current coordinate */
+		int distance = (x - REF_X) + (y - REF_Y);
+
+		/* a factor to adjust for different directionalities */
+		int dir_adjust;
+		if (BI_DIRECTIONAL == directionality){
+			dir_adjust = 1;
+		} else if (UNI_DIRECTIONAL == directionality){
+			dir_adjust = 2;
 		} else {
-			increment = dir_adjust * type_track_length;
+			vpr_printf(TIO_MESSAGE_ERROR, "get_wirepoint_tracks(): unknown directionality %d\n", directionality);
+			exit(1);
 		}
 
-		for (int itrack = wirepoint_start; itrack <= last_type_track; itrack += increment){
-			tracks->push_back( itrack );
+		int increment;
+		/* for each wirepoint */
+		for (int iwp = 0; iwp < (int)points->size(); iwp++){
+
+			int wirepoint = points->at(iwp);
+			int wirepoint_start = get_adjusted_wirepoint_start(directionality, wirepoint, side, track_type, 
+					num_type_tracks, type_track_length, first_type_track, last_type_track, distance, dir_adjust, 
+					is_dest, wirepoint_starts);
+				
+			/* get_adjusted_wirepoint_start returns -1 if the given types doesn't have the specified wirepoint.
+			   (this might happen if L=2 but wirepoint=4). We just ignore that */
+			if (-1 == wirepoint_start){
+				continue;
+			}
+	
+			/* in a unidirectional arch, connections may only be made to wirepoint 0. in the corners of
+			   the FPGA, and some sides of the perimeter tiles, all wires are of wirepoint 0 */
+			if (UNI_DIRECTIONAL == directionality && 
+			    is_dest && 
+			    0 == wirepoint &&
+			    ((TOP==side && y==0) ||
+			     (RIGHT==side && x==0) ||
+			     (LEFT==side && x==nx) ||
+			     (BOTTOM==side && y==ny))){
+				increment = dir_adjust;
+				wirepoint_start = wirepoint_start - increment*floor((wirepoint_start - first_type_track) / increment);
+			} else {
+				increment = dir_adjust * type_track_length;
+			}
+
+			for (int itrack = wirepoint_start; itrack <= last_type_track; itrack += increment){
+				tracks->push_back( itrack );
+			}
 		}
 	}
 	sort(tracks->begin(), tracks->end());
@@ -735,8 +851,8 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		t_wireconn_inf *wireconn_ptr = &(sb->wireconns.at(iconn));
 
 		/* name of track type we're connecting from/to */
-		const char *from_track_type = wireconn_ptr->from_type.c_str();
-		const char *to_track_type = wireconn_ptr->to_type.c_str();
+		vector<string> *from_track_type = &(wireconn_ptr->from_type);
+		vector<string> *to_track_type = &(wireconn_ptr->to_type);
 		/* the 'seg' coordinates of the from/to channels */
 		int from_seg = get_seg_coordinate( from_chan_type, from_x, from_y );
 		int to_seg = get_seg_coordinate( to_chan_type, to_x, to_y );
@@ -755,13 +871,20 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		/* the effective destination channel width is the size of the destination track group */
 		int dest_W;
 
-		/* check that the current track has the type specified by the wire connection */
-		if ( strcmp(track_name, from_track_type) != 0 ){	
+		/* check that the current track has one of the types specified by the wire connection */
+		bool skip = true;
+		for (int itype = 0; itype < (int)from_track_type->size(); itype++){
+			if ( strcmp(from_track_type->at(itype).c_str(), track_name) == 0 ){
+				skip = false;
+				break;
+			}
+		}
+		if (skip){
 			continue;
 		}
 
 		/* check that the current track has one of the source wire points specified by the wire connection */
-		bool skip = true;
+		skip = true;
 		for (int ipoint = 0; ipoint < (int)wireconn_ptr->from_point.size(); ipoint++){
 			if (from_wirepoint.at(0) == wireconn_ptr->from_point.at(ipoint)){
 				skip = false;
@@ -775,7 +898,9 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		/* now we need to find all tracks in the destination channel that correspond to the 
 		   type and group specified by the current wireconn_ptr. Must also go in appropriate 
 		   direction (from e_direction) */
-		
+
+		//Do outgoing unidir tracks get here?
+
 		/* get the indices of tracks in the destination group, as well as the effective destination 
 		   channel width (which is the number of tracks in destination group) */
 		get_wirepoint_tracks(directionality, nx, ny, x_coord, y_coord, to_side, to_track_type, &to_wirepoint, track_type_sizes, 
@@ -1042,7 +1167,6 @@ static int get_track_group(INP int nx, INP int ny, INP e_rr_type chan_type,
 		group = (track_length-1) - (seg_end - seg_coord);
 	} else {
 		/* track must span the entire FPGA */
-		//assert( track_details.longline ); TODO: confirm what longline is
 		group = 0;
 	}
 
@@ -1119,7 +1243,6 @@ static void get_group_tracks(INP int nx, INP int ny, INP t_seg_details *track_de
 			INP const char *track_type, INP int track_group, INP int track_seg_coord, 
 			INP e_direction track_direction, INP int nodes_per_chan, INP int type_start, 
 			INP t_track_type_sizes *track_type_sizes, INOUTP vector<int> *tracks){
-	bool found_group = false;
 
 	int group_size;			/* the number of tracks in the channel belonging to specified type->group */
 	int group_start;		/* track index at which the given 'group' starts */
@@ -1148,9 +1271,8 @@ static void get_group_tracks(INP int nx, INP int ny, INP t_seg_details *track_de
 					track_type_sizes);
 	
 	if (-1 == group_start){
-		found_group = false;
+		/* could not find specified group, do nothing */
 	} else {
-		found_group = true;
 		track_type_end = type_start + track_type_sizes->at(map_accessor).num_tracks - 1;
 		track_length = track_details[group_start].length;
 

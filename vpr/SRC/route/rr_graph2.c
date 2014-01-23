@@ -1684,7 +1684,7 @@ int get_track_to_tracks(
 		/* Do edges going to the right SB side (if we're in CHANX) or top (if we're in CHANY). 
 		   However, can't connect to right (top) if already at rightmost (topmost) track end */
 		if (from_sb < from_end) {
-//#define MY_SWITCHBLOCKS
+#define MY_SWITCHBLOCKS
 #ifdef MY_SWITCHBLOCKS
 		if (DEC_DIRECTION == from_seg_details[from_track].direction || 
 		    BI_DIRECTIONAL == directionality){

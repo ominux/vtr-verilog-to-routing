@@ -111,6 +111,14 @@ typedef enum {
 	POWER_METHOD_ABSOLUTE			/* Dynamic: Aboslute, Static: Absolute */
 } e_power_estimation_method;
 
+/* Specifies what part of the FPGA a switchblock should be built in (i.e. perimeter, core, everywhere) */
+enum e_sb_location{
+	E_PERIMETER = 0,
+	E_CORNER,
+	E_FRINGE,		/* perimeter minus corners */
+	E_CORE,
+	E_EVERYWHERE
+};
 /*************************************************************************************************/
 /* FPGA grid layout data types                                                                   */
 /*************************************************************************************************/
@@ -787,10 +795,10 @@ typedef struct s_direct_inf {
 
 /* Used to list information about two segment types that connect together through a switchblock */
 typedef struct s_wireconn_inf{
-	std::string from_type;		/* connect from this wire type */
-	std::string to_type;		/* to this wire type */
-	std::vector<int> from_point;	/* indices of wire points belonging to from_type */
-	std::vector<int> to_point;	/* indices of wire points belong to to_type */
+	std::vector<std::string> from_type;		/* connect from these wire types */
+	std::vector<std::string> to_type;		/* to these wire type */
+	std::vector<int> from_point;			/* indices of wire points belonging to from_type */
+	std::vector<int> to_point;			/* indices of wire points belong to to_type */
 } t_wireconn_inf;
 
 /* represents a connection between two sides of a switchblock */
@@ -837,11 +845,12 @@ typedef std::map< Connect_SB_Sides, std::vector<std::string> > t_permutation_map
 
 /* Lists all information about switchblocks */
 typedef struct s_switchblock_inf{
-	std::string name;
-	enum e_directionality directionality;
+	std::string name;			/* the name of this switchblock */
+	e_sb_location location;			/* where on the FPGA this switchblock should be built (i.e. perimeter, core, everywhere) */
+	e_directionality directionality;	/* the directionality of this switchblock (unidir/bidir) */
 	std::string switch_name;		/* name of switch this switchblock uses -- must match entry in s_switch_inf */
 
-	t_permutation_map permutation_map;
+	t_permutation_map permutation_map;	/* map holding the permutation functions attributed to this switchblock */
 
 	std::vector<t_wireconn_inf> wireconns;	/* list of wire types/groups this SB will connect */
 } t_switchblock_inf;

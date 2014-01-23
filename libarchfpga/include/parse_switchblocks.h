@@ -1,10 +1,11 @@
-#ifndef XML_ARCH_SWITCHBLOCKS_H
-#define XML_ARCH_SWITCHBLOCKS_H
+#ifndef PARSE_SWITCHBLOCKS_H
+#define PARSE_SWITCHBLOCKS_H
 
 /**** Includes ****/
 #include "ezxml.h"
 
 /**** Enums ****/
+
 
 /**** Structs ****/
 /* contains data passed in to the switchblock parser */
@@ -30,4 +31,4 @@ int get_sb_formula_result( INP const char* formula, INP const s_formula_data &my
 
 
 
-#endif /* XML_ARCH_SWITCHBLOCKS_H */
+#endif /* PARSE_SWITCHBLOCKS_H */

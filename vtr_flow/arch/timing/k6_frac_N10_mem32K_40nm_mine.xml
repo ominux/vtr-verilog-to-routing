@@ -226,6 +226,7 @@
 
     <switchblock name="test" type="bidir">
       <switch_type name="0"/>
+      <switchblock_location type="EVERYWHERE"/>
       <switchfuncs>
 	<func type="lr" formula="t"/>
         <func type="lt" formula="W-t"/>

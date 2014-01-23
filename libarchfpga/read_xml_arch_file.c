@@ -3021,7 +3021,7 @@ static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP vector<t_switchblock
 			} else if (0 == strcmp(tmp, "unidir")){
 				sb.directionality = UNI_DIRECTIONAL;
 			} else {
-				vpr_printf(TIO_MESSAGE_ERROR, "unsupported switchblock type: %s\n", tmp);
+				vpr_printf(TIO_MESSAGE_ERROR, "ProcessSwitchblocks: unsupported switchblock type: %s\n", tmp);
 				exit(1);
 			}
 		}
@@ -3034,6 +3034,28 @@ static void ProcessSwitchblocks(INOUTP ezxml_t Parent, OUTP vector<t_switchblock
 			sb.switch_name = tmp;
 		}
 		ezxml_set_attr(SubElem, "name", NULL);
+		FreeNode(SubElem);
+
+		/* get the switchblock location */
+		SubElem = ezxml_child(Node, "switchblock_location");
+		tmp = FindProperty(SubElem, "type", TRUE);
+		if (tmp){
+			if (strcmp(tmp, "EVERYWHERE") == 0){
+				sb.location = E_EVERYWHERE;
+			} else if (strcmp(tmp, "PERIMETER") == 0){
+				sb.location = E_PERIMETER;
+			} else if (strcmp(tmp, "CORE") == 0){
+				sb.location = E_CORE;
+			} else if (strcmp(tmp, "CORNER") == 0){
+				sb.location = E_CORNER;
+			} else if (strcmp(tmp, "FRINGE") == 0){
+				sb.location = E_FRINGE;
+			} else {
+				vpr_printf(TIO_MESSAGE_ERROR, "ProcessSwitchblocks: unrecognized switchblock location: %s\n", tmp);
+				exit(1);
+			}
+		}
+		ezxml_set_attr(SubElem, "type", NULL);
 		FreeNode(SubElem);
 
 		/* get switchblock permutation functions */

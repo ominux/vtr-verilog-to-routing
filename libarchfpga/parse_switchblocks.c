@@ -18,6 +18,7 @@ specified by the switchblock permutation functions into their numeric counterpar
 #include <vector>
 #include <stack>
 #include <utility>
+#include <algorithm>
 #include "util.h"
 #include "read_xml_util.h"
 #include "arch_types.h"
@@ -74,6 +75,10 @@ public:
 /**** Function Declarations ****/
 
 /*---- Functions for Parsing Switchblocks from Architecture ----*/
+
+/* parses the wire types specified in the comma-separated 'ch' char array into the vector wire_points_vec. 
+   Spaces are trimmed off */
+static void parse_comma_separated_wire_types(INP const char *ch, INOUTP vector<string> *wire_types_vec);
 
 /* parses the wirepoints specified in ch into the vector wire_points_vec */
 static void parse_comma_separated_wire_points(INP const char *ch, INOUTP vector<int> *wire_points_vec);
@@ -157,12 +162,14 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 
 		/* get from type */
 		char_prop = FindProperty(SubElem, "FT", TRUE);
-		wc.from_type = char_prop;
+		parse_comma_separated_wire_types(char_prop, &wc.from_type);
+		//wc.from_type = char_prop;
 		ezxml_set_attr(SubElem, "FT", NULL);
 
 		/* get to type */
 		char_prop = FindProperty(SubElem, "TT", TRUE);
-		wc.to_type = char_prop;
+		parse_comma_separated_wire_types(char_prop, &wc.to_type);
+		//wc.to_type = char_prop;
 		ezxml_set_attr(SubElem, "TT", NULL);
 
 		/* get the source wire point */
@@ -182,7 +189,41 @@ void read_sb_wireconns( INP ezxml_t Node, INOUTP t_switchblock_inf *sb ){
 	return;
 }
 
-/* parses the wirepoints specified in the comma-separated 'ch' array into the vector wire_points_vec */
+/* parses the wire types specified in the comma-separated 'ch' char array into the vector wire_points_vec. 
+   Spaces are trimmed off */
+static void parse_comma_separated_wire_types(INP const char *ch, INOUTP vector<string> *wire_types_vec){
+	
+	string types(ch);
+	int str_size = types.size();
+	int ch_start = 0;
+	int ind = 0;
+
+	if (0 == str_size){
+		vpr_printf(TIO_MESSAGE_ERROR, "parse_comma_separated_wire_types: found empty wireconn wire type entry\n");
+		exit(1);
+	}
+
+	while (ch_start <= str_size - 1){
+		string substr;
+		
+		/* get the next wire type */
+		if (ind != str_size - 1){
+			goto_next_char(&ind, types, ',');
+		}
+		if (ind == str_size - 1){
+			substr = types.substr(ch_start, ind - ch_start + 1);
+		} else {
+			substr = types.substr(ch_start, ind - ch_start);
+		}
+		/* trim whitespace */
+		substr.erase(substr.begin(), std::find_if(substr.begin(), substr.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+		wire_types_vec->push_back( substr );
+
+		ch_start = ind + 1;
+	}
+}
+
+/* parses the wirepoints specified in the comma-separated 'ch' char array into the vector wire_points_vec */
 static void parse_comma_separated_wire_points(INP const char *ch, INOUTP vector<int> *wire_points_vec){
 	int ind = 0;
 	wire_points_vec->clear();
