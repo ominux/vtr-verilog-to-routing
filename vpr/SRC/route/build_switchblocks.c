@@ -452,7 +452,13 @@ static void stampout_switchblock_line( INP int sb_line_size,
 						Switchblock_Lookup my_key(x, y, from_side, to_side, itrack);
 						Switchblock_Lookup copy_key(copy_x, copy_y, from_side, to_side, itrack);
 
-						(*sb_conns)[my_key] = (*sb_line)[copy_key];
+						//TODO: figure out why it sometimes crashes if we don't do this. Make sure nothing sketchy is 
+						//	going on...
+						if ( !map_key_exists(copy_key, sb_line) ){
+							continue;
+						}
+
+						(*sb_conns)[my_key] = sb_line->at(copy_key);
 					}
 				}
 			}
@@ -721,6 +727,12 @@ static int get_adjusted_wirepoint_start(INP e_directionality directionality, INP
 }
 
 
+static bool compare_pair_by_first(const pair<int, int> &obj1, const pair<int, int> &obj2){
+	bool result;
+	result = obj1.first < obj1.second;
+	return result;
+}
+
 /* returns the track indices belonging to the types in track_type_vec and wirepoint in point at the given 
    coordinates/side */ 
 static void get_wirepoint_tracks( INP e_directionality directionality, INP int nx, INP int ny, INP int x, INP int y, 
@@ -728,8 +740,8 @@ static void get_wirepoint_tracks( INP e_directionality directionality, INP int n
 		INP t_wirepoint_start_map *wirepoint_starts, INP bool is_dest, INOUTP vector<int> *tracks){
 
 	tracks->clear();
-
 	int num_types = (int)track_type_vec->size();
+
 	for (int itype = 0; itype < num_types; itype++){
 		string track_type = track_type_vec->at(itype);
 
@@ -850,7 +862,7 @@ static void compute_track_connections(INP int x_coord, INP int y_coord, INP enum
 		/* pointer to a connection specification between two wire types/groups */
 		t_wireconn_inf *wireconn_ptr = &(sb->wireconns.at(iconn));
 
-		/* name of track type we're connecting from/to */
+		/* names of track type we may be connecting from/to */
 		vector<string> *from_track_type = &(wireconn_ptr->from_type);
 		vector<string> *to_track_type = &(wireconn_ptr->to_type);
 		/* the 'seg' coordinates of the from/to channels */

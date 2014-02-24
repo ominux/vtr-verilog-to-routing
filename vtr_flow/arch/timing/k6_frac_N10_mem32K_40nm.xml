@@ -184,7 +184,7 @@
     <!--- VB & JL: using ITRS metal stack data, 96 nm half pitch wires, which are intermediate metal width/space.  
 			     With the 96 nm half pitch, such wires would take 60 um of height, vs. a 90 nm high (approximated as square) Stratix IV tile so this seems
 			     reasonable. Using a tile length of 90 nm, corresponding to the length of a Stratix IV tile if it were square. -->
-    <segment name="l4_unidir_seg" freq="0.5" length="4" type="unidir" Rmetal="101" Cmetal="22.5e-15">
+    <segment name="l4_unidir_seg" freq="1.0" length="4" type="unidir" Rmetal="101" Cmetal="22.5e-15">
       <mux name="0"/>
       <sb type="pattern">1 1 1 1 1</sb>
       <cb type="pattern">1 1 1 1</cb>
@@ -204,66 +204,42 @@
       <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0" TP="0"/>
     </switchblock>
 
-    <switchblock name="Core1" type="unidir">
+    <switchblock name="core1" type="unidir">
       <switch_type name="0"/>
       <switchblock_location type="CORE"/>
       <switchfuncs>
         <func type="lt" formula="W-t"/>
-        <func type="lb" formula="W+t-1"/>
         <func type="tl" formula="W-t"/>
-        <func type="tr" formula="t+1"/>
-        <func type="rt" formula="W+t-1"/>
         <func type="rb" formula="2*W-t-2"/>
-        <func type="bl" formula="t+1"/>
-        <func type="br" formula="2*W-t-2"/>
-      </switchfuncs>
-      <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0" TP="0"/>
-    </switchblock>
-
-    <switchblock name="Core2" type="unidir">
-      <switch_type name="0"/>
-      <switchblock_location type="CORE"/>
-      <switchfuncs>
-        <func type="lt" formula="t"/>
-        <func type="lb" formula="t"/>
-        <func type="tl" formula="t"/>
-        <func type="tr" formula="t"/>
-        <func type="rt" formula="t"/>
-        <func type="rb" formula="t"/>
-        <func type="bl" formula="t"/>
-        <func type="br" formula="t"/>
-      </switchfuncs>
-      <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="1,2,3" TP="0"/>
-    </switchblock>
-
-    <switchblock name="Turn" type="unidir">
-      <switch_type name="0"/>
-      <switchblock_location type="CORNER"/>
-      <switchfuncs>
-        <func type="lt" formula="W-t"/>
-        <func type="lb" formula="W+t-1"/>
-        <func type="tl" formula="W-t"/>
-        <func type="tr" formula="t+1"/>
-        <func type="rt" formula="W+t-1"/>
-        <func type="rb" formula="2*W-t-2"/>
-        <func type="bl" formula="t+1"/>
         <func type="br" formula="2*W-t-2"/>
       </switchfuncs>
       <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0,1,2,3" TP="0"/>
     </switchblock>
-
-    <switchblock name="fringeBlock" type="unidir">
+    <switchblock name="core2" type="unidir">
       <switch_type name="0"/>
-      <switchblock_location type="FRINGE"/>
+      <switchblock_location type="CORE"/>
       <switchfuncs>
-        <func type="lt" formula="t"/>
-        <func type="lb" formula="t"/>
-        <func type="tl" formula="W"/>
-        <func type="tr" formula="t"/>
-        <func type="rt" formula="t"/>
-        <func type="rb" formula="t"/>
-        <func type="bl" formula="t"/>
-        <func type="br" formula="t"/>
+        <func type="lb" formula="W+t-1"/>
+        <func type="tr" formula="t+1"/>
+        <func type="rt" formula="W+t-1"/>
+        <func type="bl" formula="t+1"/>
+      </switchfuncs>
+      <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0,1,2,3" TP="0"/>
+    </switchblock>
+
+
+    <switchblock name="perimeter" type="unidir">
+      <switch_type name="0"/>
+      <switchblock_location type="PERIMETER"/>
+      <switchfuncs>
+        <func type="lt" formula="W-t"/>
+        <func type="lb" formula="W+t-1"/>
+        <func type="tl" formula="W-t"/>
+        <func type="tr" formula="t+1"/>
+        <func type="rt" formula="W+t-1"/>
+        <func type="rb" formula="2*W-t-2"/>
+        <func type="bl" formula="t+1"/>
+        <func type="br" formula="2*W-t-2"/>
       </switchfuncs>
       <wireconn FT="l4_unidir_seg" TT="l4_unidir_seg" FP="0,1,2,3" TP="0"/>
     </switchblock>

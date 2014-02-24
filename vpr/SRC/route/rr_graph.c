@@ -905,6 +905,7 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 	assert(Fs % 3 == 0);
 	for (int i = 0; i <= L_nx; ++i) {
 		for (int j = 0; j <= L_ny; ++j) {
+			/* no horizontal channel at x = 0 */
 			if (i > 0) {
 				build_rr_xchan(i, j, track_to_pin_lookup, switch_block_conn, sb_conn_map,
 						CHANX_COST_INDEX_START, 
@@ -913,6 +914,7 @@ static void alloc_and_load_rr_graph(INP int num_nodes,
 						L_rr_node_indices, L_rr_edge_done, L_rr_node, 
 						wire_to_ipin_switch, directionality);
 			}
+			/* no vertical channel at y = 0 */
 			if (j > 0) {
 				build_rr_ychan(i, j, track_to_pin_lookup, switch_block_conn, sb_conn_map,
 						CHANX_COST_INDEX_START + num_seg_types, 
@@ -1303,8 +1305,9 @@ static void build_rr_xchan(INP int i, INP int j,
 		int start = seg_details[track].seg_start; 	
 		int end = seg_details[track].seg_end; 
 
+		/* skip if we're not at the start of a track */
 		if (i != start)
-			continue; /* Not the start of this segment. */
+			continue;
 
 		t_linked_edge *edge_list = NULL;
 

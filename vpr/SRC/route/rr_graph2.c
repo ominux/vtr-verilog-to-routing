@@ -1584,6 +1584,7 @@ int get_track_to_tracks(
 	boolean from_is_sblock, is_behind, Fs_clipped;
 	enum e_side from_side_a, from_side_b, to_side;
 
+	/* make sure we are at the start of the segment */
 	assert(from_seg == from_seg_details[from_track].seg_start); 
 
 	from_switch = from_seg_details[from_track].wire_switch;
@@ -1621,7 +1622,7 @@ int get_track_to_tracks(
 		}
 	}
 
-	/* Figure out which side of the SB the destination segment will connect to */
+	/* Figure out which side of the SB the destination segment lies on */
 	if (CHANX == to_type) {
 		to_side = (is_behind ? RIGHT : LEFT);
 	} else {
@@ -1657,7 +1658,7 @@ int get_track_to_tracks(
 		   i.e. for segments laid in the x-direction, from_sb corresponds to the x coordinate and from_chan to the y,
 		   but for segments in the y-direction, from_chan is the x coordinate and from_sb is the y. So here we reverse
 		   the coordinates if necessary */
-		//TODO: move this kind of thing to the top of the file where we will simply have to_x and to_y
+		//TODO: move this kind of thing to the top of the function where we will simply have to_x and to_y
 		//	as well as from_x and from_y
 		to_chan = from_sb;
 		to_sb = from_chan;
@@ -2034,7 +2035,7 @@ static int get_unidir_track_to_chan_seg(
 	return count;
 }
 
-/* Determines if the specified track (tracK) from the specified channel segment (seg_details)
+/* Determines if the specified track (track) from the specified channel segment (seg_details)
    has a SB connection at the specified location (sb_seg) along the track. sb_seg is the segment
    coordinate at which we check for an SB. This coordinate is converted to [0..length] for
    accessing t_seg_details->*sb */

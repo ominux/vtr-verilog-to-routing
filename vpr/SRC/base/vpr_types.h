@@ -875,7 +875,7 @@ typedef struct s_seg_details {
 	int seg_end;
 	int index;
 	float Cmetal_per_m; /* Used for power */
-	char *type_name_ptr;
+	const char *type_name_ptr;
 } t_seg_details;
 
 /* Lists detailed information about segmentation.  [0 .. W-1].              *

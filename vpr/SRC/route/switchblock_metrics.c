@@ -126,8 +126,11 @@ void get_conn_block_homogeneity(OUTP t_conn_block_homogeneity &cbm, INP t_type_p
 	//int_array_2d ph_pin_averages(block_type->num_pins, num_wire_types);
 	//int_array_3d hd_pin_array(4, block_type->num_pins, Fc);
 
+	if (0 == num_wire_types){
+		return;
+	}
 	
-	assert(num_wire_types != 0);
+	//assert(num_wire_types != 0);
 	assert(block_type->num_pins != 0);
 	//t_conn_block_homogeneity cbm;	//conn block metrics
 	cbm.wh_wire_conns.alloc_array(4, nodes_per_chan);

@@ -696,7 +696,8 @@ static void get_formula_object( INP const char *ch, INOUTP int &ichar, INP const
 				fobj->data.left_bracket = false;
 				break;
 			default:
-				vpr_printf(TIO_MESSAGE_ERROR, "in get_formula_object: unsupported character: '%c'\n", ch);
+				vpr_printf(TIO_MESSAGE_ERROR, "in get_formula_object: unsupported character: %c\n", *ch);
+				exit(1);
 				break; 
 		}	
 	}
@@ -963,4 +964,9 @@ static bool is_piecewise_formula( INP const char *formula ){
 		result = false;
 	}
 	return result;
+}
+
+ostream& operator<<(std::ostream &os, const Switchblock_Lookup &obj){
+	os << "[x: " << obj.x_coord << ", y: " << obj.y_coord << ", from_side: " << obj.from_side << ", to_side: " << obj.to_side << ", from_track: " << obj.track_num << "]";
+	return os;
 }
