@@ -39,12 +39,7 @@ labels = {
             'Low Stress Delay',...
             'Chan Width',...
             'Low Stress Wirelength',....
-            'Per-tile LB Routing Area',...
-            'LS clb PD',...
-            'LS clb WH',...
-            'LS clb HD',...
-            'LS clb HP',...
-            'LS clb PH'
+            'Per-tile LB Routing Area'
           };
 
 %parseRegex ordering has to match labels ordering
@@ -52,21 +47,17 @@ parseRegex = {
                 'Final critical path: (\d*\.*\d*)',...
                 'channel width factor of (\d+)',... 
                 'Total wirelength: (\d+)',...
-                '\s*Assuming no buffer sharing \(pessimistic\)\. Total: \d+\.\d+e\+\d+, per logic tile: (\d+)',...
-                'clb\s+Pin Diversity:\s+(\d*\.*\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+(\d*\.*\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+\d*\.*\d*\s+Hamming Distance:\s+(\d*\.*\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+\d*\.*\d*\s+Hamming Distance:\s+\d*\.*\d*\s+Hamming Proximity:\s+(\d*\.*\d*)',...
-                'clb\s+Pin Diversity:\s+\d*\.*\d*\s+Wire Homogeneity:\s+\d*\.*\d*\s+Hamming Distance:\s+\d*\.*\d*\s+Hamming Proximity:\s+\d*\.*\d*\s+Pin Homogeneity:\s+(\d*\.*\d*)'
+		'\s*Assuming no buffer sharing \(pessimistic\)\. Total: \d+\.\d+e\+\d+, per logic tile: (\d+)'
              };
+                %'\s*Total routing area: .*, per logic tile: (\d+)'
 
          
 % run from Fc_out = 0.1 to Fc_out = 0.3 in steps of 0.1         
-metricRange = 0.10:0.10:0.30;
+metricRange = 0.10:0.10:0.10;
 
 %if we use 4 workers, we can run 2 jobs in parallel; and it probably wont affect speed that much cause one of the big circuits
 % is the real bottleneck the other 3 workers will eventually have to wait for 
-matlabpool open 4;
+matlabpool open 3;
 
 % make VPR
 t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
@@ -92,6 +83,11 @@ for metric = metricRange
         minW = str2double(minW);
         lowStressW(ickt) = floor(minW*1.3);
 
+	%for a unidir architecture, we can only route with even channel width
+	if mod(lowStressW(ickt), 2) == 1
+		lowStressW(ickt) = lowStressW(ickt) + 1;
+	end
+
         display(['ckt: ' benchmark_list{ickt} ' hi-stress W: ' num2str(minW) '  low-stress W: ' num2str(lowStressW(ickt))]);
         
         %now get delay at the low stress W
@@ -106,6 +102,7 @@ for metric = metricRange
     
     %now have to compute the geometric average
     adjustedAvgMetrics(i,:) = geomean(adjustedCktMetrics,1);
+    adjustedAvgMetrics(i,:)
 end
 
 %matlabpool('close');
@@ -118,7 +115,7 @@ labels = ['metric' labels];
 
 adjustedAvgMetrics = [metricRange' adjustedAvgMetrics];
 append = false;
-t.printDataToFile('./run_metrics_Wilton++.txt', adjustedAvgMetrics, labels, append);
+t.printDataToFile('./run_metrics_Imran_prime.txt', adjustedAvgMetrics, labels, append);
 
 toc
 
