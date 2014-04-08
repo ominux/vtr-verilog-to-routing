@@ -1,7 +1,7 @@
 classdef Tester %< handle (or some other parent class)
     
    properties
-       vtrPath = '/home/oleg/Documents/work/UofT/Grad/my_vtr';                     %path to vtr folder
+       vtrPath = '/autofs/fs1.ece/fs1.eecg.vaughn/opetelin/my_vtr';                     %path to vtr folder
        vprPath = '';
        tasksPath = '';                                %run all .blif circuits here
        architecture = 'k6_frac_N10_mem32K_40nm_mine.xml';
@@ -18,7 +18,7 @@ classdef Tester %< handle (or some other parent class)
    methods
         %% Constructor
         function obj = Tester()
-           obj.vtrPath = '/home/oleg/Documents/work/UofT/Grad/my_vtr';                     %path to vtr folder
+           obj.vtrPath = '/autofs/fs1.ece/fs1.eecg.vaughn/opetelin/my_vtr';                     %path to vtr folder
            obj.vprPath = [obj.vtrPath '/vpr/'];
            obj.tasksPath = [obj.vtrPath '/vtr_flow/tasks'];                                    %run all .blif circuits here
            obj.architecture = 'k6_frac_N10_mem32K_40nm_mine.xml';
@@ -118,6 +118,60 @@ classdef Tester %< handle (or some other parent class)
 
             %should hopefully be done now...
         end
+
+	%prints the contents of the cell matrix to the specified file in a 
+	%tab-delimited fashion. if append is false, existing file contents will
+	%be erased first
+	function printCellMatrixToFile(obj, filepath, cells, append)
+		%TODO
+		[rows, columns] = size(cells);
+		if (rows == 0 || columns == 0)
+			error('got an empty cell matrix for printing');
+		end
+
+		%open file and print the labels
+		if (append)
+		   fopen_rw = 'a+'; 
+		else
+		   fopen_rw = 'w+';
+		end
+		fid = fopen(filepath, fopen_rw);
+		if (fid < 0)
+		   error('couldnt open specified file'); 
+		end
+		
+		%print out the cell matrix one row at a time
+		for irow = 1:1:rows
+			for icol = 1:1:columns
+				%figure out the class of variable that this is
+				next = cells{irow, icol};
+				get_class = class(next);
+
+				%sometimes the next entry may itself be a cell...
+				if (strcmp(get_class, 'cell'))
+					[r, c] = size(next);
+					if (r == 1 && c == 1)
+						next = next{1,1};
+						get_class = class(next);
+					else
+						error('cannot process a cell element that is not 1x1');
+					end
+				end
+
+				if strcmp(get_class, 'char')
+					fprintf(fid, '%s\t', next);
+				elseif strcmp(get_class, 'double')
+					fprintf(fid, '%f\t', next);
+				else
+					error(['got unknown class in the cell matrix: ' get_class]);
+				end
+			end
+			%go to a new line
+			fprintf(fid, '\n');
+		end
+
+	fclose(fid);
+	end
 
         function result = makeVPR(obj)
             restoreDir = cd;
