@@ -24,9 +24,9 @@ void pack_luts_and_ffs (int lut_size) {
  * output, n LUT inputs, clock input.                                   */
 
  for (bnum = 0; bnum < num_blocks; bnum++) {
-	 if (block[bnum].is_LUT_buffer == TRUE) {
+	 if (block[bnum].type == LUT && block[bnum].is_LUT_buffer == TRUE) {
 		 out_net = block[bnum].nets[0];
-		 if (net[out_net].num_pins == 2) {
+		 if (net[out_net].num_pins == 2 && block[bnum].nets[1] != OPEN && block[bnum].nets[2] == OPEN) {
 			 in_net = block[bnum].nets[1];   /* Net driving the LUT. */
 			 in_blk = net[in_net].pins[0];   /* Drives the LUT */
 			 net[out_net].pins[0] = OPEN; /* This net disappears; mark. */

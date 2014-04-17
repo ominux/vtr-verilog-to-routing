@@ -144,6 +144,7 @@ static void get_tok (char *buffer, int pass, int doall, int *done,
  if (strcmp(ptr, "1") == 0) {
 	 if (pass == 3 && doall) {
 		 ptr = my_strtok(buffer, TOKENS, blif, buffer);
+		 if (ptr == NULL) return;
 		 if (strcmp(ptr, "1") == 0) {
 			 block[num_blocks - 1].is_LUT_buffer = TRUE;
 		 }
