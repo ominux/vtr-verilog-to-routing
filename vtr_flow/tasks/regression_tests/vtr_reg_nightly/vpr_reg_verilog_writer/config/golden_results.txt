@@ -1,7 +1,0 @@
-arch	circuit	vpr_status	min_chan_width	critical_path_delay	pack_time	place_time	min_chan_width_route_time	crit_path_route_time	num_pre_packed_nets	num_pre_packed_blocks	num_post_packed_nets	num_clb	num_io	num_outputs	num_memories	num_mult	error
-k6_frac_N10_mem32K_40nm.xml	alu4.blif	success	46	5.39635	7.24	1.51	6.9	0.46	1536	1544	685	106	14	8	0	0	
-k6_frac_N10_mem32K_40nm.xml	apex4.blif	success	54	5.31699	5	1.43	8.99	0.56	1271	1290	707	89	9	19	0	0	
-k6_frac_N10_mem32K_40nm.xml	bigkey.blif	success	38	2.38492	7.73	2.4	10.7	0.49	2152	2349	540	121	229	197	0	0	
-k6_frac_N10_mem32K_40nm.xml	diffeq.blif	success	50	6.35729	5.32	1.72	3.71	0.33	1935	1974	875	93	64	39	0	0	
-k6_frac_N10_mem32K_40nm.xml	or1200.latren.blif	success	74	24.4962	8.09	9.78	291.72	3.17	4167	4498	2441	245	385	394	2	1	
-k6_frac_N10_mem32K_40nm.xml	sha.latren.blif	success	46	18.3975	10.69	3.95	18.59	1	3161	3197	1168	200	38	36	0	0	

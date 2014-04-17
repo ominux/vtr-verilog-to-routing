@@ -1,3 +1,0 @@
-arch	circuit	vpr_status	min_chan_width	critical_path_delay	pack_time	place_time	min_chan_width_route_time	crit_path_route_time	num_pre_packed_nets	num_pre_packed_blocks	num_post_packed_nets	num_clb	num_io	num_outputs	num_memories	num_mult	total_power	routing_power_perc	clock_power_perc	tile_power_perc	error
-k6_frac_N10_mem32K_40nm.xml	ch_intrinsics.v	success	50	4.02581	1.38	0.58	1.54	0.15	765	895	410	35	99	130	1	0	0.004972	0.4439	0.1044	0.4517	
-k6_frac_N10_mem32K_40nm.xml	diffeq1.v	success	52	22.5034	0.75	1.13	22.74	1.31	1004	941	717	36	162	96	0	5	0.008449	0.3765	0.02955	0.594	
