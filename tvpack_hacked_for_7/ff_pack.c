@@ -29,8 +29,13 @@ void pack_luts_and_ffs (int lut_size) {
 		 if (net[out_net].num_pins == 2 && block[bnum].nets[1] != OPEN && block[bnum].nets[2] == OPEN) {
 			 in_net = block[bnum].nets[1];   /* Net driving the LUT. */
 			 in_blk = net[in_net].pins[0];   /* Drives the LUT */
+			 
 			 net[out_net].pins[0] = OPEN; /* This net disappears; mark. */
-			 block[net[out_net].pins[1]].nets[0] = in_net;
+			 for (ipin = 0; ipin < lut_size + 1; ipin++) {
+				 if (block[net[out_net].pins[1]].nets[ipin] == out_net) {
+					 block[net[out_net].pins[1]].nets[ipin] = in_net;
+				 }
+			 }			 
 			 for (ipin = 1; ipin < net[in_net].num_pins; ipin++) {
 				 if (net[in_net].pins[ipin] == bnum) {
 					 net[in_net].pins[ipin] = net[out_net].pins[1]; /* Net that connected to old LATCH move from block bnum to block in_blk */
@@ -52,7 +57,7 @@ void pack_luts_and_ffs (int lut_size) {
 
        if (net[in_net].num_pins == 2) {   /* No fanout from driver */
           in_blk = net[in_net].pins[0];   /* Drives the FF input */
-          if (block[in_blk].type == LUT) {    /* We match! */
+		  if (in_blk != OPEN && block[in_blk].type == LUT) {    /* We match! */
 
 /* Fold the LATCH into previous LUT block.  Update block and net data. */
              

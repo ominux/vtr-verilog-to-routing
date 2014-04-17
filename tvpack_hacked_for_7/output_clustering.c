@@ -148,25 +148,25 @@ static void print_pins (FILE *fpout, int bnum, int lut_size) {
 }
 
 
-static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index) {
+static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index, int lut_size, int inputs_per_cluster) {
 	fprintf(fpout, "\t\t<block name=\"%s\" instance=\"ble4[%d]\" mode=\"ble4\">\n", block[bnum].name, index);
 
 	int ipin, inet, io_loc, column;
 
 	fprintf(fpout, "\t\t\t<inputs> ");
 	fprintf(fpout, "<port name=\"in\">");
-	for (ipin = 1; ipin < 5; ipin++) {
+	for (ipin = 1; ipin < lut_size + 1; ipin++) {
 		inet = block[bnum].nets[ipin];
 		if (inet == OPEN) {
 			fprintf(fpout, "open ");
 		}
 		else {
 			io_loc = io_net_mapping[inet];
-			if (io_loc < 18) {
+			if (io_loc < inputs_per_cluster) {
 				fprintf(fpout, "clb.I[%d]->crossbar ", io_loc);
 			}
 			else {
-				fprintf(fpout, "ble4[%d].out[0]->crossbar ", io_loc - 18);
+				fprintf(fpout, "ble4[%d].out[0]->crossbar ", io_loc - inputs_per_cluster);
 			}
 		}
 	}
@@ -192,7 +192,7 @@ static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index
 
 	fprintf(fpout, "\t\t\t<clocks>");
 	fprintf(fpout, "<port name=\"clk\">");
-	inet = block[bnum].nets[5];
+	inet = block[bnum].nets[lut_size + 1];
 	if (inet == OPEN) {
 		fprintf(fpout, "open ");
 	}
@@ -212,7 +212,7 @@ static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index
 		fprintf(fpout, "\t\t\t<block name=\"%s\" instance=\"lut4[0]\" mode=\"lut4\">\n", block[bnum].name);
 		fprintf(fpout, "\t\t\t\t<inputs> ");
 		fprintf(fpout, "<port name=\"in\">");
-		for (ipin = 1; ipin < 5; ipin++) {
+		for (ipin = 1; ipin < lut_size + 1; ipin++) {
 			inet = block[bnum].nets[ipin];
 			if (inet == OPEN) {
 				fprintf(fpout, "open ");
@@ -238,7 +238,7 @@ static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index
 		}
 		fprintf(fpout, "\t\t\t\t\t<inputs> ");
 		fprintf(fpout, "<port name=\"in\">");
-		for (ipin = 1; ipin < 5; ipin++) {
+		for (ipin = 1; ipin < lut_size + 1; ipin++) {
 			inet = block[bnum].nets[ipin];
 			if (inet == OPEN) {
 				fprintf(fpout, "open ");
@@ -274,9 +274,13 @@ static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index
 	if (block[bnum].type == LATCH || block[bnum].type == LUT_AND_LATCH) {
 		int ipin, inet, io_loc;
 		if (block[bnum].type == LATCH) {
-			fprintf(fpout,	"\t\t\t<block name=\"open\" instance=\"lut4[0]\" mode=\"wire\">\n"
-							"\t\t\t\t<inputs>\n"
-							"\t\t\t\t\t<port name=\"in\">ble4.in[0]->direct1 open open open </port>\n"
+			fprintf(fpout, "\t\t\t<block name=\"open\" instance=\"lut4[0]\" mode=\"wire\">\n"
+				"\t\t\t\t<inputs>\n"
+				"\t\t\t\t\t<port name=\"in\">ble4.in[0]->direct1 ");
+			for (ipin = 0; ipin < lut_size - 1; ipin++) {
+				fprintf(fpout, "open ");
+			}				
+			fprintf(fpout, "</port>\n"
 							"\t\t\t\t</inputs>\n"
 							"\t\t\t\t<outputs>\n"
 							"\t\t\t\t\t<port name=\"out\">lut4[0].in[0]->complete:lut4  </port>\n"
@@ -460,7 +464,7 @@ static void print_clbs (FILE *fpout, int *cluster_occupancy,
 	fprintf(fpout, "\t\t<inputs>\n");
 	fprintf(fpout, "\t\t<port name=\"I\">");
 	column = 16;
-	for (ipin = 0; ipin<18; ipin++)
+	for (ipin = 0; ipin<inputs_per_cluster; ipin++)
 		print_net_name(net_of_clb_pin[ipin], &column, fpout);
 	fprintf(fpout, "</port>\n");
 	fprintf(fpout, "\t\t</inputs>\n");
@@ -468,12 +472,12 @@ static void print_clbs (FILE *fpout, int *cluster_occupancy,
 	fprintf(fpout, "\t\t<outputs>\n");
 	fprintf(fpout, "\t\t<port name=\"O\">");
 	column = 16;
-	for (ipin = 18; ipin < 26; ipin++) {
+	for (ipin = inputs_per_cluster; ipin < inputs_per_cluster + cluster_size; ipin++) {
 		if (net_of_clb_pin[ipin] == OPEN) {
 			fprintf(fpout, "open ");
 		}
 		else {
-			fprintf(fpout, "ble4[%d].out[0]->clbouts1 ", io_net_mapping[net_of_clb_pin[ipin]] - 18);
+			fprintf(fpout, "ble4[%d].out[0]->clbouts1 ", io_net_mapping[net_of_clb_pin[ipin]] - inputs_per_cluster);
 		}
 	}
 	fprintf(fpout, "</port>\n");
@@ -482,13 +486,13 @@ static void print_clbs (FILE *fpout, int *cluster_occupancy,
 	fprintf(fpout, "\t\t<clocks>\n");
 	fprintf(fpout, "\t\t<port name=\"clk\">");
 	column = 16;
-	print_net_name(net_of_clb_pin[26], &column, fpout);
+	print_net_name(net_of_clb_pin[inputs_per_cluster + cluster_size], &column, fpout);
 	fprintf(fpout, "</port>\n");
 	fprintf(fpout, "\t\t</clocks>\n");
 
 	for (iblk=0;iblk<cluster_occupancy[icluster];iblk++) {
        sub_blk = cluster_contents[icluster][iblk];
-	   print_subblock(fpout, sub_blk, io_net_mapping, iblk);
+	   print_subblock(fpout, sub_blk, io_net_mapping, iblk, lut_size, inputs_per_cluster);
     }
 
 	for (iblk = cluster_occupancy[icluster]; iblk<8; iblk++) {
