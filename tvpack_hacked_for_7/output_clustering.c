@@ -274,9 +274,9 @@ static void print_subblock(FILE *fpout, int bnum, int *io_net_mapping, int index
 	if (block[bnum].type == LATCH || block[bnum].type == LUT_AND_LATCH) {
 		int ipin, inet, io_loc;
 		if (block[bnum].type == LATCH) {
-			fprintf(fpout,	"\t\t\t<block name=\"open\" instance=\"lut4[0]\" mode=\"wire\"/>\n"
+			fprintf(fpout,	"\t\t\t<block name=\"open\" instance=\"lut4[0]\" mode=\"wire\">\n"
 							"\t\t\t\t<inputs>\n"
-							"\t\t\t\t\t<port name=\"in\">open open ble4.in[0]->direct1  open </port>\n"
+							"\t\t\t\t\t<port name=\"in\">ble4.in[0]->direct1 open open open </port>\n"
 							"\t\t\t\t</inputs>\n"
 							"\t\t\t\t<outputs>\n"
 							"\t\t\t\t\t<port name=\"out\">lut4[0].in[0]->complete:lut4  </port>\n"
