@@ -15,7 +15,7 @@
 #include "vpr_utils.h"
 #include "read_xml_arch_file.h"
 #include "ReadOptions.h"
-#include "switchblock_metrics.h"
+#include "cb_metrics.h"
 #include <ctime>
 #include "build_switchblocks.h"
 
@@ -417,7 +417,7 @@ void build_rr_graph(
 	} else if (BI_DIRECTIONAL == directionality) {
 		switch_block_conn = alloc_and_load_switch_block_conn(nodes_per_chan,
 				sb_type, Fs);
-#define MY_SWITCHBLOCKS		
+//#define MY_SWITCHBLOCKS		
 #ifdef MY_SWITCHBLOCKS
 		//OP: test new switchblock permutation funcs for the bidir case
 		sb_conn_map = alloc_and_load_switchblock_permutations(chan_details_x,
@@ -475,10 +475,9 @@ void build_rr_graph(
 		boolean perturb_opins = FALSE;
 
 /* This enables a different connection block creating algorithm than the one currently
-   used by VPR. Was used for early tests, but is not currently used for metrics tests */
+   used by VPR. Was used for early tests, but is not currently used for CB metric tests */
 //#define MY_ALGORITHM
 		
-		//conn_block_homogeneity = (t_conn_block_homogeneity *) my_malloc(sizeof(t_conn_block_homogeneity) * L_num_types);
 		conn_block_homogeneity = new t_conn_block_homogeneity[L_num_types];
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
@@ -493,7 +492,7 @@ void build_rr_graph(
 			if (strcmp("clb", types[i].name) == 0){
 				srand(time(0));
 				float target_metric;
-				target_metric = 1;
+				target_metric = 0.47;
 
 				/* Here begins the metrics test code. The controlling variables are located in globals, 
 				   and are also used in binary_search_place_and_route (place_and_route.c) so that metrics
@@ -509,10 +508,10 @@ void build_rr_graph(
 					char filename[] = "clb_trackmap000.txt";
 					char chanwidth[] = "000\0";
 					/* basically itoa */
-					int number = nodes_per_chan;
+					int tmp_W = nodes_per_chan;
 					for (int ilen = 2; ilen >= 0; ilen--){
-						chanwidth[ilen] = (number % 10) + 48;
-						number = floor(number / 10);
+						chanwidth[ilen] = (tmp_W % 10) + 48;
+						tmp_W = floor(tmp_W / 10);
 					}
 
 					for (int ilen = 0; ilen < 3; ilen++){
@@ -526,8 +525,8 @@ void build_rr_graph(
 								&types[i], Fc);
 					} else {
 						/* generate */
-						adjust_pin_metric(target_metric, 0.0001, 0.001, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-						//adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						//adjust_pin_metric(target_metric, 0.0001, 0.001, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
+						adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 						
 						//generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
 						if (manage_trackmap && (!w_done[nodes_per_chan])){
@@ -542,21 +541,22 @@ void build_rr_graph(
 			}
 			get_conn_block_homogeneity(conn_block_homogeneity[i], &types[i], opin_to_track_map[i], 
 				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f   Pin Homogeneity: %f\n", types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
+			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f   Pin Homogeneity: %f\n",
+				types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
 				conn_block_homogeneity[i].hamming_distance, conn_block_homogeneity[i].hamming_proximity, conn_block_homogeneity[i].pin_homogeneity);
 		}
 
-		//Calculate FPGA homogeneity here
+		/* Calculate FPGA homogeneity here */
 		//fpga_homogeneity = get_conn_block_homogeneity_fpga(conn_block_homogeneity, L_num_types,
 		//			L_grid, L_nx, L_ny, types, DRIVER);
 		vpr_printf(TIO_MESSAGE_INFO,"Block Type: FPGA  Pin Homogeneity: %f  Wire Homogeneity: %f\n",
 			fpga_homogeneity.pin_homogeneity, fpga_homogeneity.wire_homogeneity); 
-		//free(conn_block_homogeneity);
+
 		delete [] conn_block_homogeneity;
 		conn_block_homogeneity = NULL; 
 	}
-	
 	/* END OPINP MAP */
+
 	/* UDSD Modifications by WMF begin */
 	/* I'm adding 2 new fields to t_rr_node, and I want them initialized to 0. */
 	for (i = 0; i < num_rr_nodes; i++) {

@@ -3,12 +3,13 @@
 #include "vpr_types.h"
 #include "globals.h"
 
-/******** OP - global vars for testing ********/
+/******** OP - temporary global vars used for testing connection block metrics ********/
 /* once turned on, metrics are used to guide the conn block creation */
-boolean test_metrics = FALSE;	
+boolean test_metrics = TRUE;
 /* if turned on, track map will be loaded/stored depending on whether the given W was already covered.
    test_metrics must be turned on for this variable to have effect */
 boolean manage_trackmap = FALSE;
+
 /******** General global variables ********/
 int Fs_seed = -1;
 

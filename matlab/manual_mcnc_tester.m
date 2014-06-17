@@ -5,25 +5,28 @@ t = Tester();
 
 %variable setup
 benchmarks_dir = [t.vtrPath '/vtr_flow/benchmarks/blif/wiremap6/'];
+%benchmark_list = {'alu4',...
+%'apex2',...
+%'apex4',...
+%'bigkey',...
+%'clma',...
+%'des',...
+%'diffeq',...
+%'dsip',...
+%'elliptic',...
+%'ex1010',...
+%'ex5p',...
+%'frisc',...
+%'misex3',...
+%'pdc',...
+%'s298',...
+%'s38417',...
+%'s38584.1',...
+%'seq',...
+%'spla',...
+%'tseng'};
 benchmark_list = {'alu4',...
 'apex2',...
-'apex4',...
-'bigkey',...
-'clma',...
-'des',...
-'diffeq',...
-'dsip',...
-'elliptic',...
-'ex1010',...
-'ex5p',...
-'frisc',...
-'misex3',...
-'pdc',...
-'s298',...
-'s38417',...
-'s38584.1',...
-'seq',...
-'spla',...
 'tseng'};
 benchmark_list = strcat(benchmark_list, '.pre-vpr.blif');
 benchmark_list = strcat(benchmarks_dir, benchmark_list);
@@ -62,7 +65,7 @@ parseRegex = {
 
 %we can then do this at different Fc values, etc.
 
-metricRange = 0.98 : -0.04 : 0.48;
+metricRange = 0.02 : 0.15 : 0.5;
 %metricRange = 0.14:0.14; %test
 
 %%get low stress channel widths for each circuit
@@ -82,20 +85,50 @@ metricRange = 0.98 : -0.04 : 0.48;
 %    %get low stress chan width
 %    lowStressW(ickt) = floor(1.3 * minW);
 %end
-    
+ 
+matlabpool open 6;
+
+%generate initial placement using normal connection blocks
+t.replaceSingleLineInFile('boolean test_metrics = \w+;', 'boolean test_metrics = FALSE;', t.globalsPath);
+t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = FALSE;', t.globalsPath)
+t.makeVPR();
+i = 0;
+parfor ickt = 1:numCkts
+        disp(['Gen Run: ' num2str(ickt) '  Circuit: ' num2str(ickt)]);
+        benchmark = benchmark_list{ickt};
+
+         %generate placement using normal connection blocks
+           vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90';];%num2str(lowStressW(ickt))];
+           vprOut = t.runVprManual(vprString);
+           %now parse
+	   baselineCktMetrics_tmp = 0;
+           for imetric = 1:length(parseRegex)
+              baselineCktMetrics_tmp(imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));
+           end
+		size( baselineCktMetrics_tmp )
+           baselineCktMetrics(ickt, :) = baselineCktMetrics_tmp;
+
+end
+
+
 
 i = 0;
 for metric = metricRange
     i = i + 1;
     
-    %this is the inner loop
     baselineCktMetrics = 0;
     adjustedCktMetrics = 0;
-    for ickt = 1:numCkts
+    t.replaceSingleLineInFile('target_metric = \d*\.*\d+;', ['target_metric = ' num2str(metric) ';'], t.rrGraphPath);
+    t.replaceSingleLineInFile('boolean test_metrics = \w+;', 'boolean test_metrics = TRUE;', t.globalsPath);
+    %t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = TRUE;   ', t.globalsPath);
+    t.makeVPR();
+
+    %this is the inner loop
+    parfor ickt = 1:numCkts
         disp(['Run: ' num2str(i) '   Metric: ' num2str(metric) '  Circuit: ' num2str(ickt)]);
         benchmark = benchmark_list{ickt};
 
-         %rerun at low stress to generate placement
+%         %generate placement using normal connection blocks
 %           t.replaceSingleLineInFile('boolean test_metrics = \w+;', 'boolean test_metrics = FALSE;', t.globalsPath);
 %           t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = FALSE;', t.globalsPath)
 %           t.makeVPR();
@@ -107,25 +140,40 @@ for metric = metricRange
 %           end
 
         %rerun with metric adjustment enabled
-        t.replaceSingleLineInFile('target_metric = \d*\.*\d+;', ['target_metric = ' num2str(metric) ';'], t.rrGraphPath);
+        %t.replaceSingleLineInFile('target_metric = \d*\.*\d+;', ['target_metric = ' num2str(metric) ';'], t.rrGraphPath);
         %first time store the trackmap and second time load it
         %if (ickt==1)
         	%t.replaceSingleLineInFile('boolean test_metrics = \w+;', 'boolean test_metrics = TRUE;', t.globalsPath);
-            %t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = TRUE;   ', t.globalsPath);
+                %t.replaceSingleLineInFile('boolean manage_trackmap = \w+;', 'boolean manage_trackmap = TRUE;   ', t.globalsPath);
         %else
         	%t.replaceSingleLineInFile('/*#define TEST_METRICS', '//#define TEST_METRICS', t.rrGraphPath);
 	%end
-        t.makeVPR();
-        vprString = [arch ' ' benchmark ' ' vprBaseOptions];% ' -route_chan_width ' '90 -route'];%num2str(lowStressW(ickt)) ' -route'];
+        %t.makeVPR();
+        vprString = [arch ' ' benchmark ' ' vprBaseOptions ' -route_chan_width ' '90 -route'];%num2str(lowStressW(ickt)) ' -route'];
         vprOut = t.runVprManual(vprString);
+	adjustedCktMetrics_tmp = 0;
         for imetric = 1:length(parseRegex)
-           adjustedCktMetrics(ickt, imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));
-        end
+           adjustedCktMetrics_tmp(imetric) =  str2double(t.regexLastToken(vprOut, parseRegex{imetric}));
+	   %adjustedCktMetrics_tmp(imetric)
+		end
+		
+		if (ickt == 1)
+			%vprOut
+		end
+		
+		display(['circuit ' num2str(ickt)]);
+		%adjustedCktMetrics_tmp
+		%display('here');
+		%size( adjustedCktMetrics_tmp )
+        %adjustedCktMetrics(ickt, :) =  adjustedCktMetrics_tmp;
     end
     %now have to compute the geometric average
     baselineAvgMetrics(i,:) = geomean(baselineCktMetrics,1);
     adjustedAvgMetrics(i,:) = geomean(adjustedCktMetrics,1);
 end
+
+
+
 
 %print data to file
 %baselineAvgMetrics = [metricRange' baselineAvgMetrics];

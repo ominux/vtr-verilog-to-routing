@@ -7,7 +7,7 @@
 #include "util.h"
 #include "vpr_types.h"
 #include "vpr_utils.h"
-#include "switchblock_metrics.h"
+#include "cb_metrics.h"
 
 #include <string>
 #include <iostream>
@@ -245,7 +245,6 @@ void get_conn_block_homogeneity(OUTP t_conn_block_homogeneity &cbm, INP t_type_p
 								num_pin_type_pins); 
 	}	
 
-	//return cbm;
 	return;
 }
 
@@ -256,14 +255,14 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		INP int num_segments, INP t_segment_inf *segment_inf){
 //TODO: move this up top so all functions han see what's being optimized.
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
-#define WIRE_HOMOGENEITY
+#define HAMMING_PROXIMITY
 #define PRESERVE_TRACKS
 //#define USE_ANNEALER
 
 	boolean success = FALSE;	
 	int Fc = 0;
 	int num_pins_per_side = 5;
-	int pin_map[20] = {	40, 44, 48, 52, 56, 
+	int pin_map[20] = {	40, 44, 48, 52, 56, 	//XXX WTF is this? looks like this is a hard-coding of CLB pins??? ugggghhhh
 				41, 45, 49, 53, 57, 
 				42, 46, 50, 54, 58,
 				43, 47, 51, 55, 59};
@@ -409,8 +408,8 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 		} while (invalid_new_track);
 
 /* here we will reuse the data already available in metrics
-   to avoid computing block metrics all over again */
-float new_hamming, new_pin;
+   to avoid computing block metrics all over again */	//XXX. How? I don't see this being done? Just calling get_.... again
+		float new_hamming, new_pin;
 #ifdef HAMMING_DISTANCE
 		metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = new_track;
 		metrics.hamming_distance = get_hamming_distance(metrics.hd_pin_array.ptr, block_type, 
@@ -424,14 +423,20 @@ float new_hamming, new_pin;
 								num_pin_type_pins, 2, TRUE); 
 		new_hamming = metrics.hamming_proximity;
 #elif defined WIRE_HOMOGENEITY
-		//TODO
+		//TODO //XXX June 2014. Hacked this on; not sure if it will work. NOPE, doesn't work.
+		metrics.hd_pin_array.ptr[rand_side][rand_pin][rand_con] = new_track;
+		metrics.wire_homogeneity = get_wire_homogeneity(metrics.wh_wire_conns.ptr, block_type, 
+								pin_type, Fc, nodes_per_chan, metrics.num_wire_types,
+								num_pin_type_pins, 2, metrics.counted_pins_per_side, TRUE); 
+
+		new_hamming = metrics.wire_homogeneity;
 #endif
 		metrics.ph_pin_averages.ptr[rand_pin][ old_track % metrics.num_wire_types]--;
 		metrics.ph_pin_averages.ptr[rand_pin][ new_track % metrics.num_wire_types]++;
+		/* need to make sure the pin metric is kept approximately constant */
 		new_pin = get_pin_diversity(metrics.ph_pin_averages.ptr, block_type,
 								pin_type, Fc, nodes_per_chan, metrics.num_wire_types,
 								num_pin_type_pins); 
-track_ptr[rand_con] = new_track;
 
 		/* assign new track, and test metrics */
 		track_ptr[rand_con] = new_track;
@@ -939,6 +944,11 @@ static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_typ
 			hd_pins += (float)pin_hd;
 			//printf("pin_hd: %f\n", pin_hd);	
 		}
+		
+		if (checked_pins == 0){
+			continue;
+		}
+
 		total_hamming_distance += hd_pins / (0.5*checked_pins*(checked_pins - 1)); // norm factor for old HD: * 2.0 / (float)((checked_pins - 1) * pow(2*Fc,exponent));
 		//printf("checked_pins: %d  hd_pins: %f  total_lemieux: %f\n", checked_pins, hd_pins, total_hamming_distance);	
 	}
@@ -958,7 +968,8 @@ static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_typ
 		INP boolean both_sides){
 	
 	float total_wire_homogeneity = 0;
-	float *wire_homogeneity = (float *) my_malloc(sizeof(float) * 4);
+	//float *wire_homogeneity = (float *) my_malloc(sizeof(float) * 4);
+	float wire_homogeneity[4];
 
 
 	/* determine the homogeneity of each wire.*/ 
@@ -979,6 +990,11 @@ static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_typ
 			//printf("pins_per_side: %d\n", counted_pins_per_side[side+mult*i]);
 			total_pins_on_side += counted_pins_per_side[side + mult*i];
 		}
+
+		if (total_pins_on_side == 0){
+			continue;
+		}
+
 		total_conns = total_pins_on_side * Fc;
 		unconnected_wires = (total_conns) ? max(0, nodes_per_chan - total_conns)  :  0 ;
 		mean = (float)total_conns / (float)(nodes_per_chan - unconnected_wires);
@@ -1003,8 +1019,8 @@ static float get_wire_homogeneity(INP int **wire_conns, INP t_type_ptr block_typ
 	}
 	total_wire_homogeneity /= num_pin_type_pins;
 
-	free(wire_homogeneity);
-	wire_homogeneity = NULL;
+	//free(wire_homogeneity);
+	//wire_homogeneity = NULL;
 
 	return total_wire_homogeneity;
 }
@@ -1045,10 +1061,6 @@ static float get_pin_homogeneity(INP int **pin_averages, INP t_type_ptr block_ty
 
 	return total_pin_homogeneity;
 }
-
-
-//float get_hamming_distance
-
 
 /* Uses homogeneity computed for each individual block to compute the wire/pin homogeneity over	*
 *  the entire FPGA										*/

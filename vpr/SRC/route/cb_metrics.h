@@ -1,5 +1,5 @@
-#ifndef SWITCHBLOCK_METRICS_H
-#define SWITCHBLOCK_METRICS_H
+#ifndef CB_METRICS_H
+#define CB_METRICS_H
 
 /**** Classes ****/
 /* constructor and destructor for a 2d array */
@@ -40,8 +40,6 @@ public:
 			sizey = y;
 			ptr = (int **) alloc_matrix(0, x-1, 0, y-1, sizeof(int));
 			already_set = true;
-
-			//init_to_zero();
 		}
 	}
 	void free_array(){
@@ -181,7 +179,4 @@ void read_trackmap_from_file(INP char *filename, OUTP int *****tracks_connected_
 
 int get_max_Fc(INP int *Fc_array, INP t_type_ptr block_type, INP e_pin_type pin_type);
 
-//need to find a way to write track connections to a file
-// first check if something like this already exists in our libraries
-
-#endif /*SWITCHBLOCK_METRICS_H*/
+#endif /*CB_METRICS_H*/
