@@ -257,7 +257,7 @@ void adjust_hamming(INP float target, INP float target_tolerance, INP float pin_
 //TODO: also, rename to OPTIMIZE_HAMMING_PROXIMITY or something.
 #define HAMMING_PROXIMITY
 #define PRESERVE_TRACKS
-//#define USE_ANNEALER
+#define USE_ANNEALER
 
 	boolean success = FALSE;	
 	int Fc = 0;
@@ -766,7 +766,7 @@ static float get_pin_diversity(INP int **pin_averages, INP t_type_ptr block_type
 
 
 
-/* Returns the hamming average hamming distance of the block's pins */
+/* Returns the average hamming distance of the block's pins */
 static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_type, 
 		INP e_pin_type pin_type, 
 		INP int Fc, INP int nodes_per_chan, INP int num_wire_types,

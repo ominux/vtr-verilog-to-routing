@@ -492,7 +492,7 @@ void build_rr_graph(
 			if (strcmp("clb", types[i].name) == 0){
 				srand(time(0));
 				float target_metric;
-				target_metric = 0.47;
+				target_metric = 0.7;
 
 				/* Here begins the metrics test code. The controlling variables are located in globals, 
 				   and are also used in binary_search_place_and_route (place_and_route.c) so that metrics
