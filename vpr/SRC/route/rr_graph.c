@@ -490,7 +490,7 @@ void build_rr_graph(
 				nodes_per_chan, Fc_out[i], &types[i], perturb_opins, directionality);
 
 			if (strcmp("clb", types[i].name) == 0){
-				srand(time(0));
+				//srand(time(0));
 				float target_metric;
 				target_metric = 0.7;
 
@@ -526,8 +526,11 @@ void build_rr_graph(
 					} else {
 						/* generate */
 						//adjust_pin_metric(target_metric, 0.0001, 0.001, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-						adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-						
+						//adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, 
+						//	num_seg_types, segment_inf);
+						adjust_cb_metric(WIRE_HOMOGENEITY, 0.7, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan,
+							num_seg_types, segment_inf);
+
 						//generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
 						if (manage_trackmap && (!w_done[nodes_per_chan])){
 							/* store */

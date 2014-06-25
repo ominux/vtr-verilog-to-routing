@@ -93,8 +93,8 @@ static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_
 /* this annealer is used to adjust a desired wire or pin metric while keeping the other type of metric
    relatively constant */
 static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
-		INP e_pin_type pin_type, INP int Fc, INP int num_pin_type_pins, INP float target_metric,
-		INP float target_metric_tolerance, INOUTP Conn_Block_Metrics *cb_metrics);
+		INP e_pin_type pin_type, INP int Fc, INP int num_pin_type_pins, INP float target_metric, 
+		INP float target_metric_tolerance, INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics);
 /* updates temperature based on current temperature and the annealer's outer loop iteration */
 static double update_temp(INP double temp, INP int i_outer);
 /* determines whether to accept or reject a proposed move based on the resulting delta of the cost and current temperature */
@@ -104,7 +104,7 @@ static bool accept_move(INP double del_cost, INP double temp);
 static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_chan, INP float initial_pin_diversity, 
 		INP float pin_diversity_tolerance, INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc,
 		INP int num_pin_type_pins, INP double cost, INP double temp, INP float target_wire_metric, 
-		INOUTP Conn_Block_Metrics *cb_metrics);
+		INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics);
 
 int get_num_wire_types(INP int num_segments, INP t_segment_inf *segment_inf){
 
@@ -1384,8 +1384,9 @@ void generate_random_trackmap(INOUTP int *****tracks_connected_to_pin, INP e_pin
 
 /* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
    within some tolerance */
-void adjust_wire_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
-		INP t_type_ptr block_type, INOUTP int *****tracks_connected_to_pin, 
+//TODO: rename to adjust_cb_metric
+void adjust_cb_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
+		INP t_type_ptr block_type, INOUTP int *****pin_to_track_connections, 
 		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, 
 		INP int num_segments, INP t_segment_inf *segment_inf){
 
@@ -1397,6 +1398,11 @@ void adjust_wire_metric(INP e_metric metric, INP float target, INP float target_
 
 	if (block_type->num_pins == 0){
 		vpr_printf(TIO_MESSAGE_ERROR, "Trying to adjust CB metrics for a block with no pins!\n");
+		exit(1);
+	}
+
+	if (block_type->height > 1 || block_type->width > 1){
+		vpr_printf(TIO_MESSAGE_ERROR, "adjust_metric: adjusting connection block metrics is currently intended for CLBs, which have height and width = 1\n");
 		exit(1);
 	}
 
@@ -1419,18 +1425,15 @@ void adjust_wire_metric(INP e_metric metric, INP float target, INP float target_
 	get_pin_locations( block_type, pin_type, &cb_metrics.pin_locations );
 
 	/* initialize CB metrics structures */
-	init_cb_structs(block_type, tracks_connected_to_pin, num_segments, segment_inf, pin_type, num_pin_type_pins, nodes_per_chan,
+	init_cb_structs(block_type, pin_to_track_connections, num_segments, segment_inf, pin_type, num_pin_type_pins, nodes_per_chan,
 			Fc, &cb_metrics);
 	
 	/* get initial values for metrics */
-	get_conn_block_metrics(block_type, tracks_connected_to_pin, num_segments, segment_inf, pin_type, num_pin_type_pins,
+	get_conn_block_metrics(block_type, pin_to_track_connections, num_segments, segment_inf, pin_type, num_pin_type_pins,
 			nodes_per_chan, Fc, &cb_metrics);
 
 	/* now run the annealer to adjust the desired metric towards the target value */
-	annealer(metric, nodes_per_chan, block_type, pin_type, Fc, num_pin_type_pins, target, target_tolerance, &cb_metrics);
-//static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
-//		INP e_pin_type pin_type, INP int Fc, INP int num_pin_type_pins, INP float target_metric, 
-//		INOUTP Conn_Block_Metrics *cb_metrics){
+	annealer(metric, nodes_per_chan, block_type, pin_type, Fc, num_pin_type_pins, target, target_tolerance, pin_to_track_connections, &cb_metrics);
 }
 
 /* calculates all the connection block metrics and returns them through the cb_metrics variable */
@@ -1442,10 +1445,6 @@ void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_conne
 	if (0 == block_type->index){
 		/* an empty block */
 		vpr_printf(TIO_MESSAGE_ERROR, "Cannot calculate CB metrics for empty blocks\n");
-		exit(1);
-	} else if (cb_metrics->num_wire_types <= 0 || cb_metrics->num_wire_types > 1){
-		/* can only compute metrics for a single wire type, for now */
-		vpr_printf(TIO_MESSAGE_ERROR, "Can only compute CB metrics for a single wire type for now. Number of wire types encountered: %d\n", cb_metrics->num_wire_types);
 		exit(1);
 	} else if (0 == Fc){
 		vpr_printf(TIO_MESSAGE_ERROR, "Can not compute CB metrics for pins not connected to any tracks\n");
@@ -1518,6 +1517,7 @@ static float get_pin_diversity(INP t_type_ptr block_type, INP e_pin_type pin_typ
 			
 		}
 	}
+	total_pin_diversity /= num_pin_type_pins;
 	return total_pin_diversity;
 }
 
@@ -1589,8 +1589,9 @@ static void init_cb_structs(INP t_type_ptr block_type, INP int *****tracks_conne
 		INOUTP Conn_Block_Metrics *cb_metrics){
 	
 	/* can not have diversity for open pins */
-	if(OPEN != pin_type){
+	if(OPEN == pin_type){
 		vpr_printf(TIO_MESSAGE_ERROR, "Can not initialize CB metric structures for pins of OPEN type\n");
+		exit(1);
 	}
 
 
@@ -1625,29 +1626,34 @@ static void init_cb_structs(INP t_type_ptr block_type, INP int *****tracks_conne
 			/*  over each width unit */
 			for (int iwidth = 0; iwidth < block_type->width; iwidth++){
 				/* over each pin */
-				for (int ipin = 0; ipin < block_type->num_pins; ipin++){
-					/* only doing pin_type pins */
-					if (block_type->class_inf[block_type->pin_class[ipin]].type != pin_type){
-						continue;
-					}
+				for (int ipin = 0; ipin < (int)cb_metrics->pin_locations.at(iside).size(); ipin++){
+					int pin = cb_metrics->pin_locations.at(iside).at(ipin);
 
-					if (counted_pins == num_pin_type_pins){
-						/* Some blocks like io appear to have four sides, but only one	*
-						*  of those sides is actually used in practice. So here we try	*
-						*  not to count the unused pins.				*/
-						break;
-					}
+					///* only doing pin_type pins */
+					//if (block_type->class_inf[block_type->pin_class[pin]].type != pin_type){
+					//	assert(false);
+					//	continue;
+					//}
 
-					/* check that pin has connections at this height/width/side */
-					track = tracks_connected_to_pin[ipin][iwidth][iheight][iside][0];
-					if (OPEN == track){
-						continue;
-					}
+					//if (counted_pins == num_pin_type_pins){
+					//	/* Some blocks like io appear to have four sides, but only one	*
+					//	*  of those sides is actually used in practice. So here we try	*
+					//	*  not to count the unused pins.				*/
+					//	assert(false);
+					//	break;
+					//}
+
+					///* check that pin has connections at this height/width/side */
+					//track = tracks_connected_to_pin[pin][iwidth][iheight][iside][0];
+					//if (OPEN == track){
+					//	assert(false);
+					//	continue;
+					//}
 					
 					/* now iterate over each track connected to this pin */
 					for (int i = 0; i < Fc; i++){
 						/* insert track into pin_to_tracks */
-						track = tracks_connected_to_pin[ipin][iwidth][iheight][iside][i];
+						track = tracks_connected_to_pin[pin][iwidth][iheight][iside][i];
 						pair< set<int>::iterator, bool > result1 = cb_metrics->pin_to_tracks.at(iside).at(ipin).insert( track );
 						if (!result1.second){
 							/* this track should not already be a part of the set */
@@ -1656,7 +1662,7 @@ static void init_cb_structs(INP t_type_ptr block_type, INP int *****tracks_conne
 						}
 						
 						/* insert the current pin into the corresponding tracks_to_pin entry */
-						pair< set<int>::iterator, bool > result2 = cb_metrics->track_to_pins.at(iside).at(track).insert( ipin );
+						pair< set<int>::iterator, bool > result2 = cb_metrics->track_to_pins.at(iside).at(track).insert( pin );
 						if (!result2.second){
 							/* this pin should not already be a part of the set */
 							vpr_printf(TIO_MESSAGE_ERROR, "Attempted to insert element into tracks_to_pin set which already exists there\n");
@@ -1715,10 +1721,11 @@ static void get_pin_locations(INP t_type_ptr block_type, INP e_pin_type pin_type
 static void find_tracks_with_more_switches_than( INP set<int> *pin_tracks, INP vector< set<int> > *track_to_pins, INP int criteria, INOUTP vector<int> *result ){
 	result->clear();
 	/* for each track connected to the pin */
-	for (int itrack = 0; itrack < (int)pin_tracks->size(); itrack++){
-		/* check which tracks have enough switches to satisfy 'criteria' */
-		if ( (int)track_to_pins->at(itrack).size() > criteria ){
-			result->push_back(itrack);
+	set<int>::const_iterator it;
+	for (it = pin_tracks->begin(); it != pin_tracks->end(); it++){
+		int track = *it;
+		if ( (int)track_to_pins->at(track).size() > criteria ){
+			result->push_back(track);
 		}
 	}
 }
@@ -1741,7 +1748,7 @@ static void find_tracks_unconnected_to_pin( INP set<int> *pin_tracks, INP vector
 static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_chan, INP float initial_pin_diversity, 
 		INP float pin_diversity_tolerance, INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc,
 		INP int num_pin_type_pins, INP double cost, INP double temp, INP float target_wire_metric, 
-		INOUTP Conn_Block_Metrics *cb_metrics){
+		INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics){
 
 	double new_cost = 0;
 	float new_pin_diversity = 0;
@@ -1766,9 +1773,9 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 
 	/* choose a random side, random pin, and a random switch */
 	int rand_side = rand() % 4;
-	int rand_pin = rand() % cb_metrics->pin_locations.at(rand_side).size();
-	rand_pin = cb_metrics->pin_locations.at(rand_side).at(rand_pin);
-	set<int> *tracks_connected_to_pin = &pin_to_tracks->at(rand_side).at(rand_pin);
+	int rand_pin_index = rand() % cb_metrics->pin_locations.at(rand_side).size();
+	int rand_pin = cb_metrics->pin_locations.at(rand_side).at(rand_pin_index);
+	set<int> *tracks_connected_to_pin = &pin_to_tracks->at(rand_side).at(rand_pin_index);
 
 	/* get an old track connection i.e. one that is connected to our pin. this track has to have a certain number of switches.
 	   for instance, if we want to avoid completely disconnecting a track, it should have > 1 switch so that when we move one
@@ -1782,6 +1789,7 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 		/* looking for tracks with 1 or more switches */
 		find_tracks_with_more_switches_than(tracks_connected_to_pin, &track_to_pins->at(rand_side), 0, &set_of_tracks);
 	}
+
 	/* now choose a random track from the returned set of qualifying tracks */
 	int old_track = rand() % set_of_tracks.size();
 	old_track = set_of_tracks.at(old_track);
@@ -1793,14 +1801,14 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 
 	/* move the rand_pin's connection from the old track to the new track and see what the new cost is */
 	/* update CB metrics structures */
-	pin_to_tracks->at(rand_side).at(rand_pin).erase(old_track);
-	pin_to_tracks->at(rand_side).at(rand_pin).insert(new_track);
+	pin_to_tracks->at(rand_side).at(rand_pin_index).erase(old_track);
+	pin_to_tracks->at(rand_side).at(rand_pin_index).insert(new_track);
 
 	track_to_pins->at(rand_side).at(old_track).erase(rand_pin);
 	track_to_pins->at(rand_side).at(new_track).insert(rand_pin);
 
-	wire_types_used_count->at(rand_side).at(rand_pin).at(old_track % num_wire_types)--;
-	wire_types_used_count->at(rand_side).at(rand_pin).at(new_track % num_wire_types)++;
+	wire_types_used_count->at(rand_side).at(rand_pin_index).at(old_track % num_wire_types)--;
+	wire_types_used_count->at(rand_side).at(rand_pin_index).at(new_track % num_wire_types)++;
 	
 	
 	/* get the new pin diversity cost */
@@ -1840,7 +1848,6 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 				exit(1);
 				break;
 		}
-
 		new_cost = fabs(target_wire_metric - new_wire_metric);
 		delta_cost = new_cost - cost;
 		if (!accept_move(delta_cost, temp)){
@@ -1853,16 +1860,27 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 
 	if (revert){
 		/* revert the attempted move */
-		pin_to_tracks->at(rand_side).at(rand_pin).insert(old_track);
-		pin_to_tracks->at(rand_side).at(rand_pin).erase(new_track);
+		pin_to_tracks->at(rand_side).at(rand_pin_index).insert(old_track);
+		pin_to_tracks->at(rand_side).at(rand_pin_index).erase(new_track);
 
 		track_to_pins->at(rand_side).at(old_track).insert(rand_pin);
 		track_to_pins->at(rand_side).at(new_track).erase(rand_pin);
 
-		wire_types_used_count->at(rand_side).at(rand_pin).at(old_track % num_wire_types)++;
-		wire_types_used_count->at(rand_side).at(rand_pin).at(new_track % num_wire_types)--;
+		wire_types_used_count->at(rand_side).at(rand_pin_index).at(old_track % num_wire_types)++;
+		wire_types_used_count->at(rand_side).at(rand_pin_index).at(new_track % num_wire_types)--;
+
+		new_cost = cost;
 	} else {
 		/* accept the attempted move */
+	
+		int track_index = 0;
+		for (track_index = 0; track_index < Fc; track_index++){
+			if (pin_to_track_connections[rand_pin][0][0][rand_side][track_index] == old_track){
+				break;
+			}
+		}
+		pin_to_track_connections[rand_pin][0][0][rand_side][track_index] = new_track;
+
 		cb_metrics->pin_diversity = new_pin_diversity;
 		switch(metric){
 			case WIRE_HOMOGENEITY:
@@ -1889,7 +1907,7 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
    relatively constant */
 static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
 		INP e_pin_type pin_type, INP int Fc, INP int num_pin_type_pins, INP float target_metric, 
-		INP float target_metric_tolerance, INOUTP Conn_Block_Metrics *cb_metrics){
+		INP float target_metric_tolerance, INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics){
 
 	double temp = INITIAL_TEMP;
 	
@@ -1930,7 +1948,7 @@ static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 			double new_cost = 0;
 			if (metric < NUM_WIRE_METRICS){
 				new_cost = try_move_for_wire_metric(metric, nodes_per_chan, initial_orthogonal_metric, orthogonal_metric_tolerance,
-				block_type, pin_type, Fc, num_pin_type_pins, cost, temp, target_metric, cb_metrics);
+				block_type, pin_type, Fc, num_pin_type_pins, cost, temp, target_metric, pin_to_track_connections, cb_metrics);
 
 			} else {
 				//TODO new_cost = try_move_for_pin_metric();
@@ -1955,6 +1973,7 @@ static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 
 	}
 
+	//TODO: return true/false if annealing succeeded/failed
 
 	return;
 }
@@ -1962,8 +1981,8 @@ static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 /* updates temperature based on current temperature and the annealer's outer loop iteration */
 static double update_temp(INP double temp, INP int i_outer){
 	double new_temp;
-	double fac = 0.999;
-	double temp_threshold = 0.001;
+	double fac = TEMP_DECREASE_FAC;
+	double temp_threshold = LOWEST_TEMP;
 
 	/* just decrease temp by a constant factor */
 	new_temp = fac*temp;

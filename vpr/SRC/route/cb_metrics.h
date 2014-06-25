@@ -4,9 +4,12 @@
 #include <vector>
 #include <set>
 
-#define MAX_OUTER_ITERATIONS 1000
-#define MAX_INNER_ITERATIONS 5
-#define INITIAL_TEMP 2
+#define MAX_OUTER_ITERATIONS 100000
+#define MAX_INNER_ITERATIONS 10
+#define INITIAL_TEMP 1
+#define LOWEST_TEMP 0.00001
+#define TEMP_DECREASE_FAC 0.999
+
 
 
 
@@ -245,8 +248,8 @@ void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_conne
 
 /* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
    within some tolerance */
-void adjust_wire_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
-		INP t_type_ptr block_type, INOUTP int *****tracks_connected_to_pin, 
+void adjust_cb_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
+		INP t_type_ptr block_type, INOUTP int *****pin_to_track_connections, 
 		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, 
 		INP int num_segments, INP t_segment_inf *segment_inf);
 #endif /*CB_METRICS_H*/
