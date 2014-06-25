@@ -242,7 +242,6 @@ static int binary_search_place_and_route(struct s_placer_opts placer_opts,
 
 	/* OP -- Test */
 	test_metrics = manage_trackmap = FALSE;
-	assert(false);
 
 	struct s_trace **best_routing; /* Saves the best routing found so far. */
 	int current, low, high, final;

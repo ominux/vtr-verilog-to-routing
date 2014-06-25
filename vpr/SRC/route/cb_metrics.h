@@ -1,6 +1,37 @@
 #ifndef CB_METRICS_H
 #define CB_METRICS_H
 
+#include <vector>
+#include <set>
+
+#define MAX_OUTER_ITERATIONS 1000
+#define MAX_INNER_ITERATIONS 5
+#define INITIAL_TEMP 2
+
+
+
+/**** Enums ****/
+/* Defines the different kinds of metrics that we can adjust */
+enum e_metric{
+	WIRE_HOMOGENEITY = 0,
+	HAMMING_PROXIMITY,
+	LEMIEUX_COST_FUNC,	/* described by lemieux in his 2001 book; used there for creating routable sparse crossbars */
+	NUM_WIRE_METRICS,
+	PIN_DIVERSITY,
+	NUM_METRICS
+};
+
+
+/**** Typedefs ****/
+/* 2D vector of integers */
+typedef std::vector< std::vector<int> > t_2d_int_vec;
+/* 3D vector of integers */
+typedef std::vector< std::vector< std::vector<int> > > t_3d_int_vec;
+
+/* a vector of vectors of integer sets. used for pin-to-track and track-to-pin lookups */
+typedef std::vector< std::vector< std::set<int> > > t_vec_vec_set;
+
+
 /**** Classes ****/
 /* constructor and destructor for a 2d array */
 class int_array_2d{
@@ -110,6 +141,32 @@ public:
 };
 
 
+class Conn_Block_Metrics{
+public:
+	/* the actual metrics */
+	float pin_diversity;
+	float wire_homogeneity;
+	float hamming_proximity;
+	float lemieux_cost_func;
+
+	int num_wire_types;			/* the number of different wire types, used for computing pin diversity */
+	t_2d_int_vec pin_locations;		/* [0..3][0..num_on_this_side-1]. Keeps track of which pins come out on which side of the block */
+
+	/* these vectors simplify the calculation of the various metrics */
+	t_vec_vec_set track_to_pins;		/* [0..3][0..W-1][0..pins_connected-1]. A convenient lookup for which pins connect to a given track */
+	t_vec_vec_set pin_to_tracks;		/* [0..3][0..num_pins_on_side-1][0..tracks_connected-1]. A lookup for which tracks connect to a given pin */
+	t_3d_int_vec wire_types_used_count;	/* [0..3][0..num_pins_on_side-1][0..num_wire_types-1]. Keeps track of how many times each pin connects to each of the wire types */
+
+	void clear(){
+		pin_diversity = wire_homogeneity = hamming_proximity = lemieux_cost_func = 0.0;
+		num_wire_types = 0;
+		pin_locations.clear();
+		track_to_pins.clear();
+		pin_to_tracks.clear();
+		wire_types_used_count.clear();
+	}
+};
+
 /**** Structures ****/
 /* Contains statistics on a connection block's diversity */
 typedef struct s_conn_block_homogeneity {
@@ -179,4 +236,17 @@ void read_trackmap_from_file(INP char *filename, OUTP int *****tracks_connected_
 
 int get_max_Fc(INP int *Fc_array, INP t_type_ptr block_type, INP e_pin_type pin_type);
 
+/* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
+   within some tolerance */
+/* calculates all the connection block metrics and returns them through the cb_metrics variable */
+void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_connected_to_pin, INP int num_segments, INP t_segment_inf *segment_inf, 
+		INP e_pin_type pin_type, INP int num_pin_type_pins, INP int nodes_per_chan, INP int Fc, 
+		INOUTP Conn_Block_Metrics *cb_metrics);
+
+/* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
+   within some tolerance */
+void adjust_wire_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
+		INP t_type_ptr block_type, INOUTP int *****tracks_connected_to_pin, 
+		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, 
+		INP int num_segments, INP t_segment_inf *segment_inf);
 #endif /*CB_METRICS_H*/
