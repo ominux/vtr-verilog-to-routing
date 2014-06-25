@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <map>
+#include <set>
 #include "TIO_PrintHandlerExtern.h"
 
 #ifndef TRUE                    /* Some compilers predefine TRUE, FALSE */
@@ -168,6 +169,22 @@ template< typename F, typename T > bool map_key_exists( INP F key, INP std::map<
 		exists = false;
 	}
 
+	return exists;
+}
+
+/* a generic function for determining if a given set element exists */
+template< typename T > bool set_element_exists( INP T elem, INP std::set< T > *my_set ){
+	bool exists;
+	if (NULL == my_set){
+		vpr_printf(TIO_MESSAGE_ERROR, "set_element_exists: set pointer is NULL\n");
+		exit(1);
+	}
+	typename std::set< T >::const_iterator it = my_set->find(elem);
+	if (my_set->end() != it){
+		exists = true;
+	} else {
+		exists = false;
+	}
 	return exists;
 } 
 

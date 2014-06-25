@@ -602,19 +602,27 @@ struct s_pb_type_power {
  name: unique identifier for type  
  num_pins: Number of pins for the block
  capacity: Number of blocks of this type that can occupy one grid tile.
- This is primarily used for IO pads.
+ 	   This is primarily used for IO pads.
  width: Width of large block in grid tiles
  height: Height of large block in grid tiles
  pinloc: Is set to 1 if a given pin exists on a certain position of a block.
+ pin_width: XXX
+ pin_height: XXX
+ num_pin_loc_assignments: XXX
+ pin_loc_assignments: XXX
+ pin_location_distribution: XXX
  num_class: Number of logically-equivalent pin classes
  class_inf: Information of each logically-equivalent class
  pin_class: The class a pin belongs to
  is_global_pin: Whether or not a pin is global (hence not routed)
  is_Fc_frac: True if Fc fractional, else Fc absolute
  is_Fc_out_full_flex: True means opins will connect to all available segments
+ Fc: XXX
  pb_type: Internal subblocks and routing information for this physical block
  pb_graph_head: Head of DAG of pb_types_nodes and their edges
 
+ grid_loc_def: XXX
+ num_grid_loc_def: XXX
  area: Describes how much area this logic block takes, if undefined, use default
  type_timing_inf: timing information unique to this type
  num_drivers: Total number of output drivers supplied
@@ -634,7 +642,7 @@ struct s_type_descriptor /* TODO rename this.  maybe physical type descriptor or
 	int *pin_width; /* [0..num_pins-1] */
 	int *pin_height; /* [0..num_pins-1] */
 	int ***num_pin_loc_assignments; /* [0..width-1][0..height-1][0..3] */
-	char *****pin_loc_assignments; /* [0..width-1][0..height-1][0..3][0..num_tokens-1][0..string_name] */
+	char *****pin_loc_assignments; /* [0..width-1][0..height-1][0..3][0..num_tokens-1][0..string_name] */ //XXX: what is num_tokens and string_name?
 	enum e_pin_location_distr pin_location_distribution;
 
 	int num_class;
