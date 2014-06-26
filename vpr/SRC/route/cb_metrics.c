@@ -83,16 +83,25 @@ static void find_tracks_with_more_switches_than( INP set<int> *pin_tracks, INP v
    is passed back in the 'result' vector */
 static void find_tracks_unconnected_to_pin( INP set<int> *pin_tracks, INP vector< set<int> > *track_to_pins, INOUTP vector<int> *result );
 
+/* iterates through the elements of set 1 and returns the number of elements in set1 that are 
+   also in set2 (in terms of bit vectors, this looks for the number of positions where both bit vectors 
+   have a value of 1; values of 0 not counted... so, not quite true hamming proximity). Analogously, if we 
+   wanted the hamming distance of these two sets, (in terms of bit vectors, the number of bit positions that are 
+   different... i.e. the actual definition of hamming disatnce) that would be 2(set_size - returned_value) */
+static int hamming_proximity_of_two_sets(INP set<int> *set1, INP set<int> *set2);
 /* returns the pin diversity metric of a block */
 static float get_pin_diversity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
 		INP int num_pin_type_pins, INP Conn_Block_Metrics *cb_metrics);
 /* Returns the wire homogeneity of a block's connection to tracks */
 static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
 		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics);
+/* Returns the hamming proximity of a block's connection to tracks */
+static float get_hamming_proximity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
+		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics);
 
 /* this annealer is used to adjust a desired wire or pin metric while keeping the other type of metric
    relatively constant */
-static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
+static bool annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
 		INP e_pin_type pin_type, INP int Fc, INP int num_pin_type_pins, INP float target_metric, 
 		INP float target_metric_tolerance, INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics);
 /* updates temperature based on current temperature and the annealer's outer loop iteration */
@@ -825,6 +834,7 @@ static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_ty
 	for (side = 0; side < (4 / mult); side++){
 		checked_pins = 0;
 		hd_pins = 0;
+		int pin_comparisons = 0;
 		for (pin = 0; pin < (mult * num_pins); pin++){
 			if (pin >= num_pins){
 				new_pin = pin % num_pins;
@@ -843,7 +853,6 @@ static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_ty
 			}
 			//printf("side %d  pin %d  track %d\n", new_side, new_pin, pin_array[new_side][new_pin][0]);
 			int pin_hd = 0;
-			int pin_comparisons = 0;
 			checked_pins++;
 			for (comp_pin = pin + 1; comp_pin < (mult * num_pins); comp_pin++){
 				if (comp_pin >= num_pins){
@@ -884,6 +893,7 @@ static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_ty
 			}
 			/* add to running total */
 			hd_pins += (float)pin_hd;
+			//printf("old pin_hp: %f\n", pin_hd);
 			//printf("hd_pins: %f\n", hd_pins);	
 		}
 		total_hamming_proximity += hd_pins * 2.0 / (float)((checked_pins - 1) * pow(Fc,exponent));
@@ -918,6 +928,7 @@ static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_typ
 	for (side = 0; side < (4 / mult); side++){
 		checked_pins = 0;
 		hd_pins = 0;
+		int pin_comparisons = 0;
 		for (pin = 0; pin < (mult * num_pins); pin++){
 			if (pin >= num_pins){
 				new_pin = pin % num_pins;
@@ -936,7 +947,6 @@ static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_typ
 			}
 			//printf("side %d  pin %d  track %d\n", new_side, new_pin, pin_array[new_side][new_pin][0]);
 			float pin_hd = 0;
-			int pin_comparisons = 0;
 			checked_pins++;
 			for (comp_pin = pin + 1; comp_pin < (mult * num_pins); comp_pin++){
 				if (comp_pin >= num_pins){
@@ -987,7 +997,6 @@ static float get_hamming_distance(INP int ***pin_array, INP t_type_ptr block_typ
 		if (checked_pins == 0){
 			continue;
 		}
-
 		total_hamming_distance += hd_pins / (0.5*checked_pins*(checked_pins - 1)); // norm factor for old HD: * 2.0 / (float)((checked_pins - 1) * pow(2*Fc,exponent));
 		//printf("checked_pins: %d  hd_pins: %f  total_lemieux: %f\n", checked_pins, hd_pins, total_hamming_distance);	
 	}
@@ -1402,7 +1411,7 @@ void adjust_cb_metric(INP e_metric metric, INP float target, INP float target_to
 	}
 
 	if (block_type->height > 1 || block_type->width > 1){
-		vpr_printf(TIO_MESSAGE_ERROR, "adjust_metric: adjusting connection block metrics is currently intended for CLBs, which have height and width = 1\n");
+		vpr_printf(TIO_MESSAGE_ERROR, "adjust_cb_metric: adjusting connection block metrics is currently intended for CLBs, which have height and width = 1\n");
 		exit(1);
 	}
 
@@ -1422,24 +1431,102 @@ void adjust_cb_metric(INP e_metric metric, INP float target, INP float target_to
 
 	/* determine which pins of our desired type come out on which side of the block */
 	Conn_Block_Metrics cb_metrics;
-	get_pin_locations( block_type, pin_type, &cb_metrics.pin_locations );
 
-	/* initialize CB metrics structures */
-	init_cb_structs(block_type, pin_to_track_connections, num_segments, segment_inf, pin_type, num_pin_type_pins, nodes_per_chan,
-			Fc, &cb_metrics);
 	
 	/* get initial values for metrics */
-	get_conn_block_metrics(block_type, pin_to_track_connections, num_segments, segment_inf, pin_type, num_pin_type_pins,
-			nodes_per_chan, Fc, &cb_metrics);
+	get_conn_block_metrics(block_type, pin_to_track_connections, num_segments, segment_inf, pin_type,
+			Fc_array, nodes_per_chan, &cb_metrics);
 
 	/* now run the annealer to adjust the desired metric towards the target value */
-	annealer(metric, nodes_per_chan, block_type, pin_type, Fc, num_pin_type_pins, target, target_tolerance, pin_to_track_connections, &cb_metrics);
+	bool success = annealer(metric, nodes_per_chan, block_type, pin_type, Fc, num_pin_type_pins, target, target_tolerance, pin_to_track_connections, &cb_metrics);
+	if (!success){
+		vpr_printf(TIO_MESSAGE_INFO, "Failed to adjust specified connection block metric\n");
+	}
 }
+
+/* initializes the fields of the cb_metrics class */
+static void init_cb_structs(INP t_type_ptr block_type, INP int *****tracks_connected_to_pin, INP int num_segments, INP t_segment_inf *segment_inf, 
+		INP e_pin_type pin_type, INP int num_pin_type_pins, INP int nodes_per_chan, INP int Fc,
+		INOUTP Conn_Block_Metrics *cb_metrics){
+	
+	/* can not have diversity for open pins */
+	if(OPEN == pin_type){
+		vpr_printf(TIO_MESSAGE_ERROR, "Can not initialize CB metric structures for pins of OPEN type\n");
+		exit(1);
+	}
+
+	int num_wire_types = get_num_wire_types(num_segments, segment_inf);
+	cb_metrics->num_wire_types = num_wire_types;
+	
+	get_pin_locations( block_type, pin_type, &cb_metrics->pin_locations );
+	
+	/* allocate the multi-dimensional vectors used for conveniently calculating CB metrics */
+	for (int iside = 0; iside < 4; iside++){
+		cb_metrics->track_to_pins.push_back( vector< set<int> >() );
+		cb_metrics->pin_to_tracks.push_back( vector< set<int> >() );
+		cb_metrics->wire_types_used_count.push_back( vector< vector<int> >() );
+		for (int i = 0; i < nodes_per_chan; i++){
+			cb_metrics->track_to_pins.at(iside).push_back( set<int>() );
+		}
+		for (int ipin = 0; ipin < (int)cb_metrics->pin_locations.at(iside).size(); ipin++){
+			cb_metrics->pin_to_tracks.at(iside).push_back( set<int>() );
+			cb_metrics->wire_types_used_count.at(iside).push_back( vector<int>() );
+			for (int itype = 0; itype < num_wire_types; itype++){
+				cb_metrics->wire_types_used_count.at(iside).at(ipin).push_back(0);
+			}
+		}
+	}
+
+	/*  set the values of the multi-dimensional vectors */
+	int counted_pins = 0;
+	int track = 0;
+	/* over each side of the block */
+	for (int iside = 0; iside < 4; iside++){
+		/* over each height unit */
+		for (int iheight = 0; iheight < block_type->height; iheight++){
+			/*  over each width unit */
+			for (int iwidth = 0; iwidth < block_type->width; iwidth++){
+				/* over each pin */
+				for (int ipin = 0; ipin < (int)cb_metrics->pin_locations.at(iside).size(); ipin++){
+					int pin = cb_metrics->pin_locations.at(iside).at(ipin);
+					
+					/* now iterate over each track connected to this pin */
+					for (int i = 0; i < Fc; i++){
+						/* insert track into pin_to_tracks */
+						track = tracks_connected_to_pin[pin][iwidth][iheight][iside][i];
+						pair< set<int>::iterator, bool > result1 = cb_metrics->pin_to_tracks.at(iside).at(ipin).insert( track );
+						if (!result1.second){
+							/* this track should not already be a part of the set */
+							vpr_printf(TIO_MESSAGE_ERROR, "Attempted to insert element into pin_to_tracks set which already exists there\n");
+							exit(1);
+						}
+						
+						/* insert the current pin into the corresponding tracks_to_pin entry */
+						pair< set<int>::iterator, bool > result2 = cb_metrics->track_to_pins.at(iside).at(track).insert( pin );
+						if (!result2.second){
+							/* this pin should not already be a part of the set */
+							vpr_printf(TIO_MESSAGE_ERROR, "Attempted to insert element into tracks_to_pin set which already exists there\n");
+							exit(1);
+						}
+
+						/* keep track of how many of each wire type is used by the current pin */
+						cb_metrics->wire_types_used_count.at(iside).at(ipin).at(track % num_wire_types)++;
+						
+					}
+					counted_pins++;
+				}
+			}
+		}
+	}
+}
+
 
 /* calculates all the connection block metrics and returns them through the cb_metrics variable */
 void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_connected_to_pin, INP int num_segments, INP t_segment_inf *segment_inf, 
-		INP e_pin_type pin_type, INP int num_pin_type_pins, INP int nodes_per_chan, INP int Fc, 
-		INOUTP Conn_Block_Metrics *cb_metrics){
+		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, INOUTP Conn_Block_Metrics *cb_metrics){
+
+	/* get Fc */
+	int Fc = get_max_Fc(Fc_array, block_type, pin_type);
 
 	/* a bit of error checking */
 	if (0 == block_type->index){
@@ -1450,6 +1537,21 @@ void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_conne
 		vpr_printf(TIO_MESSAGE_ERROR, "Can not compute CB metrics for pins not connected to any tracks\n");
 		exit(1);
 	}
+
+	/* get the number of block pins that are of pin_type */
+	int num_pin_type_pins;
+	if (DRIVER == pin_type){
+		num_pin_type_pins = block_type->num_drivers;
+	} else if (RECEIVER == pin_type){
+		num_pin_type_pins = block_type->num_receivers;
+	} else {
+		vpr_printf(TIO_MESSAGE_ERROR, "Found unexpected pin type when adjusting CB wire metric: %d\n", pin_type);
+		exit(1);
+	}
+
+	/* initialize CB metrics structures */
+	init_cb_structs(block_type, tracks_connected_to_pin, num_segments, segment_inf, pin_type, num_pin_type_pins, nodes_per_chan,
+			Fc, cb_metrics);
 
 	/* check based on block type whether we should account for pins on both sides of a channel when computing the relevant CB metrics
 	  (i.e. from a block on the left and from a block on the right for a vertical channel, for instance) */
@@ -1465,28 +1567,14 @@ void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_conne
 	}
 
 	/* get the metrics */
-	//cb_metrics->pin_homogeneity = get_pin_homogeneity(cbm.ph_pin_averages.ptr, block_type, tracks_connected_to_pin, 
-	//						pin_type, Fc, nodes_per_chan, num_wire_types,
-	//						num_pin_type_pins, 2);
-
-	//cb_metrics->wire_homogeneity = get_wire_homogeneity(cbm.wh_wire_conns.ptr, block_type, 
-	//						pin_type, Fc, nodes_per_chan, num_wire_types,
-	//						num_pin_type_pins, 2, cbm.counted_pins_per_side, both_sides); 
-	//
-
 	cb_metrics->wire_homogeneity = get_wire_homogeneity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 
 	//cb_metrics->hamming_distance = get_hamming_distance(cbm.hd_pin_array.ptr, block_type, 
 	//						pin_type, Fc, nodes_per_chan, num_wire_types,
 	//						num_pin_type_pins, 2, both_sides); 
 	//
-	//cb_metrics->hamming_proximity = get_hamming_proximity(cbm.hd_pin_array.ptr, block_type,
-	//						pin_type, Fc, nodes_per_chan, num_wire_types,
-	//						num_pin_type_pins, 2, both_sides); 
+	cb_metrics->hamming_proximity = get_hamming_proximity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 
-	//cb_metrics->pin_diversity = get_pin_diversity(cbm.ph_pin_averages.ptr, block_type,
-	//						pin_type, Fc, nodes_per_chan, num_wire_types,
-	//						num_pin_type_pins);
 	cb_metrics->pin_diversity = get_pin_diversity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, cb_metrics);
 
 }
@@ -1519,6 +1607,85 @@ static float get_pin_diversity(INP t_type_ptr block_type, INP e_pin_type pin_typ
 	}
 	total_pin_diversity /= num_pin_type_pins;
 	return total_pin_diversity;
+}
+
+/* Returns the hamming proximity of a block's connection to tracks */
+static float get_hamming_proximity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
+		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics){
+
+	float hamming_proximity = 0;
+
+	t_2d_int_vec *pin_locations = &cb_metrics->pin_locations;
+	t_vec_vec_set *pin_to_tracks = &cb_metrics->pin_to_tracks;
+
+	/* may want to calculate HD for two sides at once to simulate presence of neighboring blocks */
+	int mult = (both_sides) ? 2 : 1;
+	
+	/* iterate over the sides */
+	for (int iside = 0; iside < (4/mult); iside++){
+		/* how many pins do we need to iterate over? this depends on whether or not we take into
+		   account pins on adjacent sides of a channel */
+		int num_pins = 0;
+		if (both_sides){
+			num_pins = (int)pin_locations->at(iside).size() + (int)pin_locations->at(iside+2).size();
+		} else {
+			num_pins = (int)pin_locations->at(iside).size();
+		}
+		float hp_pins = 0;
+		/* for each pin... */
+		int pin_comparisons = 0;
+		for (int ipin = 0; ipin < num_pins; ipin++){
+			int pin_ind = ipin;
+			int pin_side = iside;
+			if (both_sides){
+				if (ipin >= (int)pin_locations->at(iside).size()){
+					pin_side += 2;
+					pin_ind = pin_ind % pin_locations->at(iside).size();
+				} 
+			}
+			float pin_hp = 0;
+			/* ...compare it's track connections to every other pin that we haven't already compared it to */
+			for (int icomp = ipin+1; icomp < num_pins; icomp++){
+				int comp_pin_ind = icomp;
+				int comp_side = iside;
+				if (both_sides){
+					if (icomp >= (int)pin_locations->at(iside).size()){
+						comp_side += 2;
+						comp_pin_ind = comp_pin_ind % pin_locations->at(iside).size();
+					} 
+				}
+				pin_comparisons++;
+				/* get the hamming proximity between the tracks of the two pins being compared */
+				float pin_to_pin_hp = (float)hamming_proximity_of_two_sets(&pin_to_tracks->at(pin_side).at(pin_ind), &pin_to_tracks->at(comp_side).at(comp_pin_ind));
+				pin_to_pin_hp = pow(pin_to_pin_hp, exponent);
+				pin_hp += pin_to_pin_hp;
+			}
+			hp_pins += pin_hp;
+			//printf("new pin_hp: %f\n", pin_hp);
+		}
+		hamming_proximity += hp_pins * 2.0 / (float)((num_pins-1) * pow(Fc, exponent));
+	}
+	hamming_proximity /= num_pin_type_pins;
+	
+	return hamming_proximity;
+}
+
+/* iterates through the elements of set 1 and returns the number of elements in set1 that are 
+   also in set2 (in terms of bit vectors, this looks for the number of positions where both bit vectors 
+   have a value of 1; values of 0 not counted... so, not quite true hamming proximity). Analogously, if we 
+   wanted the hamming distance of these two sets, (in terms of bit vectors, the number of bit positions that are 
+   different... i.e. the actual definition of hamming disatnce) that would be 2(set_size - returned_value) */
+static int hamming_proximity_of_two_sets(INP set<int> *set1, INP set<int> *set2){
+	int result = 0;
+	
+	set<int>::const_iterator it;
+	for (it = set1->begin(); it != set1->end(); it++){
+		int element = *it;
+		if ( set_element_exists(element, set2) ){
+			result++;
+		}
+	}
+	return result;
 }
 
 /* Returns the wire homogeneity of a block's connection to tracks */
@@ -1583,102 +1750,6 @@ static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_
 }
 
 
-/* initializes the fields of the cb_metrics class */
-static void init_cb_structs(INP t_type_ptr block_type, INP int *****tracks_connected_to_pin, INP int num_segments, INP t_segment_inf *segment_inf, 
-		INP e_pin_type pin_type, INP int num_pin_type_pins, INP int nodes_per_chan, INP int Fc,
-		INOUTP Conn_Block_Metrics *cb_metrics){
-	
-	/* can not have diversity for open pins */
-	if(OPEN == pin_type){
-		vpr_printf(TIO_MESSAGE_ERROR, "Can not initialize CB metric structures for pins of OPEN type\n");
-		exit(1);
-	}
-
-
-	int num_wire_types = get_num_wire_types(num_segments, segment_inf);
-	cb_metrics->num_wire_types = num_wire_types;
-	
-	
-	/* allocate the multi-dimensional vectors used for conveniently calculating CB metrics */
-	for (int iside = 0; iside < 4; iside++){
-		cb_metrics->track_to_pins.push_back( vector< set<int> >() );
-		cb_metrics->pin_to_tracks.push_back( vector< set<int> >() );
-		cb_metrics->wire_types_used_count.push_back( vector< vector<int> >() );
-		for (int i = 0; i < nodes_per_chan; i++){
-			cb_metrics->track_to_pins.at(iside).push_back( set<int>() );
-		}
-		for (int ipin = 0; ipin < (int)cb_metrics->pin_locations.at(iside).size(); ipin++){
-			cb_metrics->pin_to_tracks.at(iside).push_back( set<int>() );
-			cb_metrics->wire_types_used_count.at(iside).push_back( vector<int>() );
-			for (int itype = 0; itype < num_wire_types; itype++){
-				cb_metrics->wire_types_used_count.at(iside).at(ipin).push_back(0);
-			}
-		}
-	}
-
-	/*  set the values of the multi-dimensional vectors */
-	int counted_pins = 0;
-	int track = 0;
-	/* over each side of the block */
-	for (int iside = 0; iside < 4; iside++){
-		/* over each height unit */
-		for (int iheight = 0; iheight < block_type->height; iheight++){
-			/*  over each width unit */
-			for (int iwidth = 0; iwidth < block_type->width; iwidth++){
-				/* over each pin */
-				for (int ipin = 0; ipin < (int)cb_metrics->pin_locations.at(iside).size(); ipin++){
-					int pin = cb_metrics->pin_locations.at(iside).at(ipin);
-
-					///* only doing pin_type pins */
-					//if (block_type->class_inf[block_type->pin_class[pin]].type != pin_type){
-					//	assert(false);
-					//	continue;
-					//}
-
-					//if (counted_pins == num_pin_type_pins){
-					//	/* Some blocks like io appear to have four sides, but only one	*
-					//	*  of those sides is actually used in practice. So here we try	*
-					//	*  not to count the unused pins.				*/
-					//	assert(false);
-					//	break;
-					//}
-
-					///* check that pin has connections at this height/width/side */
-					//track = tracks_connected_to_pin[pin][iwidth][iheight][iside][0];
-					//if (OPEN == track){
-					//	assert(false);
-					//	continue;
-					//}
-					
-					/* now iterate over each track connected to this pin */
-					for (int i = 0; i < Fc; i++){
-						/* insert track into pin_to_tracks */
-						track = tracks_connected_to_pin[pin][iwidth][iheight][iside][i];
-						pair< set<int>::iterator, bool > result1 = cb_metrics->pin_to_tracks.at(iside).at(ipin).insert( track );
-						if (!result1.second){
-							/* this track should not already be a part of the set */
-							vpr_printf(TIO_MESSAGE_ERROR, "Attempted to insert element into pin_to_tracks set which already exists there\n");
-							exit(1);
-						}
-						
-						/* insert the current pin into the corresponding tracks_to_pin entry */
-						pair< set<int>::iterator, bool > result2 = cb_metrics->track_to_pins.at(iside).at(track).insert( pin );
-						if (!result2.second){
-							/* this pin should not already be a part of the set */
-							vpr_printf(TIO_MESSAGE_ERROR, "Attempted to insert element into tracks_to_pin set which already exists there\n");
-							exit(1);
-						}
-
-						/* keep track of how many of each wire type is used by the current pin */
-						cb_metrics->wire_types_used_count.at(iside).at(ipin).at(track % num_wire_types)++;
-						
-					}
-					counted_pins++;
-				}
-			}
-		}
-	}
-}
 
 
 /* goes through each pin of pin_type and determines which side of the block it comes out on. results are stored in 
@@ -1838,7 +1909,7 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 				new_wire_metric = get_wire_homogeneity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 				break;
 			case HAMMING_PROXIMITY:
-
+				new_wire_metric = get_hamming_proximity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 				break;
 			case LEMIEUX_COST_FUNC:
 
@@ -1905,10 +1976,11 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 
 /* this annealer is used to adjust a desired wire or pin metric while keeping the other type of metric
    relatively constant */
-static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
+static bool annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr block_type, 
 		INP e_pin_type pin_type, INP int Fc, INP int num_pin_type_pins, INP float target_metric, 
 		INP float target_metric_tolerance, INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics){
 
+	bool success = false;
 	double temp = INITIAL_TEMP;
 	
 	/* the annealer adjusts a wire metric or a pin metric while keeping the other one relatively constant. what I'm 
@@ -1959,6 +2031,7 @@ static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 				cost = new_cost;
 			}
 		}
+		//printf("T %f   cost %f\n", temp, cost);
 
 		temp = update_temp(temp, i_outer);
 
@@ -1973,9 +2046,13 @@ static void annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 
 	}
 
-	//TODO: return true/false if annealing succeeded/failed
+	if (cost <= target_metric_tolerance){
+		success = true;
+	} else {
+		success = false;
+	}
 
-	return;
+	return success;
 }
  
 /* updates temperature based on current temperature and the annealer's outer loop iteration */

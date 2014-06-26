@@ -492,7 +492,7 @@ void build_rr_graph(
 			if (strcmp("clb", types[i].name) == 0){
 				//srand(time(0));
 				float target_metric;
-				target_metric = 0.7;
+				target_metric = 0.5;
 
 				/* Here begins the metrics test code. The controlling variables are located in globals, 
 				   and are also used in binary_search_place_and_route (place_and_route.c) so that metrics
@@ -528,7 +528,7 @@ void build_rr_graph(
 						//adjust_pin_metric(target_metric, 0.0001, 0.001, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 						//adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, 
 						//	num_seg_types, segment_inf);
-						adjust_cb_metric(WIRE_HOMOGENEITY, 0.7, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan,
+						adjust_cb_metric(HAMMING_PROXIMITY, target_metric, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan,
 							num_seg_types, segment_inf);
 
 						//generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
@@ -542,6 +542,12 @@ void build_rr_graph(
 					}
 				}
 			}
+			//if (strcmp("clb", types[i].name) == 0){
+			//	Conn_Block_Metrics cb_metrics;
+			//	get_conn_block_metrics(&types[i], opin_to_track_map[i], num_seg_types, segment_inf, DRIVER, Fc_out[i], nodes_per_chan, &cb_metrics);
+			//	printf("NEW clb WH: %f   HP: %f   PD: %f\n", cb_metrics.wire_homogeneity, cb_metrics.hamming_proximity, cb_metrics.pin_diversity);
+			//}
+
 			get_conn_block_homogeneity(conn_block_homogeneity[i], &types[i], opin_to_track_map[i], 
 				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
 			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f   Pin Homogeneity: %f\n",

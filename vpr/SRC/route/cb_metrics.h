@@ -161,7 +161,7 @@ public:
 	t_3d_int_vec wire_types_used_count;	/* [0..3][0..num_pins_on_side-1][0..num_wire_types-1]. Keeps track of how many times each pin connects to each of the wire types */
 
 	void clear(){
-		pin_diversity = wire_homogeneity = hamming_proximity = lemieux_cost_func = 0.0;
+		pin_diversity = wire_homogeneity = hamming_proximity = lemieux_cost_func = 0;
 		num_wire_types = 0;
 		pin_locations.clear();
 		track_to_pins.clear();
@@ -239,13 +239,10 @@ void read_trackmap_from_file(INP char *filename, OUTP int *****tracks_connected_
 
 int get_max_Fc(INP int *Fc_array, INP t_type_ptr block_type, INP e_pin_type pin_type);
 
-/* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
-   within some tolerance */
+
 /* calculates all the connection block metrics and returns them through the cb_metrics variable */
 void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_connected_to_pin, INP int num_segments, INP t_segment_inf *segment_inf, 
-		INP e_pin_type pin_type, INP int num_pin_type_pins, INP int nodes_per_chan, INP int Fc, 
-		INOUTP Conn_Block_Metrics *cb_metrics);
-
+		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, INOUTP Conn_Block_Metrics *cb_metrics);
 /* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
    within some tolerance */
 void adjust_cb_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
