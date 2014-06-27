@@ -5,7 +5,7 @@
 
 /******** OP - temporary global vars used for testing connection block metrics ********/
 /* once turned on, metrics are used to guide the conn block creation */
-boolean test_metrics = TRUE;
+boolean test_metrics = FALSE;
 /* if turned on, track map will be loaded/stored depending on whether the given W was already covered.
    test_metrics must be turned on for this variable to have effect */
 boolean manage_trackmap = FALSE;

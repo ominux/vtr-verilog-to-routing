@@ -98,6 +98,9 @@ static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_
 /* Returns the hamming proximity of a block's connection to tracks */
 static float get_hamming_proximity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
 		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics);
+/* Returns Lemieux's cost function for sparse crossbars (see his 2001 book) applied here to the connection block */
+static float get_lemieux_cost_func(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
+		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics);
 
 /* this annealer is used to adjust a desired wire or pin metric while keeping the other type of metric
    relatively constant */
@@ -109,10 +112,10 @@ static double update_temp(INP double temp, INP int i_outer);
 /* determines whether to accept or reject a proposed move based on the resulting delta of the cost and current temperature */
 static bool accept_move(INP double del_cost, INP double temp);
 /* this function simply moves a switch from one track to another track (with an empty slot). The switch stays on the
-   same pin as before. This try_move function is appropriate for wire metrics. */
-static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_chan, INP float initial_pin_diversity, 
-		INP float pin_diversity_tolerance, INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc,
-		INP int num_pin_type_pins, INP double cost, INP double temp, INP float target_wire_metric, 
+   same pin as before. */
+static double try_move(INP e_metric metric, INP int nodes_per_chan, INP float initial_orthogonal_metric, 
+		INP float orthogonal_metric_tolerance, INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc,
+		INP int num_pin_type_pins, INP double cost, INP double temp, INP float target_metric, 
 		INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics);
 
 int get_num_wire_types(INP int num_segments, INP t_segment_inf *segment_inf){
@@ -573,7 +576,7 @@ void adjust_pin_metric(INP float pin_target, INP float pin_tolerance, INP float 
 		INP int *Fc_array, INP int nodes_per_chan, INP int num_segments, 
 		INP t_segment_inf *segment_inf){
 
-#define PIN_DIVERSITY
+//#define PIN_DIVERSITY
 
 	boolean success = FALSE;
 	int Fc = 0;
@@ -893,12 +896,8 @@ static float get_hamming_proximity(INP int ***pin_array, INP t_type_ptr block_ty
 			}
 			/* add to running total */
 			hd_pins += (float)pin_hd;
-			//printf("old pin_hp: %f\n", pin_hd);
-			//printf("hd_pins: %f\n", hd_pins);	
 		}
 		total_hamming_proximity += hd_pins * 2.0 / (float)((checked_pins - 1) * pow(Fc,exponent));
-		
-		//printf("Fc: %d   side: %d  hd: %f  checked_pins: %d\n", Fc, side, hd_pins * 2.0 / (float)((checked_pins - 1) * pow(2*Fc,exponent)), checked_pins);
 	}
 	/* average over the sides */
 	total_hamming_proximity /= num_pin_type_pins;
@@ -1393,7 +1392,6 @@ void generate_random_trackmap(INOUTP int *****tracks_connected_to_pin, INP e_pin
 
 /* adjusts the connection block until the appropriate wire metric has hit it's target value. the pin metric is kept constant
    within some tolerance */
-//TODO: rename to adjust_cb_metric
 void adjust_cb_metric(INP e_metric metric, INP float target, INP float target_tolerance, INP float pin_tolerance,
 		INP t_type_ptr block_type, INOUTP int *****pin_to_track_connections, 
 		INP e_pin_type pin_type, INP int *Fc_array, INP int nodes_per_chan, 
@@ -1569,11 +1567,9 @@ void get_conn_block_metrics(INP t_type_ptr block_type, INP int *****tracks_conne
 	/* get the metrics */
 	cb_metrics->wire_homogeneity = get_wire_homogeneity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 
-	//cb_metrics->hamming_distance = get_hamming_distance(cbm.hd_pin_array.ptr, block_type, 
-	//						pin_type, Fc, nodes_per_chan, num_wire_types,
-	//						num_pin_type_pins, 2, both_sides); 
-	//
 	cb_metrics->hamming_proximity = get_hamming_proximity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
+
+	cb_metrics->lemieux_cost_func = get_lemieux_cost_func(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 
 	cb_metrics->pin_diversity = get_pin_diversity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, cb_metrics);
 
@@ -1609,6 +1605,70 @@ static float get_pin_diversity(INP t_type_ptr block_type, INP e_pin_type pin_typ
 	return total_pin_diversity;
 }
 
+/* Returns Lemieux's cost function for sparse crossbars (see his 2001 book) applied here to the connection block */
+static float get_lemieux_cost_func(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
+		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics){
+
+	float lcf = 0;
+
+	t_2d_int_vec *pin_locations = &cb_metrics->pin_locations;
+	t_vec_vec_set *pin_to_tracks = &cb_metrics->pin_to_tracks;
+
+	/* may want to calculate LCF for two sides at once to simulate presence of neighboring blocks */
+	int mult = (both_sides) ? 2 : 1;
+	
+	/* iterate over the sides */
+	for (int iside = 0; iside < (4/mult); iside++){
+		/* how many pins do we need to iterate over? this depends on whether or not we take into
+		   account pins on adjacent sides of a channel */
+		int num_pins = 0;
+		if (both_sides){
+			num_pins = (int)pin_locations->at(iside).size() + (int)pin_locations->at(iside+2).size();
+		} else {
+			num_pins = (int)pin_locations->at(iside).size();
+		}
+		float lcf_pins = 0;
+		/* for each pin... */
+		int pin_comparisons = 0;
+		for (int ipin = 0; ipin < num_pins; ipin++){
+			int pin_ind = ipin;
+			int pin_side = iside;
+			if (both_sides){
+				if (ipin >= (int)pin_locations->at(iside).size()){
+					pin_side += 2;
+					pin_ind = pin_ind % pin_locations->at(iside).size();
+				} 
+			}
+			float pin_lcf = 0;
+			/* ...compare it's track connections to every other pin that we haven't already compared it to */
+			for (int icomp = ipin+1; icomp < num_pins; icomp++){
+				int comp_pin_ind = icomp;
+				int comp_side = iside;
+				if (both_sides){
+					if (icomp >= (int)pin_locations->at(iside).size()){
+						comp_side += 2;
+						comp_pin_ind = comp_pin_ind % pin_locations->at(iside).size();
+					} 
+				}
+				pin_comparisons++;
+				/* get the hamming proximity between the tracks of the two pins being compared */
+				float pin_to_pin_lcf = (float)hamming_proximity_of_two_sets(&pin_to_tracks->at(pin_side).at(pin_ind), &pin_to_tracks->at(comp_side).at(comp_pin_ind));
+				pin_to_pin_lcf = 2*((int)pin_to_tracks->at(pin_side).at(pin_ind).size() - pin_to_pin_lcf);
+				if (0 == pin_to_pin_lcf){
+					pin_to_pin_lcf = 1;
+				}
+				pin_to_pin_lcf = pow(1.0 / pin_to_pin_lcf, exponent);				
+				pin_lcf += pin_to_pin_lcf;
+			}
+			lcf_pins += pin_lcf;
+		}
+		lcf += lcf_pins / (0.5*num_pins*(num_pins-1));
+	}
+	lcf /= (4.0 / (both_sides ? 2.0 : 1.0));
+	
+	return lcf;
+}
+
 /* Returns the hamming proximity of a block's connection to tracks */
 static float get_hamming_proximity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
 		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics){
@@ -1618,7 +1678,7 @@ static float get_hamming_proximity(INP t_type_ptr block_type, INP e_pin_type pin
 	t_2d_int_vec *pin_locations = &cb_metrics->pin_locations;
 	t_vec_vec_set *pin_to_tracks = &cb_metrics->pin_to_tracks;
 
-	/* may want to calculate HD for two sides at once to simulate presence of neighboring blocks */
+	/* may want to calculate HP for two sides at once to simulate presence of neighboring blocks */
 	int mult = (both_sides) ? 2 : 1;
 	
 	/* iterate over the sides */
@@ -1688,6 +1748,8 @@ static int hamming_proximity_of_two_sets(INP set<int> *set1, INP set<int> *set2)
 	return result;
 }
 
+
+
 /* Returns the wire homogeneity of a block's connection to tracks */
 static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc, INP int nodes_per_chan,
 		INP int num_pin_type_pins, INP int exponent, INP bool both_sides, INP Conn_Block_Metrics *cb_metrics){
@@ -1733,7 +1795,6 @@ static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_
 			for (int i = 0; i < mult; i++){
 				if (counted_pins_per_side[side + i*mult] > 0){
 					/* only include sides with connected pins */
-					//wire_homogeneity_temp += (float)cb_metrics->tracks_used_count.at(side + i*mult).at(track);
 					wire_homogeneity_temp += (float)cb_metrics->track_to_pins.at(side+i*mult).at(track).size();
 				}
 			}
@@ -1748,9 +1809,6 @@ static float get_wire_homogeneity(INP t_type_ptr block_type, INP e_pin_type pin_
 
 	return total_wire_homogeneity;
 }
-
-
-
 
 /* goes through each pin of pin_type and determines which side of the block it comes out on. results are stored in 
    the 'pin_locations' 2d-vector */
@@ -1815,15 +1873,15 @@ static void find_tracks_unconnected_to_pin( INP set<int> *pin_tracks, INP vector
 }
 
 /* this function simply moves a switch from one track to another track (with an empty slot). The switch stays on the
-   same pin as before. This try_move function is appropriate for wire metrics. */
-static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_chan, INP float initial_pin_diversity, 
-		INP float pin_diversity_tolerance, INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc,
-		INP int num_pin_type_pins, INP double cost, INP double temp, INP float target_wire_metric, 
+   same pin as before. */
+static double try_move(INP e_metric metric, INP int nodes_per_chan, INP float initial_orthogonal_metric, 
+		INP float orthogonal_metric_tolerance, INP t_type_ptr block_type, INP e_pin_type pin_type, INP int Fc,
+		INP int num_pin_type_pins, INP double cost, INP double temp, INP float target_metric, 
 		INOUTP int *****pin_to_track_connections, INOUTP Conn_Block_Metrics *cb_metrics){
 
 	double new_cost = 0;
-	float new_pin_diversity = 0;
-	float new_wire_metric = 0;
+	float new_orthogonal_metric = 0;
+	float new_metric = 0;
 
 	/* will determine whether we should revert the attempted move at the end of this function */
 	bool revert = false;
@@ -1835,6 +1893,19 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 	t_vec_vec_set *track_to_pins = &cb_metrics->track_to_pins;
 	t_3d_int_vec *wire_types_used_count = &cb_metrics->wire_types_used_count;
 	int num_wire_types = cb_metrics->num_wire_types;
+
+	/* for the CLB block types it is appropriate to account for pins on both sides of a channel segment when
+	   calculating a CB metric */
+	bool both_sides = false;
+	if (0 == strcmp("clb", block_type->name)){
+		/* many CLBs are adjacent to eachother, so connections from one CLB	
+		*  will share the channel segment with its neighbor. We'd like to take this into	
+		*  account for the applicable metrics. */
+		both_sides = TRUE;
+	} else {
+		/* other blocks (i.e. IO, RAM, etc) are not as frequent as CLBs */
+		both_sides = FALSE;
+	}
 
 	static vector<int> set_of_tracks;
 	/* the set_of_tracks vector is used to find sets of tracks satisfying some criteria that we want. we reserve memory for it, which
@@ -1881,51 +1952,50 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 	wire_types_used_count->at(rand_side).at(rand_pin_index).at(old_track % num_wire_types)--;
 	wire_types_used_count->at(rand_side).at(rand_pin_index).at(new_track % num_wire_types)++;
 	
-	
-	/* get the new pin diversity cost */
-	new_pin_diversity = get_pin_diversity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, cb_metrics);
+	/* the orthogonal metric needs to stay within some tolerance of its initial value. here we get the
+	   orthogonal metric after the above move */
+	if (metric < NUM_WIRE_METRICS){
+		/* get the new pin diversity cost */
+		new_orthogonal_metric = get_pin_diversity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, cb_metrics);
+	} else {
+		/* get the new wire homogeneity cost */
+		new_orthogonal_metric = get_wire_homogeneity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
+	}
 
-	/* check if the pin diversity metric has remained within tolerance */
-	if (new_pin_diversity >= initial_pin_diversity - pin_diversity_tolerance 
-	    && new_pin_diversity <= initial_pin_diversity + pin_diversity_tolerance){
-		/* The pin diversity metric is within tolerance. Can proceed */
+	/* check if the orthogonal metric has remained within tolerance */
+	if (new_orthogonal_metric >= initial_orthogonal_metric - orthogonal_metric_tolerance 
+	    && new_orthogonal_metric <= initial_orthogonal_metric + orthogonal_metric_tolerance){
+		/* The orthogonal metric is within tolerance. Can proceed */
 
 		/* get the new wire metric */
-		new_wire_metric = 0;
-		bool both_sides = false;
-		if (0 == strcmp("clb", block_type->name)){
-			/* many CLBs are adjacent to eachother, so connections from one CLB	
-			*  will share the channel segment with its neighbor. We'd like to take this into	
-			*  account for the applicable metrics. */
-			both_sides = TRUE;
-		} else {
-			/* other blocks (i.e. IO, RAM, etc) are not as frequent as CLBs */
-			both_sides = FALSE;
-		}
+		new_metric = 0;
 
 		double delta_cost;
 		switch(metric){
 			case WIRE_HOMOGENEITY:
-				new_wire_metric = get_wire_homogeneity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
+				new_metric = get_wire_homogeneity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 				break;
 			case HAMMING_PROXIMITY:
-				new_wire_metric = get_hamming_proximity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
+				new_metric = get_hamming_proximity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
 				break;
 			case LEMIEUX_COST_FUNC:
-
+				new_metric = get_lemieux_cost_func(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, 2, both_sides, cb_metrics);
+				break;
+			case PIN_DIVERSITY:
+				new_metric = get_pin_diversity(block_type, pin_type, Fc, nodes_per_chan, num_pin_type_pins, cb_metrics);
 				break;
 			default:
-				vpr_printf(TIO_MESSAGE_ERROR, "try_move_for_wire_metric: illegal wire metric: %d\n", (int)metric);
+				vpr_printf(TIO_MESSAGE_ERROR, "try_move: illegal CB metric being adjusted: %d\n", (int)metric);
 				exit(1);
 				break;
 		}
-		new_cost = fabs(target_wire_metric - new_wire_metric);
+		new_cost = fabs(target_metric - new_metric);
 		delta_cost = new_cost - cost;
 		if (!accept_move(delta_cost, temp)){
 			revert = true;
 		}
 	} else {
-		/* the new pin diversity metric changed too much. will undo the move at the end of this function */
+		/* the new orthogoanl metric changed too much. will undo the move made before */
 		revert = true;
 	}
 
@@ -1943,7 +2013,8 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 		new_cost = cost;
 	} else {
 		/* accept the attempted move */
-	
+
+		/* need to update the actual pin-to-track mapping used by build_rr_graph */
 		int track_index = 0;
 		for (track_index = 0; track_index < Fc; track_index++){
 			if (pin_to_track_connections[rand_pin][0][0][rand_side][track_index] == old_track){
@@ -1952,25 +2023,30 @@ static double try_move_for_wire_metric(INP e_metric metric, INP int nodes_per_ch
 		}
 		pin_to_track_connections[rand_pin][0][0][rand_side][track_index] = new_track;
 
-		cb_metrics->pin_diversity = new_pin_diversity;
+		/* update metrics */
 		switch(metric){
 			case WIRE_HOMOGENEITY:
-				cb_metrics->wire_homogeneity = new_wire_metric;
+				cb_metrics->wire_homogeneity = new_metric;
+				cb_metrics->pin_diversity = new_orthogonal_metric;
 				break;
 			case HAMMING_PROXIMITY:
-				cb_metrics->hamming_proximity = new_wire_metric;
+				cb_metrics->hamming_proximity = new_metric;
+				cb_metrics->pin_diversity = new_orthogonal_metric;
 				break;
 			case LEMIEUX_COST_FUNC:
-				cb_metrics->lemieux_cost_func = new_wire_metric;
+				cb_metrics->lemieux_cost_func = new_metric;
+				cb_metrics->pin_diversity = new_orthogonal_metric;
+				break;
+			case PIN_DIVERSITY:
+				cb_metrics->pin_diversity = new_metric;
+				cb_metrics->wire_homogeneity = new_orthogonal_metric;
 				break;
 			default:
-				vpr_printf(TIO_MESSAGE_ERROR, "try_move_for_wire_metric: illegal wire metric: %d\n", (int)metric);
+				vpr_printf(TIO_MESSAGE_ERROR, "try_move: illegal CB metric: %d\n", (int)metric);
 				exit(1);
 				break;
-
 		}
 	}
-
 	return new_cost;
 }
 
@@ -1991,6 +2067,7 @@ static bool annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 	/* get initial metrics and cost */
 	double cost;
 	if (metric < NUM_WIRE_METRICS){
+		//TODO: add tolerance as a passed-in parameter
 		initial_orthogonal_metric = cb_metrics->pin_diversity;
 		orthogonal_metric_tolerance = 0.05;
 
@@ -2010,7 +2087,18 @@ static bool annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 				break;
 		}
 	} else {
-		//TODO pin metrics
+		initial_orthogonal_metric = cb_metrics->wire_homogeneity;
+		orthogonal_metric_tolerance = 0.05;
+
+		switch(metric){
+			case PIN_DIVERSITY:
+				cost = fabs(cb_metrics->pin_diversity - target_metric);
+				break;
+			default:
+				vpr_printf(TIO_MESSAGE_ERROR, "CB metrics annealer: illegal pin metric: %d\n", (int)metric);
+				exit(1);
+				break;
+		}
 	}
 
 
@@ -2018,13 +2106,8 @@ static bool annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 
 		for (int i_inner = 0; i_inner < MAX_INNER_ITERATIONS; i_inner++){
 			double new_cost = 0;
-			if (metric < NUM_WIRE_METRICS){
-				new_cost = try_move_for_wire_metric(metric, nodes_per_chan, initial_orthogonal_metric, orthogonal_metric_tolerance,
+			new_cost = try_move(metric, nodes_per_chan, initial_orthogonal_metric, orthogonal_metric_tolerance,
 				block_type, pin_type, Fc, num_pin_type_pins, cost, temp, target_metric, pin_to_track_connections, cb_metrics);
-
-			} else {
-				//TODO new_cost = try_move_for_pin_metric();
-			}
 
 			/* update the cost after trying the move */
 			if (new_cost != cost){
@@ -2043,7 +2126,6 @@ static bool annealer(INP e_metric metric, INP int nodes_per_chan, INP t_type_ptr
 		if ( cost <= target_metric_tolerance ){
 			break;
 		}
-
 	}
 
 	if (cost <= target_metric_tolerance){
