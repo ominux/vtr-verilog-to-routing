@@ -471,98 +471,33 @@ void build_rr_graph(
 	/* START OPINP MAP */
 	/* Create opin map lookups */
 	if (BI_DIRECTIONAL == directionality) {
-		t_conn_block_homogeneity *conn_block_homogeneity, fpga_homogeneity;
 		boolean perturb_opins = FALSE;
 
-/* This enables a different connection block creating algorithm than the one currently
-   used by VPR. Was used for early tests, but is not currently used for CB metric tests */
-//#define MY_ALGORITHM
-		
-		conn_block_homogeneity = new t_conn_block_homogeneity[L_num_types];
 		opin_to_track_map = (int ******) my_malloc(sizeof(int *****) * L_num_types);
 		for (i = 0; i < L_num_types; ++i) {
 			perturb_opins = get_perturb_opins(&types[i], Fc_out[i], nodes_per_chan,
 				num_seg_types, segment_inf);
-			#ifdef MY_ALGORITHM
-			perturb_opins = FALSE;
-			#endif
+
 			opin_to_track_map[i] = alloc_and_load_pin_to_track_map(DRIVER,
 				nodes_per_chan, Fc_out[i], &types[i], perturb_opins, directionality);
 
-			if (strcmp("clb", types[i].name) == 0){
+			/* adjust CLB connection block, if enabled */
+			if (strcmp("clb", types[i].name) == 0 && test_metrics){
 				//srand(time(0));	//TODO: when CBs aren't deterministic, we get a problem when it comes to binary-search routing. can figure out current seed?
 				float target_metric;
-				target_metric = 0.54;
+				target_metric = 0.43;
 
-				/* Here begins the metrics test code. The controlling variables are located in globals, 
-				   and are also used in binary_search_place_and_route (place_and_route.c) so that metrics
-				   may work well with the full VPR flow (if I want to test routability of metric-guided
-				   conn blocks). For other tests though, they should be disabled in the binary search f'n, 
-				   and enabled/disabled right from the globals file by the external testing script. */
-
-				/* loads an existing trackmap if the given chan width has already been routed before */
-				/* used for min chan width of metrics-guided place & route */
-				int Fc = get_max_Fc(Fc_out[i], &types[i], DRIVER);
-				static int w_done[1000] = {0};
-				if (test_metrics){
-					char filename[] = "clb_trackmap000.txt";
-					char chanwidth[] = "000\0";
-					/* basically itoa */
-					int tmp_W = nodes_per_chan;
-					for (int ilen = 2; ilen >= 0; ilen--){
-						chanwidth[ilen] = (tmp_W % 10) + 48;
-						tmp_W = floor(tmp_W / 10);
-					}
-
-					for (int ilen = 0; ilen < 3; ilen++){
-						filename[12 + ilen] = chanwidth[ilen];
-					}
-	
-					if (manage_trackmap && w_done[nodes_per_chan]){
-						/* load */
-						printf("loading track map %s\n", filename);
-						read_trackmap_from_file(filename, opin_to_track_map[i], DRIVER,
-								&types[i], Fc);
-					} else {
-						/* generate */
-						//adjust_pin_metric(target_metric, 0.0001, 0.001, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-						//adjust_hamming(target_metric, 0.001, 0.01, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan, 
-						//	num_seg_types, segment_inf);
-						adjust_cb_metric(WIRE_HOMOGENEITY, target_metric, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan,
-							num_seg_types, segment_inf);
-
-						//generate_random_trackmap(opin_to_track_map[i], DRIVER, Fc, nodes_per_chan, &types[i]);
-						if (manage_trackmap && (!w_done[nodes_per_chan])){
-							/* store */
-							printf("storing track map %s\n", filename);
-							write_trackmap_to_file(filename, opin_to_track_map[i], DRIVER,
-									&types[i], Fc);
-							w_done[nodes_per_chan] = 1;
-						}
-					}
-				}
+				adjust_cb_metric(WIRE_HOMOGENEITY, target_metric, 0.005, 0.05, &types[i], opin_to_track_map[i], DRIVER, Fc_out[i], nodes_per_chan,
+					num_seg_types, segment_inf);
 			}
-			if (strcmp("clb", types[i].name) == 0){
+			if (0 != types[i].index){
 				Conn_Block_Metrics cb_metrics;
 				get_conn_block_metrics(&types[i], opin_to_track_map[i], num_seg_types, segment_inf, DRIVER, Fc_out[i], nodes_per_chan, &cb_metrics);
-				printf("NEW clb WH: %f   HP: %f   LCF %f   PD: %f\n", cb_metrics.wire_homogeneity, cb_metrics.hamming_proximity, cb_metrics.lemieux_cost_func, cb_metrics.pin_diversity);
+				vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f\n",
+					types[i].name, cb_metrics.pin_diversity, cb_metrics.wire_homogeneity,
+					cb_metrics.lemieux_cost_func, cb_metrics.hamming_proximity);
 			}
-
-			get_conn_block_homogeneity(conn_block_homogeneity[i], &types[i], opin_to_track_map[i], 
-				DRIVER, Fc_out[i], nodes_per_chan, num_seg_types, segment_inf);
-			vpr_printf(TIO_MESSAGE_INFO,"Block Type: %s   Pin Diversity: %f   Wire Homogeneity: %f   Hamming Distance: %f  Hamming Proximity: %f   Pin Homogeneity: %f\n",
-				types[i].name, conn_block_homogeneity[i].pin_diversity, conn_block_homogeneity[i].wire_homogeneity,
-				conn_block_homogeneity[i].hamming_distance, conn_block_homogeneity[i].hamming_proximity, conn_block_homogeneity[i].pin_homogeneity);
 		}
-
-		/* Calculate FPGA homogeneity here */
-		//fpga_homogeneity = get_conn_block_homogeneity_fpga(conn_block_homogeneity, L_num_types,
-		//			L_grid, L_nx, L_ny, types, DRIVER);
-		vpr_printf(TIO_MESSAGE_INFO,"Block Type: FPGA  Pin Homogeneity: %f  Wire Homogeneity: %f\n",
-			fpga_homogeneity.pin_homogeneity, fpga_homogeneity.wire_homogeneity); 
-
-		delete [] conn_block_homogeneity;
-		conn_block_homogeneity = NULL; 
 	}
 	/* END OPINP MAP */
 
