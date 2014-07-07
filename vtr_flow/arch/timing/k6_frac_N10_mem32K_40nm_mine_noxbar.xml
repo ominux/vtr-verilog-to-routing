@@ -314,53 +314,131 @@
 
     <!-- Define general purpose logic block (CLB) begin -->
     <pb_type name="clb">
-      <input name="I" num_pins="40" equivalent="true"/>
+      <input name="I" num_pins="40" equivalent="false"/>
       <output name="O" num_pins="20" equivalent="false"/>
       <clock name="clk" num_pins="1"/>
 
-      <!-- Describe fracturable logic element.  
-             Each fracturable logic element has a 6-LUT that can alternatively operate as two 5-LUTs with shared inputs. 
-             The outputs of the fracturable logic element can be optionally registered
-        -->
-      <pb_type name="fle" num_pb="10">
-        <input name="in" num_pins="6"/>
-        <output name="out" num_pins="2"/>
+      <pb_type name="tmp" num_pb="1">
+        <input name="in_comp" num_pins="60"/>
+        <input name="in_dir" num_pins="60"/>
+        <output name="out1" num_pins="10"/>
+        <output name="out2" num_pins="10"/>
         <clock name="clk" num_pins="1"/>
+        
 
-        <!-- Dual 5-LUT mode definition begin -->
-        <mode name="n2_lut5">
-          <pb_type name="lut5inter" num_pb="1">
-            <input name="in" num_pins="5"/>
-            <output name="out" num_pins="2"/>
-            <clock name="clk" num_pins="1"/>
-            <pb_type name="ble5" num_pb="2">
+
+        <!-- Describe fracturable logic element.  
+               Each fracturable logic element has a 6-LUT that can alternatively operate as two 5-LUTs with shared inputs. 
+               The outputs of the fracturable logic element can be optionally registered
+          -->
+        <pb_type name="fle" num_pb="10">
+          <input name="in" num_pins="6"/>
+          <output name="out" num_pins="2"/>
+          <clock name="clk" num_pins="1"/>
+
+          <!-- Dual 5-LUT mode definition begin -->
+          <mode name="n2_lut5">
+            <pb_type name="lut5inter" num_pb="1">
               <input name="in" num_pins="5"/>
+              <output name="out" num_pins="2"/>
+              <clock name="clk" num_pins="1"/>
+              <pb_type name="ble5" num_pb="2">
+                <input name="in" num_pins="5"/>
+                <output name="out" num_pins="1"/>
+                <clock name="clk" num_pins="1"/> 
+
+                <!-- Define the LUT -->
+                <pb_type name="lut5" blif_model=".names" num_pb="1" class="lut">
+                  <input name="in" num_pins="5" port_class="lut_in"/>
+                  <output name="out" num_pins="1" port_class="lut_out"/>
+                  <!-- LUT timing using delay matrix -->
+                  <!-- These are the physical delay inputs on a Stratix IV LUT but because VPR cannot do LUT rebalancing,
+                             we instead take the average of these numbers to get more stable results
+                        82e-12
+                        173e-12
+                        261e-12
+                        263e-12
+                        398e-12
+                        -->
+                  <delay_matrix type="max" in_port="lut5.in" out_port="lut5.out">
+                    235e-12
+                    235e-12
+                    235e-12
+                    235e-12
+                    235e-12
+                  </delay_matrix>
+                </pb_type>
+
+                <!-- Define the flip-flop -->
+                <pb_type name="ff" blif_model=".latch" num_pb="1" class="flipflop">
+                  <input name="D" num_pins="1" port_class="D"/>
+                  <output name="Q" num_pins="1" port_class="Q"/>
+                  <clock name="clk" num_pins="1" port_class="clock"/>
+                  <T_setup value="66e-12" port="ff.D" clock="clk"/>
+                  <T_clock_to_Q max="124e-12" port="ff.Q" clock="clk"/>
+                </pb_type>
+
+                <interconnect>
+                  <direct name="direct1" input="ble5.in[4:0]" output="lut5[0:0].in[4:0]"/>
+                  <direct name="direct2" input="lut5[0:0].out" output="ff[0:0].D">
+                    <!-- Advanced user option that tells CAD tool to find LUT+FF pairs in netlist -->
+                    <pack_pattern name="ble5" in_port="lut5[0:0].out" out_port="ff[0:0].D"/>
+                  </direct>
+                  <direct name="direct3" input="ble5.clk" output="ff[0:0].clk"/>                    
+                  <mux name="mux1" input="ff[0:0].Q lut5.out[0:0]" output="ble5.out[0:0]">
+                    <!-- LUT to output is faster than FF to output on a Stratix IV -->
+                    <delay_constant max="25e-12" in_port="lut5.out[0:0]" out_port="ble5.out[0:0]" />
+                    <delay_constant max="45e-12" in_port="ff[0:0].Q" out_port="ble5.out[0:0]" />
+                  </mux>
+                </interconnect>
+              </pb_type>
+              <interconnect>
+                <direct name="direct1" input="lut5inter.in" output="ble5[0:0].in"/>
+                <direct name="direct2" input="lut5inter.in" output="ble5[1:1].in"/>
+                <direct name="direct3" input="ble5[1:0].out" output="lut5inter.out"/>                 
+                <complete name="complete1" input="lut5inter.clk" output="ble5[1:0].clk"/>                  
+              </interconnect>
+            </pb_type>
+            <interconnect>
+              <direct name="direct1" input="fle.in[4:0]" output="lut5inter.in"/>
+              <direct name="direct2" input="lut5inter.out" output="fle.out"/>
+              <direct name="direct3" input="fle.clk" output="lut5inter.clk"/>
+            </interconnect>
+          </mode> 
+          <!-- Dual 5-LUT mode definition end -->
+          <!-- 6-LUT mode definition begin -->
+          <mode name="n1_lut6">
+            <!-- Define 6-LUT mode -->
+            <pb_type name="ble6" num_pb="1">
+              <input name="in" num_pins="6"/>
               <output name="out" num_pins="1"/>
               <clock name="clk" num_pins="1"/> 
 
-              <!-- Define the LUT -->
-              <pb_type name="lut5" blif_model=".names" num_pb="1" class="lut">
-                <input name="in" num_pins="5" port_class="lut_in"/>
+              <!-- Define LUT -->
+              <pb_type name="lut6" blif_model=".names" num_pb="1" class="lut">
+                <input name="in" num_pins="6" port_class="lut_in"/>
                 <output name="out" num_pins="1" port_class="lut_out"/>
                 <!-- LUT timing using delay matrix -->
                 <!-- These are the physical delay inputs on a Stratix IV LUT but because VPR cannot do LUT rebalancing,
-                           we instead take the average of these numbers to get more stable results
-                      82e-12
-                      173e-12
-                      261e-12
-                      263e-12
-                      398e-12
-                      -->
-                <delay_matrix type="max" in_port="lut5.in" out_port="lut5.out">
-                  235e-12
-                  235e-12
-                  235e-12
-                  235e-12
-                  235e-12
+                         we instead take the average of these numbers to get more stable results
+                    82e-12
+                    173e-12
+                    261e-12
+                    263e-12
+                    398e-12
+                    397e-12
+                    -->
+                <delay_matrix type="max" in_port="lut6.in" out_port="lut6.out">
+                  261e-12
+                  261e-12
+                  261e-12
+                  261e-12
+                  261e-12
+                  261e-12
                 </delay_matrix>
               </pb_type>
 
-              <!-- Define the flip-flop -->
+              <!-- Define flip-flop -->
               <pb_type name="ff" blif_model=".latch" num_pb="1" class="flipflop">
                 <input name="D" num_pins="1" port_class="D"/>
                 <output name="Q" num_pins="1" port_class="Q"/>
@@ -370,96 +448,98 @@
               </pb_type>
 
               <interconnect>
-                <direct name="direct1" input="ble5.in[4:0]" output="lut5[0:0].in[4:0]"/>
-                <direct name="direct2" input="lut5[0:0].out" output="ff[0:0].D">
+                <direct name="direct1" input="ble6.in" output="lut6[0:0].in"/>
+                <direct name="direct2" input="lut6.out" output="ff.D">
                   <!-- Advanced user option that tells CAD tool to find LUT+FF pairs in netlist -->
-                  <pack_pattern name="ble5" in_port="lut5[0:0].out" out_port="ff[0:0].D"/>
+                  <pack_pattern name="ble6" in_port="lut6.out" out_port="ff.D"/>
                 </direct>
-                <direct name="direct3" input="ble5.clk" output="ff[0:0].clk"/>                    
-                <mux name="mux1" input="ff[0:0].Q lut5.out[0:0]" output="ble5.out[0:0]">
+                <direct name="direct3" input="ble6.clk" output="ff.clk"/>                    
+                <mux name="mux1" input="ff.Q lut6.out" output="ble6.out">
                   <!-- LUT to output is faster than FF to output on a Stratix IV -->
-                  <delay_constant max="25e-12" in_port="lut5.out[0:0]" out_port="ble5.out[0:0]" />
-                  <delay_constant max="45e-12" in_port="ff[0:0].Q" out_port="ble5.out[0:0]" />
+                  <delay_constant max="25e-12" in_port="lut6.out" out_port="ble6.out" />
+                  <delay_constant max="45e-12" in_port="ff.Q" out_port="ble6.out" />
                 </mux>
               </interconnect>
             </pb_type>
             <interconnect>
-              <direct name="direct1" input="lut5inter.in" output="ble5[0:0].in"/>
-              <direct name="direct2" input="lut5inter.in" output="ble5[1:1].in"/>
-              <direct name="direct3" input="ble5[1:0].out" output="lut5inter.out"/>                 
-              <complete name="complete1" input="lut5inter.clk" output="ble5[1:0].clk"/>                  
+              <direct name="direct1" input="fle.in" output="ble6.in"/>
+              <direct name="direct2" input="ble6.out" output="fle.out[0:0]"/>
+              <direct name="direct3" input="fle.clk" output="ble6.clk"/>
             </interconnect>
-          </pb_type>
-          <interconnect>
-            <direct name="direct1" input="fle.in[4:0]" output="lut5inter.in"/>
-            <direct name="direct2" input="lut5inter.out" output="fle.out"/>
-            <direct name="direct3" input="fle.clk" output="lut5inter.clk"/>
-          </interconnect>
-        </mode> 
-        <!-- Dual 5-LUT mode definition end -->
-        <!-- 6-LUT mode definition begin -->
-        <mode name="n1_lut6">
-          <!-- Define 6-LUT mode -->
-          <pb_type name="ble6" num_pb="1">
-            <input name="in" num_pins="6"/>
-            <output name="out" num_pins="1"/>
-            <clock name="clk" num_pins="1"/> 
+          </mode>
+          <!-- 6-LUT mode definition end -->
+        </pb_type>
 
-            <!-- Define LUT -->
-            <pb_type name="lut6" blif_model=".names" num_pb="1" class="lut">
-              <input name="in" num_pins="6" port_class="lut_in"/>
-              <output name="out" num_pins="1" port_class="lut_out"/>
-              <!-- LUT timing using delay matrix -->
-              <!-- These are the physical delay inputs on a Stratix IV LUT but because VPR cannot do LUT rebalancing,
-                       we instead take the average of these numbers to get more stable results
-                  82e-12
-                  173e-12
-                  261e-12
-                  263e-12
-                  398e-12
-                  397e-12
-                  -->
-              <delay_matrix type="max" in_port="lut6.in" out_port="lut6.out">
-                261e-12
-                261e-12
-                261e-12
-                261e-12
-                261e-12
-                261e-12
-              </delay_matrix>
-            </pb_type>
 
-            <!-- Define flip-flop -->
-            <pb_type name="ff" blif_model=".latch" num_pb="1" class="flipflop">
-              <input name="D" num_pins="1" port_class="D"/>
-              <output name="Q" num_pins="1" port_class="Q"/>
-              <clock name="clk" num_pins="1" port_class="clock"/>
-              <T_setup value="66e-12" port="ff.D" clock="clk"/>
-              <T_clock_to_Q max="124e-12" port="ff.Q" clock="clk"/>
-            </pb_type>
+        <interconnect>
+		<mux name="in_mux0" input="tmp.in_comp[0] tmp.in_dir[0]" output="fle[0].in[0]"/>
+		<mux name="in_mux1" input="tmp.in_comp[1] tmp.in_dir[1]" output="fle[0].in[1]"/>
+		<mux name="in_mux2" input="tmp.in_comp[2] tmp.in_dir[2]" output="fle[0].in[2]"/>
+		<mux name="in_mux3" input="tmp.in_comp[3] tmp.in_dir[3]" output="fle[0].in[3]"/>
+		<mux name="in_mux4" input="tmp.in_comp[4] tmp.in_dir[4]" output="fle[0].in[4]"/>
+		<mux name="in_mux5" input="tmp.in_comp[5] tmp.in_dir[5]" output="fle[0].in[5]"/>
+		<mux name="in_mux6" input="tmp.in_comp[6] tmp.in_dir[6]" output="fle[1].in[0]"/>
+		<mux name="in_mux7" input="tmp.in_comp[7] tmp.in_dir[7]" output="fle[1].in[1]"/>
+		<mux name="in_mux8" input="tmp.in_comp[8] tmp.in_dir[8]" output="fle[1].in[2]"/>
+		<mux name="in_mux9" input="tmp.in_comp[9] tmp.in_dir[9]" output="fle[1].in[3]"/>
+		<mux name="in_mux10" input="tmp.in_comp[10] tmp.in_dir[10]" output="fle[1].in[4]"/>
+		<mux name="in_mux11" input="tmp.in_comp[11] tmp.in_dir[11]" output="fle[1].in[5]"/>
+		<mux name="in_mux12" input="tmp.in_comp[12] tmp.in_dir[12]" output="fle[2].in[0]"/>
+		<mux name="in_mux13" input="tmp.in_comp[13] tmp.in_dir[13]" output="fle[2].in[1]"/>
+		<mux name="in_mux14" input="tmp.in_comp[14] tmp.in_dir[14]" output="fle[2].in[2]"/>
+		<mux name="in_mux15" input="tmp.in_comp[15] tmp.in_dir[15]" output="fle[2].in[3]"/>
+		<mux name="in_mux16" input="tmp.in_comp[16] tmp.in_dir[16]" output="fle[2].in[4]"/>
+		<mux name="in_mux17" input="tmp.in_comp[17] tmp.in_dir[17]" output="fle[2].in[5]"/>
+		<mux name="in_mux18" input="tmp.in_comp[18] tmp.in_dir[18]" output="fle[3].in[0]"/>
+		<mux name="in_mux19" input="tmp.in_comp[19] tmp.in_dir[19]" output="fle[3].in[1]"/>
+		<mux name="in_mux20" input="tmp.in_comp[20] tmp.in_dir[20]" output="fle[3].in[2]"/>
+		<mux name="in_mux21" input="tmp.in_comp[21] tmp.in_dir[21]" output="fle[3].in[3]"/>
+		<mux name="in_mux22" input="tmp.in_comp[22] tmp.in_dir[22]" output="fle[3].in[4]"/>
+		<mux name="in_mux23" input="tmp.in_comp[23] tmp.in_dir[23]" output="fle[3].in[5]"/>
+		<mux name="in_mux24" input="tmp.in_comp[24] tmp.in_dir[24]" output="fle[4].in[0]"/>
+		<mux name="in_mux25" input="tmp.in_comp[25] tmp.in_dir[25]" output="fle[4].in[1]"/>
+		<mux name="in_mux26" input="tmp.in_comp[26] tmp.in_dir[26]" output="fle[4].in[2]"/>
+		<mux name="in_mux27" input="tmp.in_comp[27] tmp.in_dir[27]" output="fle[4].in[3]"/>
+		<mux name="in_mux28" input="tmp.in_comp[28] tmp.in_dir[28]" output="fle[4].in[4]"/>
+		<mux name="in_mux29" input="tmp.in_comp[29] tmp.in_dir[29]" output="fle[4].in[5]"/>
+		<mux name="in_mux30" input="tmp.in_comp[30] tmp.in_dir[30]" output="fle[5].in[0]"/>
+		<mux name="in_mux31" input="tmp.in_comp[31] tmp.in_dir[31]" output="fle[5].in[1]"/>
+		<mux name="in_mux32" input="tmp.in_comp[32] tmp.in_dir[32]" output="fle[5].in[2]"/>
+		<mux name="in_mux33" input="tmp.in_comp[33] tmp.in_dir[33]" output="fle[5].in[3]"/>
+		<mux name="in_mux34" input="tmp.in_comp[34] tmp.in_dir[34]" output="fle[5].in[4]"/>
+		<mux name="in_mux35" input="tmp.in_comp[35] tmp.in_dir[35]" output="fle[5].in[5]"/>
+		<mux name="in_mux36" input="tmp.in_comp[36] tmp.in_dir[36]" output="fle[6].in[0]"/>
+		<mux name="in_mux37" input="tmp.in_comp[37] tmp.in_dir[37]" output="fle[6].in[1]"/>
+		<mux name="in_mux38" input="tmp.in_comp[38] tmp.in_dir[38]" output="fle[6].in[2]"/>
+		<mux name="in_mux39" input="tmp.in_comp[39] tmp.in_dir[39]" output="fle[6].in[3]"/>
+		<mux name="in_mux40" input="tmp.in_comp[40] tmp.in_dir[40]" output="fle[6].in[4]"/>
+		<mux name="in_mux41" input="tmp.in_comp[41] tmp.in_dir[41]" output="fle[6].in[5]"/>
+		<mux name="in_mux42" input="tmp.in_comp[42] tmp.in_dir[42]" output="fle[7].in[0]"/>
+		<mux name="in_mux43" input="tmp.in_comp[43] tmp.in_dir[43]" output="fle[7].in[1]"/>
+		<mux name="in_mux44" input="tmp.in_comp[44] tmp.in_dir[44]" output="fle[7].in[2]"/>
+		<mux name="in_mux45" input="tmp.in_comp[45] tmp.in_dir[45]" output="fle[7].in[3]"/>
+		<mux name="in_mux46" input="tmp.in_comp[46] tmp.in_dir[46]" output="fle[7].in[4]"/>
+		<mux name="in_mux47" input="tmp.in_comp[47] tmp.in_dir[47]" output="fle[7].in[5]"/>
+		<mux name="in_mux48" input="tmp.in_comp[48] tmp.in_dir[48]" output="fle[8].in[0]"/>
+		<mux name="in_mux49" input="tmp.in_comp[49] tmp.in_dir[49]" output="fle[8].in[1]"/>
+		<mux name="in_mux50" input="tmp.in_comp[50] tmp.in_dir[50]" output="fle[8].in[2]"/>
+		<mux name="in_mux51" input="tmp.in_comp[51] tmp.in_dir[51]" output="fle[8].in[3]"/>
+		<mux name="in_mux52" input="tmp.in_comp[52] tmp.in_dir[52]" output="fle[8].in[4]"/>
+		<mux name="in_mux53" input="tmp.in_comp[53] tmp.in_dir[53]" output="fle[8].in[5]"/>
+		<mux name="in_mux54" input="tmp.in_comp[54] tmp.in_dir[54]" output="fle[9].in[0]"/>
+		<mux name="in_mux55" input="tmp.in_comp[55] tmp.in_dir[55]" output="fle[9].in[1]"/>
+		<mux name="in_mux56" input="tmp.in_comp[56] tmp.in_dir[56]" output="fle[9].in[2]"/>
+		<mux name="in_mux57" input="tmp.in_comp[57] tmp.in_dir[57]" output="fle[9].in[3]"/>
+		<mux name="in_mux58" input="tmp.in_comp[58] tmp.in_dir[58]" output="fle[9].in[4]"/>
+		<mux name="in_mux59" input="tmp.in_comp[59] tmp.in_dir[59]" output="fle[9].in[5]"/>
 
-            <interconnect>
-              <direct name="direct1" input="ble6.in" output="lut6[0:0].in"/>
-              <direct name="direct2" input="lut6.out" output="ff.D">
-                <!-- Advanced user option that tells CAD tool to find LUT+FF pairs in netlist -->
-                <pack_pattern name="ble6" in_port="lut6.out" out_port="ff.D"/>
-              </direct>
-              <direct name="direct3" input="ble6.clk" output="ff.clk"/>                    
-              <mux name="mux1" input="ff.Q lut6.out" output="ble6.out">
-                <!-- LUT to output is faster than FF to output on a Stratix IV -->
-                <delay_constant max="25e-12" in_port="lut6.out" out_port="ble6.out" />
-                <delay_constant max="45e-12" in_port="ff.Q" out_port="ble6.out" />
-              </mux>
-            </interconnect>
-          </pb_type>
-          <interconnect>
-            <direct name="direct1" input="fle.in" output="ble6.in"/>
-            <direct name="direct2" input="ble6.out" output="fle.out[0:0]"/>
-            <direct name="direct3" input="fle.clk" output="ble6.clk"/>
-          </interconnect>
-        </mode>
-        <!-- 6-LUT mode definition end -->
+
+          <complete name="clks" input="tmp.clk" output="fle[9:0].clk"/>
+          <direct name="out1" input="fle[9:0].out[0:0]" output="tmp.out1"/>
+          <direct name="out2" input="fle[9:0].out[1:1]" output="tmp.out2"/>
+        </interconnect>
       </pb_type>
+      <!-- tmp definition end -->
 
       <interconnect>
         <!-- We use a full crossbar to get logical equivalence at inputs of CLB 
@@ -471,20 +551,32 @@
 		     Since all our outputs LUT outputs go to a BLE output, and have a delay of 
 		     25 ps to do so, we subtract 25 ps from the 100 ps delay of a feedback
 		     to get the part that should be marked on the crossbar.	 -->
-        <complete name="crossbar" input="clb.I fle[9:0].out" output="fle[9:0].in">
+        <!--complete name="crossbar" input="clb.I fle[9:0].out" output="fle[9:0].in">
           <delay_constant max="95e-12" in_port="clb.I" out_port="fle[9:0].in" />
           <delay_constant max="75e-12" in_port="fle[9:0].out" out_port="fle[9:0].in" />
         </complete>
         <complete name="clks" input="clb.clk" output="fle[9:0].clk">
+        </complete-->
+
+        <complete name="outputs_xbar" input="tmp.out1 tmp.out2" output="tmp.in_comp">
+          <delay_constant max="75e-12" in_port="tmp.out1 tmp.out2" out_port="tmp.in_comp" />
         </complete>
 
+        <direct name="dir1" input="clb.I" output="tmp.in_dir[39:0]"/>
+	<!-- Issue here. How do we know which side the 19:0 pins come from? We want this to be distributed evenly across all four sides -->
+        <direct name="dir2" input="clb.I[19:0]" output="tmp.in_dir[59:40]"/>
+
+        <direct name="clbouts1" input="tmp.out1" output="clb.O[9:0]"/>
+        <direct name="clbouts2" input="tmp.out2" output="clb.O[19:10]"/>
+
+        <direct name="clks" input="clb.clk" output="tmp.clk"/>
         <!-- This way of specifying direct connection to clb outputs is important because this architecture uses automatic spreading of opins.  
                By grouping to output pins in this fashion, if a logic block is completely filled by 6-LUTs, 
                then the outputs those 6-LUTs take get evenly distributed across all four sides of the CLB instead of clumped on two sides (which is what happens with a more
                naive specification).
           -->
-        <direct name="clbouts1" input="fle[9:0].out[0:0]" output="clb.O[9:0]"/>
-        <direct name="clbouts2" input="fle[9:0].out[1:1]" output="clb.O[19:10]"/>
+        <!--direct name="clbouts1" input="fle[9:0].out[0:0]" output="clb.O[9:0]"/>
+        <direct name="clbouts2" input="fle[9:0].out[1:1]" output="clb.O[19:10]"/-->
       </interconnect>
 
       <!-- Every input pin is driven by 15% of the tracks in a channel, every output pin is driven by 10% of the tracks in a channel -->
