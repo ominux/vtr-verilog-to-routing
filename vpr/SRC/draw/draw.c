@@ -1369,6 +1369,8 @@ static void draw_chany_to_chany_edge(int from_node, int from_track, int to_node,
 				/* since no U-turns from_track must be INC as well */
 				y1 = draw_coords.tile_y[to_ylow - 1] + draw_coords.tile_width;
 			} else { /* DEC wire starts at top edge */
+
+				/*
 				if (!(from_yhigh > to_yhigh)) {
 					vpr_printf_info("from_yhigh (%d) !> to_yhigh (%d).\n", 
 							from_yhigh, to_yhigh);
@@ -1381,7 +1383,8 @@ static void draw_chany_to_chany_edge(int from_node, int from_track, int to_node,
 							rr_node[to_node].xlow, rr_node[to_node].ylow,
 							rr_node[to_node].ptc_num);
 					exit(1);
-				}
+				}*/
+
 				y2 = draw_coords.tile_y[to_yhigh] + draw_coords.tile_width;
 				y1 = draw_coords.tile_y[to_yhigh + 1];
 			}
