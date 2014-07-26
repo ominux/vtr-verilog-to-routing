@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
 
 		if (vpr_setup.PlacerOpts.doPlacement || vpr_setup.RouterOpts.doRouting) {
 			vpr_init_pre_place_and_route(vpr_setup, Arch);
+			vpr_setup_interposer_cut_locations(Arch);
 			vpr_place_and_route(vpr_setup, Arch);
 	#if 0
 			if(vpr_setup.RouterOpts.doRouting) {
