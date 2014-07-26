@@ -1711,7 +1711,7 @@ static float comp_td_point_to_point_delay(int inet, int ipin) {
 	t_type_ptr source_type, sink_type;
 	float delay_source_to_sink;
 	/* ANDRE: Variables used for increased delay */
-	int y, cut_step, y1, y2, counter, times_crossed;
+	int y, y1, y2, counter, times_crossed;
 	float f_delay_increase;
 
 	delay_source_to_sink = 0.;
@@ -1756,15 +1756,14 @@ static float comp_td_point_to_point_delay(int inet, int ipin) {
 		y1 = std::min(block[source_block].y, block[sink_block].y);
 		y2 = std::max(block[source_block].y, block[sink_block].y);
 
-		cut_step = ny / (num_cuts + 1);
-		//vpr_printf(TIO_MESSAGE_INFO, "y1:%d\ty2:%d\tcut_step:%d\n", y1, y2, cut_step);
 		times_crossed = 0;
-
-		counter = 0;
-		for(y = cut_step; y < ny && counter < num_cuts; y+=cut_step){
+		for(counter = 0; counter < num_cuts; ++counter)
+		{
+			y = arch_cut_locations[counter];
 			if(y1 <= y && y2 > y)
+			{
 				times_crossed++;
-			counter++;
+			}
 		}
 
 		delay_source_to_sink += (float)times_crossed * f_delay_increase;
@@ -2300,7 +2299,7 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 
 	float ncost, crossing;
 	float C1, C2;
-	int times_crossed, cut_step, counter;
+	int times_crossed, counter;
 	int const_type = constant_type;
 
 	/* Get the expected "crossing count" of a net, based on its number *
@@ -2338,42 +2337,50 @@ static float get_net_cost(int inet, struct s_bb *bbptr) {
 		 * 5 penalty = C * height
 		 */
 		int closest = 11000;
-		cut_step = ny / (num_cuts + 1);
 		times_crossed = 0;
 		C1 = placer_cost_constant;
 		C2 = (float)(percent_wires_cut / 100.0);
-
-		counter = 0;
-		for(int j = cut_step; j < ny && counter < num_cuts; j+=cut_step){
-			if(bbptr->ymin <= j && bbptr->ymax > j){
+		
+		for(counter = 0; counter < num_cuts; ++counter)
+		{
+			int j = arch_cut_locations[counter];
+			if(bbptr->ymin <= j && bbptr->ymax > j)
+			{
 				times_crossed++;
 				closest = std::min(closest, std::min(j-bbptr->ymin+1, bbptr->ymax-j));
 			}
-			counter++;
 		}
 
 		if(const_type == 0)
-			ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed *
-				(bbptr->xmax - bbptr->xmin + 1) * C2;
-		if(const_type == 1)
-			ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed *
-				(bbptr->ymax - bbptr->ymin + 1) * C2;
-		if(const_type == 2)
-			ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed *
-				(bbptr->ymax - bbptr->ymin + 1) * C2 + 
-				C1 * chany_place_cost_fac[nx][1] * times_crossed * C2;
-		if(const_type == 3){
-			if(times_crossed > 0)
-				ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed *
-					closest * C2 +
-					C1 * chany_place_cost_fac[nx][1] * times_crossed * C2;
+		{
+			ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed * (bbptr->xmax - bbptr->xmin + 1) * C2;
 		}
-		if(const_type == 4){
-			ncost += C1 * (bbptr->ymax - bbptr->ymin + 1) * crossing
-				* chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1] * C2;
+		if(const_type == 1)
+		{
+			// hack: changed times_crossed  to times_crossed^2
+			ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed * (bbptr->ymax - bbptr->ymin + 1) * C2;
+			//ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed * times_crossed * 2 * (bbptr->ymax - bbptr->ymin + 1) * C2;
+			//ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed * times_crossed * (bbptr->ymax - bbptr->ymin + 1) * C2;
+		}
+		if(const_type == 2)
+		{
+			ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed * (bbptr->ymax - bbptr->ymin + 1) * C2 + C1 * chany_place_cost_fac[nx][1] * times_crossed * C2;
+		}
+		if(const_type == 3)
+		{
+			if(times_crossed > 0)
+			{
+				ncost += C1 * chany_place_cost_fac[nx][1] * times_crossed * closest * C2 + C1 * chany_place_cost_fac[nx][1] * times_crossed * C2;
+			}
+		}
+		if(const_type == 4)
+		{
+			ncost += C1 * (bbptr->ymax - bbptr->ymin + 1) * crossing * chany_place_cost_fac[bbptr->xmax][bbptr->xmin - 1] * C2;
 		}
 		if(const_type == 5)
+		{
 			ncost += C1 * chany_place_cost_fac[nx][1] * (bbptr->ymax - bbptr->ymin + 1) * C2;
+		}
 	}
 
 	return (ncost);
