@@ -798,6 +798,8 @@ struct s_arch {
 	t_model *model_library;
 	t_power_arch * power;
 	t_clock_arch * clocks;
+
+	int lcm_of_block_heights;
 };
 
 #endif

@@ -131,6 +131,28 @@ static void CheckXMLTagOrder(ezxml_t Parent);
 static void ff_primtives_annotation_clock_match(t_pin_to_pin_annotation *annotation, 
 	t_pb_type * parent_pb_type);
 
+int gcd(int a, int b)
+{
+	if (b == 0)
+		return a;
+	else
+		return gcd(b, a%b);
+}
+int lcm(int a, int b)
+{
+	int mygcd = gcd(a,b);
+
+	if(mygcd==0)
+	{
+		return -1;
+	}
+	else
+	{
+		return (a*b)/mygcd;
+	}
+}
+
+
 /* Sets up the pinloc map and pin classes for the type. Unlinks the loc nodes
  * from the XML tree.
  * Pins and pin classses must already be setup by SetupPinClasses */
@@ -2688,6 +2710,18 @@ void XmlReadArch(INP const char *ArchFile, INP boolean timing_enabled,
 	ProcessComplexBlocks(Next, Types, NumTypes, timing_enabled);
 	FreeNode(Next);
 
+	/* find the least common multiple of block heights
+	 * for interposer based architectures, a cutline cannot go through a block */
+	arch->lcm_of_block_heights = 1;
+	for(int i=0; i < *NumTypes; ++i)
+	{
+		t_type_descriptor * Type = &(*Types)[i];
+		if(Type!=0)
+		{
+			arch->lcm_of_block_heights = lcm(arch->lcm_of_block_heights, Type->height);
+		}
+	}
+
 	/* Process switches */
 	Next = FindElement(Cur, "switchlist", TRUE);
 	ProcessSwitches(Next, &(arch->Switches), &(arch->num_switches),
@@ -4120,5 +4154,4 @@ static void ff_primtives_annotation_clock_match(t_pin_to_pin_annotation *annotat
 const char* get_arch_file_name(){
 	return arch_file_name;
 }
-
 
