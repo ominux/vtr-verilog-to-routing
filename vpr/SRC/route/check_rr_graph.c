@@ -369,7 +369,7 @@ void check_node(int inode, enum e_route_type route_type) {
 			tracks_per_node = chan_width_y[xlow];
 		}
 
-		if (ptc_num >= nodes_per_chan) {
+		if (ptc_num >= 2*nodes_per_chan) {
 			vpr_throw(VPR_ERROR_ROUTE, __FILE__, __LINE__, 
 				"in check_node: inode %d (type %d) has a ptc_num of %d.\n", inode, rr_type, ptc_num);
 		}

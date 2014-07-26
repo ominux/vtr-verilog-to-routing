@@ -48,6 +48,8 @@ static void timing_driven_expand_neighbours(struct s_heap *current,
 static float get_timing_driven_expected_cost(int inode, int target_node,
 		float criticality_fac, float R_upstream);
 
+static int get_num_expected_interposer_hops_to_target(int inode, int target_node);
+
 static int get_expected_segs_to_target(int inode, int target_node,
 		int *num_segs_ortho_dir_ptr);
 
@@ -712,22 +714,25 @@ static float get_timing_driven_expected_cost(int inode, int target_node,
 	 * that's already in the "known" path_cost.                                   */
 
 	t_rr_type rr_type;
-	int cost_index, ortho_cost_index, num_segs_same_dir, num_segs_ortho_dir;
-	float expected_cost, cong_cost, Tdel;
+	int cost_index, ortho_cost_index, num_segs_same_dir, num_segs_ortho_dir, num_interposer_hops;
+	float expected_cost, cong_cost, Tdel, interposer_hop_delay;
 
 	rr_type = rr_node[inode].type;
 
 	if (rr_type == CHANX || rr_type == CHANY) {
-		num_segs_same_dir = get_expected_segs_to_target(inode, target_node,
-				&num_segs_ortho_dir);
+
+		num_interposer_hops = get_num_expected_interposer_hops_to_target(inode, target_node);
+		//num_interposer_hops = 0;
+		num_segs_same_dir = get_expected_segs_to_target(inode, target_node,&num_segs_ortho_dir);
+
 		cost_index = rr_node[inode].cost_index;
 		ortho_cost_index = rr_indexed_data[cost_index].ortho_cost_index;
 
-		cong_cost = num_segs_same_dir * rr_indexed_data[cost_index].base_cost
-				+ num_segs_ortho_dir
-						* rr_indexed_data[ortho_cost_index].base_cost;
+		cong_cost = num_segs_same_dir  * rr_indexed_data[cost_index].base_cost
+				  + num_segs_ortho_dir * rr_indexed_data[ortho_cost_index].base_cost;
+
 		cong_cost += rr_indexed_data[IPIN_COST_INDEX].base_cost
-				+ rr_indexed_data[SINK_COST_INDEX].base_cost;
+				   + rr_indexed_data[SINK_COST_INDEX].base_cost;
 
 		Tdel =
 				num_segs_same_dir * rr_indexed_data[cost_index].T_linear
@@ -744,6 +749,9 @@ static float get_timing_driven_expected_cost(int inode, int target_node,
 												* rr_indexed_data[ortho_cost_index].C_load);
 
 		Tdel += rr_indexed_data[IPIN_COST_INDEX].T_linear;
+		
+		interposer_hop_delay = (float)delay_increase * 1e-12;
+		Tdel += num_interposer_hops * interposer_hop_delay;
 
 		expected_cost = criticality_fac * Tdel
 				+ (1. - criticality_fac) * cong_cost;
@@ -757,6 +765,93 @@ static float get_timing_driven_expected_cost(int inode, int target_node,
 	else { /* Change this if you want to investigate route-throughs */
 		return (0.);
 	}
+}
+
+
+
+static int get_num_expected_interposer_hops_to_target(int inode, int target_node) 
+{
+	/* 
+	Description:
+		returns the expected number of times you have to cross the 
+		interposer in order to go from inode to target_node.
+		This does not include inode itself.
+	
+	Assumptions: 
+		1- Cuts are horizontal
+		2- target_node is a terminal pin (hence its ylow==yhigh)
+		3- wires that go through the interposer are uni-directional
+
+		---------	y=150
+		|		|
+		---------	y=100
+		|		|
+		---------	y=50
+		|		|
+		---------	y=0
+
+		num_cuts = 2, cut_step = 50, cut_locations = {50, 100}
+	*/
+	int y_start; /* start point y-coordinate. (y-coordinate at the *end* of wire 'i') */
+	int y_end;   /* destination (target) y-coordinate */
+	int cut_i, y_cut_location, num_expected_hops;
+	t_rr_type rr_type;
+
+	num_expected_hops = 0;
+	y_end   = rr_node[target_node].ylow; 
+	rr_type = rr_node[inode].type;
+
+	if(rr_type == CHANX) 
+	{	/* inode is a horizontal wire */
+		/* the ylow and yhigh are the same */
+		assert(rr_node[inode].ylow == rr_node[inode].yhigh);
+		y_start = rr_node[inode].ylow;
+	}
+	else
+	{	/* inode is a CHANY */
+		if(rr_node[inode].direction == INC_DIRECTION)
+		{
+			y_start = rr_node[inode].yhigh;
+		}
+		else if(rr_node[inode].direction == DEC_DIRECTION)
+		{
+			y_start = rr_node[inode].ylow;
+		}
+		else
+		{
+			// interposer wires can be bidirectional
+			y_start = rr_node[inode].ylow;
+		}
+	}
+
+	/* for every cut, is it between 'i' and 'target'? */
+	for(cut_i=0 ; cut_i<num_cuts; ++cut_i) 
+	{
+		y_cut_location = arch_cut_locations[cut_i];
+		if( (y_start < y_cut_location &&  y_cut_location < y_end) ||
+			(y_end   < y_cut_location &&  y_cut_location < y_start)) 
+		{
+			++num_expected_hops;
+		}
+	}
+
+	/* Make there is no off-by-1 error.For current node i: 
+	   if it's a vertical wire, node 'i' itself may be crossing the interposer.
+	*/
+	if(rr_type == CHANY)
+	{	
+		/* for every cut, does it cut wire 'i'? */
+		for(cut_i=0 ; cut_i<num_cuts; ++cut_i) 
+		{
+			y_cut_location = arch_cut_locations[cut_i];
+			if(rr_node[inode].ylow < y_cut_location && y_cut_location < rr_node[inode].yhigh)
+			{
+				++num_expected_hops;
+			}
+		}
+	}
+
+	return num_expected_hops;
 }
 
 /* Macro used below to ensure that fractions are rounded up, but floating   *
@@ -775,6 +870,7 @@ static int get_expected_segs_to_target(int inode, int target_node,
 	int target_x, target_y, num_segs_same_dir, cost_index, ortho_cost_index;
 	int no_need_to_pass_by_clb;
 	float inv_length, ortho_inv_length, ylow, yhigh, xlow, xhigh;
+	int num_expected_hops = get_num_expected_interposer_hops_to_target(inode, target_node);
 
 	target_x = rr_node[target_node].xlow;
 	target_y = rr_node[target_node].ylow;
@@ -803,6 +899,9 @@ static int get_expected_segs_to_target(int inode, int target_node,
 			*num_segs_ortho_dir_ptr = 0;
 			no_need_to_pass_by_clb = 0;
 		}
+		
+		// for every hop, there is an extra interposer node
+		(*num_segs_ortho_dir_ptr) = (*num_segs_ortho_dir_ptr) + 2*num_expected_hops;
 
 		/* Now count horizontal (same dir. as inode) segs. */
 
@@ -848,6 +947,8 @@ static int get_expected_segs_to_target(int inode, int target_node,
 		} else {
 			num_segs_same_dir = 0;
 		}
+
+		num_segs_same_dir = num_segs_same_dir + 2*num_expected_hops;
 	}
 
 	return (num_segs_same_dir);

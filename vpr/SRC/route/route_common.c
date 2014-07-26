@@ -1165,7 +1165,8 @@ void print_route(char *route_file) {
 
 					/* Uncomment line below if you're debugging and want to see the switch types *
 					 * used in the routing.                                                      */
-					/*          fprintf (fp, "Switch: %d", tptr->iswitch);    */
+					fprintf (fp, "\t\t Switch: %d", tptr->iswitch);
+					fprintf (fp, "\t\t Switch_Delay: %g", switch_inf[tptr->iswitch].Tdel);
 
 					fprintf(fp, "\n");
 

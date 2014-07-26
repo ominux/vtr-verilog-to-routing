@@ -513,15 +513,17 @@ void build_rr_graph(
 		}
 	}
 
-	/* ANDRE: Function that cuts some of the vertical wires */
-	if(num_cuts > 0)
-		cut_rr_graph_edges(nodes_per_chan, seg_details, rr_node, rr_node_indices,
-				directionality, percent_wires_cut, num_cuts);
-
 	rr_graph_externals(timing_inf, segment_inf, num_seg_types, nodes_per_chan,
 			wire_to_ipin_switch, base_cost_type);
 	if (getEchoEnabled() && isEchoFileEnabled(E_ECHO_RR_GRAPH)) {
 		dump_rr_graph(getEchoFileName(E_ECHO_RR_GRAPH));
+	}
+
+
+	/* Main Entry Point to rr_graph modifications for interposer-based architectures */
+	if(num_cuts > 0)
+	{
+		modify_rr_graph_for_interposer_based_arch(max_chan_width, directionality);
 	}
 
 	check_rr_graph(graph_type, L_nx, L_ny, num_switches, Fc_in);
