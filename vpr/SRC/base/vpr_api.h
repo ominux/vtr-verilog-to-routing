@@ -102,4 +102,6 @@ t_trace* vpr_resync_post_route_netlist_to_TI_CLAY_v1_architecture(
 /* Prints user/internal errors for VPR */
 void vpr_print_error(t_vpr_error* vpr_error);
 
+void vpr_setup_interposer_cut_locations(t_arch Arch);
+
 #endif
